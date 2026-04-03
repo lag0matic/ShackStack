@@ -36,12 +36,14 @@ This clean beta branch contains the operator-facing app code for the `V-0.1 BETA
 ## Build
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File .\installer\Build-DecoderWorkers.ps1
 dotnet build .\ShackStack.sln
 ```
 
 ## Publish
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File .\installer\Build-DecoderWorkers.ps1
 dotnet publish .\src\ShackStack.Desktop\ShackStack.Desktop.csproj -c Release -r win-x64 --self-contained true -o .\publish\ShackStack-win-x64-v0.1-beta
 ```
 

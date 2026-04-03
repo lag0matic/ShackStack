@@ -15,7 +15,7 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly IDisposable _audioSubscription;
     private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly string _workerPath;
+    private readonly DecoderWorkerLaunch _workerLaunch;
 
     private Process? _process;
     private StreamWriter? _stdin;
@@ -27,11 +27,7 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
     public PythonRttyDecoderHost(IAudioService audioService)
     {
         _audioService = audioService;
-        _workerPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "ShackStack - Codex",
-            "Tools",
-            "rtty_sidecar_worker.py");
+        _workerLaunch = BundledDecoderWorkerLocator.Resolve("rtty_sidecar_worker");
 
         _audioSubscription = _audioService.ReceiveStream.Subscribe(new Observer<AudioBuffer>(buffer =>
         {
@@ -45,7 +41,7 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
 
         _telemetry.OnNext(new RttyDecoderTelemetry(
             false,
-            File.Exists(_workerPath) ? "Python RTTY worker ready to launch" : $"Worker missing: {_workerPath}",
+            _workerLaunch.Exists ? "Python RTTY worker ready to launch" : $"Worker missing: {_workerLaunch.DisplayPath}",
             "Python RTTY sidecar",
             0,
             _configuration.ShiftHz,
@@ -101,11 +97,11 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
 
     private Task EnsureProcessAsync(CancellationToken ct)
     {
-        if (!File.Exists(_workerPath))
+        if (!_workerLaunch.Exists)
         {
             _telemetry.OnNext(new RttyDecoderTelemetry(
                 false,
-                $"Worker missing: {_workerPath}",
+                $"Worker missing: {_workerLaunch.DisplayPath}",
                 "Python RTTY sidecar",
                 0,
                 _configuration.ShiftHz,
@@ -119,20 +115,7 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
             return Task.CompletedTask;
         }
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "python",
-            Arguments = $"\"{_workerPath}\"",
-            WorkingDirectory = Path.GetDirectoryName(_workerPath)!,
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardInputEncoding = Encoding.UTF8,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
+        var startInfo = BundledDecoderWorkerLocator.CreateStartInfo(_workerLaunch);
 
         _process = new Process
         {
