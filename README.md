@@ -1,61 +1,62 @@
-# ShackStack.Avalonia
+# ShackStack
 
-This is the new sibling rewrite workspace for ShackStack.
+ShackStack is a Windows desktop ham radio application built with C# and Avalonia.
 
-It is intentionally separate from the existing Python application so the current working app remains untouched while the rewrite evolves.
+This clean beta branch contains the operator-facing app code for the `V-0.1 BETA` release. It is intended to be the GitHub-ready application repo, separate from the larger local development workspace and decoder experimentation harnesses.
 
-## Rewrite Goals
+## Current Beta Scope
 
-- keep ShackStack's product identity
-- move to a cleaner long-term desktop architecture
-- preserve direct radio control as the primary path
-- preserve fake FLRig support for HAMRS
-- keep audio, waterfall, and CW as first-class features
-- isolate experimental decoders from the operator shell
+- direct Icom CI-V radio control
+- VFO A / VFO B, `A/B`, `A=B`, and split operation
+- waterfall, spectrum, S-meter, monitor audio, and persisted operator display/audio settings
+- voice controls and rig-backed transmit settings
+- fake FLRig compatibility for HAMRS-style interop
+- SSTV receive workflow with live preview and pop-out desk/archive
+- WeFAX receive workflow with live preview and pop-out desk/archive
+- decoder host plumbing for CW, RTTY, SSTV, and WeFAX
 
-## Solution Shape
+## Solution Layout
 
-- `ShackStack.Desktop`
-  - Avalonia app entry and composition root
-- `ShackStack.UI`
-  - views, viewmodels, UI-only behavior
-- `ShackStack.Core`
-  - application orchestration and state
-- `ShackStack.Core.Abstractions`
-  - contracts and shared models
-- `ShackStack.Infrastructure.*`
-  - radio, audio, waterfall, interop, decoder implementations
-- `ShackStack.DecoderHost`
-  - future out-of-process decoder worker
+- `src/ShackStack.Desktop`
+  - Windows desktop entry point, packaging metadata, and assets
+- `src/ShackStack.UI`
+  - Avalonia views, controls, and viewmodels
+- `src/ShackStack.Core`
+  - app orchestration and workflows
+- `src/ShackStack.Core.Abstractions`
+  - shared contracts and models
+- `src/ShackStack.Infrastructure.*`
+  - radio, audio, waterfall, configuration, interop, and decoder implementations
+- `src/ShackStack.DecoderHost`
+  - out-of-process decoder boundary components
+- `installer`
+  - Inno Setup packaging script
 
-## First Milestone
+## Build
 
-1. compile-ready shell
-2. dark muted theme
-3. service boundaries in code
-4. placeholder operating/settings/diagnostics workspaces
-5. decoder host boundary stub
+```powershell
+dotnet build .\ShackStack.sln
+```
+
+## Publish
+
+```powershell
+dotnet publish .\src\ShackStack.Desktop\ShackStack.Desktop.csproj -c Release -r win-x64 --self-contained true -o .\publish\ShackStack-win-x64-v0.1-beta
+```
+
+## Installer
+
+```powershell
+& "C:\Program Files\Inno Setup 7\ISCC.exe" ".\installer\ShackStack.iss"
+```
+
+## Version
+
+- current beta: `V-0.1 BETA`
 
 ## Notes
 
-- This workspace is the place for the C# / Avalonia rewrite.
-- The Python repo remains the operational reference implementation.
-- Waterfall rendering direction is render-thread Skia via Avalonia `ICustomDrawOperation`, not UI-thread bitmap painting.
-- Windows packaging direction is self-contained `win-x64` publish + Inno Setup, not single-file publish.
-
-## CW Direction
-
-- The main ShackStack application remains a C# / Avalonia desktop app.
-- CW receive decoding is treated as an isolated sidecar / plugin problem, not main-shell business logic.
-- CW transmit stays in-process in the main app and is driven directly from CI-V keying commands.
-- The first serious CW RX experimentation path should prioritize fast iteration and can use Python behind the sidecar boundary.
-- If a decoder later proves worth hardening or optimizing, it can be kept as a sidecar or reimplemented in Rust/C# without reshaping the app shell.
-
-## Current Plan
-
-1. finish daily-use shell polish
-2. keep voice and HAMRS/FLRig paths stable
-3. build the CW tab around a decoder sidecar contract
-4. implement CW TX in the main app via CI-V key down / key up timing
-5. prototype CW RX in a separate decoder worker with text, confidence, tone, and WPM outputs
-6. return to RTTY, WeFAX, SSTV, and other digital tabs after the CW boundary is in place
+- This repo is intentionally app-focused.
+- Local publish artifacts are excluded from source control.
+- Local tests, scratch docs, and development notes are intentionally not included in this clean branch.
+- The broader Python decoder lab and experimentation workspace remain separate.
