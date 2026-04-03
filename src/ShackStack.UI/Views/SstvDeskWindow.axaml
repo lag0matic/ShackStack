@@ -1,0 +1,191 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ShackStack.UI.ViewModels"
+        xmlns:models="using:ShackStack.UI.ViewModels"
+        x:Class="ShackStack.UI.Views.SstvDeskWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1240"
+        Height="820"
+        MinWidth="980"
+        MinHeight="680"
+        Title="SSTV Desk"
+        Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
+        Background="#0F1117"
+        Foreground="#C4C8D8">
+  <Grid RowDefinitions="Auto,*" Margin="10">
+    <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,10">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Spacing="4">
+          <TextBlock Text="SSTV Desk" FontSize="19" FontWeight="SemiBold" />
+          <TextBlock Text="Received-image archive and reply composition live here. Overlay text stays non-destructive in the preview." Foreground="#AAB1C7" TextWrapping="Wrap" />
+        </StackPanel>
+        <Button Grid.Column="1" Content="Refresh Archive" Command="{Binding RefreshSstvArchiveCommand}" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <TabControl Grid.Row="1">
+      <TabItem Header="Received">
+        <Grid ColumnDefinitions="280,*" ColumnSpacing="10" Margin="0,6,0,0">
+          <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Past Images" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding SstvReceivedFolderPath, StringFormat=Folder: {0}}" Foreground="#7F879B" TextWrapping="Wrap" />
+                <ListBox ItemsSource="{Binding SstvReceivedImages}" SelectedItem="{Binding SelectedSstvReceivedImage}" MinHeight="420">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SstvImageItem">
+                      <StackPanel Spacing="2" Margin="0,2">
+                        <TextBlock Text="{Binding Label}" />
+                        <TextBlock Text="{Binding Timestamp, StringFormat={}{0:g}}" Foreground="#7F879B" FontSize="11" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </StackPanel>
+            </ScrollViewer>
+          </Border>
+
+          <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+            <Grid RowDefinitions="*,Auto,Auto">
+              <Border Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                <Image Source="{Binding SstvSelectedReceivedBitmap}" Stretch="Uniform" />
+              </Border>
+              <TextBlock Grid.Row="1" Text="{Binding SstvImageStatus}" Margin="0,10,0,0" Foreground="#AAB1C7" />
+              <TextBlock Grid.Row="2" Text="{Binding SstvSelectedReceivedPath}" Margin="0,6,0,0" Foreground="#7F879B" TextWrapping="Wrap" />
+            </Grid>
+          </Border>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Reply">
+        <Grid ColumnDefinitions="320,*" ColumnSpacing="10" Margin="0,6,0,0">
+          <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Reply Palette" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="Choose a reply-base image from the reply folder and compose overlay text. The underlying file is not modified." Foreground="#AAB1C7" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding SstvReplyFolderPath, StringFormat=Reply Folder: {0}}" Foreground="#7F879B" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding SstvTemplateFolderPath, StringFormat=Template Folder: {0}}" Foreground="#7F879B" TextWrapping="Wrap" />
+                <TextBlock Text="Base Image" Foreground="#7F879B" />
+                <ListBox ItemsSource="{Binding SstvReplyImages}" SelectedItem="{Binding SelectedSstvReplyBaseImage}" MinHeight="170" MaxHeight="220">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SstvImageItem">
+                      <StackPanel Spacing="2" Margin="0,2">
+                        <TextBlock Text="{Binding Label}" />
+                        <TextBlock Text="{Binding Timestamp, StringFormat={}{0:g}}" Foreground="#7F879B" FontSize="11" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Text="Layout Templates" Foreground="#7F879B" />
+                <ListBox ItemsSource="{Binding SstvReplyLayoutTemplates}" SelectedItem="{Binding SelectedSstvReplyLayoutTemplate}" MinHeight="84" MaxHeight="120">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SstvTemplateItem">
+                      <StackPanel Spacing="2" Margin="0,2">
+                        <TextBlock Text="{Binding Name}" />
+                        <TextBlock Text="{Binding Timestamp, StringFormat={}{0:g}}" Foreground="#7F879B" FontSize="11" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                  <TextBox Grid.Column="0" Text="{Binding SstvReplyTemplateName}" Watermark="Template name" />
+                  <Button Grid.Column="1" Content="Load" Command="{Binding LoadSstvReplyLayoutTemplateCommand}" />
+                  <Button Grid.Column="2" Content="Save" Command="{Binding SaveSstvReplyLayoutTemplateCommand}" />
+                </Grid>
+                <TextBlock Text="{Binding SstvReplyTemplateStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Text Boxes" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <Button Grid.Column="1" Content="Add" Command="{Binding AddSstvReplyOverlayCommand}" />
+                  <Button Grid.Column="2" Content="Remove" Command="{Binding RemoveSstvReplyOverlayCommand}" />
+                </Grid>
+                <ListBox ItemsSource="{Binding SstvReplyOverlayItems}" SelectedItem="{Binding SelectedSstvReplyOverlayItem}" MinHeight="96" MaxHeight="140">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:SstvOverlayItemViewModel">
+                      <StackPanel Spacing="2" Margin="0,2">
+                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" MaxHeight="36" />
+                        <TextBlock Text="{Binding FontFamilyName, StringFormat={}{0}}" Foreground="#7F879B" FontSize="11" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Text="Overlay Text" Foreground="#7F879B" />
+                <TextBox Text="{Binding SelectedSstvReplyOverlayItem.Text}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="76" />
+                <Grid ColumnDefinitions="Auto,90,Auto,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Size" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <NumericUpDown Grid.Column="1" Minimum="10" Maximum="72" Increment="1" Value="{Binding SelectedSstvReplyOverlayItem.FontSize}" />
+                  <TextBlock Grid.Column="2" Text="Font" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="3" ItemsSource="{Binding SstvReplyFontOptions}" SelectedItem="{Binding SelectedSstvReplyOverlayItem.FontFamilyName}" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,72,Auto,72,Auto,72" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="R" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBox Grid.Column="1" Text="{Binding SelectedSstvReplyOverlayItem.Red}" HorizontalContentAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="G" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBox Grid.Column="3" Text="{Binding SelectedSstvReplyOverlayItem.Green}" HorizontalContentAlignment="Center" />
+                  <TextBlock Grid.Column="4" Text="B" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBox Grid.Column="5" Text="{Binding SelectedSstvReplyOverlayItem.Blue}" HorizontalContentAlignment="Center" />
+                </Grid>
+                <TextBlock Text="{Binding SelectedSstvReplyOverlayItem.ColorHex, StringFormat=Preview Color: {0}}" Foreground="#AAB1C7" />
+                <ItemsControl ItemsSource="{Binding SstvReplyTemplates}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Button Content="{Binding}" Command="{Binding $parent[Window].DataContext.ApplySstvReplyTemplateCommand}" CommandParameter="{Binding}" Margin="0,0,8,8" Padding="8,4" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </ScrollViewer>
+          </Border>
+
+          <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+            <Grid>
+              <Border Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                <Grid>
+                  <Image Source="{Binding SstvReplyPreviewBitmap}" Stretch="Uniform" IsVisible="{Binding SstvReplyHasBaseImage}" />
+                  <TextBlock Text="Choose a reply image to use as the base." Foreground="#6F778A" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" IsVisible="{Binding SstvReplyShowPlaceholder}" />
+                  <ItemsControl ItemsSource="{Binding SstvReplyOverlayItems}" IsVisible="{Binding SstvReplyHasBaseImage}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <Grid />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="models:SstvOverlayItemViewModel">
+                        <Border Background="#70000000"
+                                CornerRadius="6"
+                                Padding="10,6"
+                                MaxWidth="520"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                PointerPressed="OnOverlayPointerPressed"
+                                PointerMoved="OnOverlayPointerMoved"
+                                PointerReleased="OnOverlayPointerReleased"
+                                PointerCaptureLost="OnOverlayPointerCaptureLost">
+                          <Border.RenderTransform>
+                            <TranslateTransform X="{Binding X}" Y="{Binding Y}" />
+                          </Border.RenderTransform>
+                          <TextBlock Text="{Binding Text}"
+                                     Foreground="{Binding PreviewBrush}"
+                                     FontSize="{Binding FontSize}"
+                                     FontFamily="{Binding PreviewFontFamily}"
+                                     FontWeight="SemiBold"
+                                     TextWrapping="Wrap"
+                                     TextAlignment="Center" />
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Grid>
+              </Border>
+            </Grid>
+          </Border>
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</Window>

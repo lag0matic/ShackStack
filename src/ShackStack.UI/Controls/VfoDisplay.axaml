@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ShackStack.UI.Controls.VfoDisplay"
+             MinWidth="280"
+             Height="52">
+  <Border x:Name="RootBorder" Background="#0B0E13" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12,6">
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
+      <Border x:Name="Digit0" PointerWheelChanged="DigitWheelChanged" PointerEntered="DigitPointerEntered" PointerExited="DigitPointerExited" Tag="10000000" Padding="2,0">
+        <TextBlock x:Name="Digit0Text" FontFamily="Consolas" FontSize="28" FontWeight="Medium" Foreground="#B0B8D0" />
+      </Border>
+      <Border x:Name="Digit1" PointerWheelChanged="DigitWheelChanged" PointerEntered="DigitPointerEntered" PointerExited="DigitPointerExited" Tag="1000000" Padding="2,0">
+        <TextBlock x:Name="Digit1Text" FontFamily="Consolas" FontSize="28" FontWeight="Medium" Foreground="#B0B8D0" />
+      </Border>
+
+      <TextBlock Text="." FontFamily="Consolas" FontSize="28" FontWeight="Medium" Foreground="#445060" Margin="1,0,2,0" />
+
+      <Border x:Name="Digit2" PointerWheelChanged="DigitWheelChanged" PointerEntered="DigitPointerEntered" PointerExited="DigitPointerExited" Tag="100000" Padding="2,0">
+        <TextBlock x:Name="Digit2Text" FontFamily="Consolas" FontSize="28" FontWeight="Medium" Foreground="#E8EAF0" />
+      </Border>
+      <Border x:Name="Digit3" PointerWheelChanged="DigitWheelChanged" PointerEntered="DigitPointerEntered" PointerExited="DigitPointerExited" Tag="10000" Padding="2,0">
+        <TextBlock x:Name="Digit3Text" FontFamily="Consolas" FontSize="28" FontWeight="Medium" Foreground="#E8EAF0" />
+      </Border>
+      <Border x:Name="Digit4" PointerWheelChanged="DigitWheelChanged" PointerEntered="DigitPointerEntered" PointerExited="DigitPointerExited" Tag="1000" Padding="2,0">
+        <TextBlock x:Name="Digit4Text" FontFamily="Consolas" FontSize="28" FontWeight="Medium" Foreground="#E8EAF0" />
+      </Border>
+
+      <TextBlock Text="." FontFamily="Consolas" FontSize="28" FontWeight="Medium" Foreground="#445060" Margin="1,0,2,0" />
+
+      <Border x:Name="Digit5" PointerWheelChanged="DigitWheelChanged" PointerEntered="DigitPointerEntered" PointerExited="DigitPointerExited" Tag="100" Padding="2,0">
+        <TextBlock x:Name="Digit5Text" FontFamily="Consolas" FontSize="28" FontWeight="Medium" Foreground="#E8EAF0" />
+      </Border>
+      <Border x:Name="Digit6" PointerWheelChanged="DigitWheelChanged" PointerEntered="DigitPointerEntered" PointerExited="DigitPointerExited" Tag="10" Padding="2,0">
+        <TextBlock x:Name="Digit6Text" FontFamily="Consolas" FontSize="28" FontWeight="Medium" Foreground="#E8EAF0" />
+      </Border>
+      <Border x:Name="Digit7" PointerWheelChanged="DigitWheelChanged" PointerEntered="DigitPointerEntered" PointerExited="DigitPointerExited" Tag="1" Padding="2,0">
+        <TextBlock x:Name="Digit7Text" FontFamily="Consolas" FontSize="28" FontWeight="Medium" Foreground="#E8EAF0" />
+      </Border>
+
+      <TextBlock Text="MHz" FontSize="11" Foreground="#5C6272" VerticalAlignment="Bottom" Margin="8,0,0,4" />
+    </StackPanel>
+  </Border>
+</UserControl>

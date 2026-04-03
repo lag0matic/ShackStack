@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+
+publish/
+tests/
+docs/
+
+*.user
+*.suo
+*.pdb
+*.cache
+*.tmp
+*.log
+Thumbs.db
+Desktop.ini

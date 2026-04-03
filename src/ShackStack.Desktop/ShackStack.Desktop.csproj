@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\shackstack.ico</ApplicationIcon>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <Version>0.1.0-beta</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <InformationalVersion>V-0.1 BETA</InformationalVersion>
+    <Product>ShackStack</Product>
+    <Company>ShackStack</Company>
+    <AssemblyTitle>ShackStack V-0.1 BETA</AssemblyTitle>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Models\" />
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
+    <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.12">
+      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ShackStack.UI\ShackStack.UI.csproj" />
+    <ProjectReference Include="..\ShackStack.Core\ShackStack.Core.csproj" />
+    <ProjectReference Include="..\ShackStack.Infrastructure.Configuration\ShackStack.Infrastructure.Configuration.csproj" />
+    <ProjectReference Include="..\ShackStack.Infrastructure.Radio\ShackStack.Infrastructure.Radio.csproj" />
+    <ProjectReference Include="..\ShackStack.Infrastructure.Audio\ShackStack.Infrastructure.Audio.csproj" />
+    <ProjectReference Include="..\ShackStack.Infrastructure.Waterfall\ShackStack.Infrastructure.Waterfall.csproj" />
+    <ProjectReference Include="..\ShackStack.Infrastructure.Interop\ShackStack.Infrastructure.Interop.csproj" />
+    <ProjectReference Include="..\ShackStack.Infrastructure.Decoders\ShackStack.Infrastructure.Decoders.csproj" />
+  </ItemGroup>
+</Project>

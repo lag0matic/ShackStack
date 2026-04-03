@@ -1,0 +1,32 @@
+namespace ShackStack.Core.Abstractions.Models;
+
+public sealed record RadioState(
+    bool IsConnected,
+    long FrequencyHz,
+    long VfoAFrequencyHz,
+    long VfoBFrequencyHz,
+    RadioMode Mode,
+    bool IsVfoBActive,
+    bool IsSplitEnabled,
+    bool IsPttActive,
+    int Smeter,
+    int FilterSlot,
+    int FilterWidthHz,
+    int PreampLevel,
+    int AttenuatorDb,
+    bool IsTunerEnabled,
+    bool IsNoiseBlankerEnabled,
+    bool IsNoiseReductionEnabled,
+    int NoiseReductionLevel,
+    bool IsAutoNotchEnabled,
+    bool IsManualNotchEnabled,
+    int ManualNotchWidth,
+    int ManualNotchPosition,
+    bool IsIpPlusEnabled,
+    bool IsFilterShapeSoft,
+    int VoiceMicGainPercent,
+    int VoiceCompressionPercent,
+    int VoiceRfPowerPercent,
+    int CwPitchHz,
+    int CwKeyerWpm
+);
