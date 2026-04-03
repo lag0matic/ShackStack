@@ -5,6 +5,8 @@ obj/
 publish/
 tests/
 docs/
+src/ShackStack.Desktop/DecoderWorkers/
+src/ShackStack.DecoderHost/Python/.pyinstaller/
 
 *.user
 *.suo
@@ -14,3 +16,5 @@ docs/
 *.log
 Thumbs.db
 Desktop.ini
+src/ShackStack.DecoderHost/Python/**/__pycache__/
+src/ShackStack.DecoderHost/Python/**/*.pyc
