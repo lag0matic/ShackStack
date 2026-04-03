@@ -1,6 +1,7 @@
 # ShackStack
 
 ShackStack is a Windows desktop ham radio application built with C# and Avalonia.
+This was written with the assistance of ChatGPT, Claude, and Other AI tools - I am not a professional coder, and there will be bugs and rough edges.
 
 This clean beta branch contains the operator-facing app code for the `V-0.1 BETA` release. It is intended to be the GitHub-ready application repo, separate from the larger local development workspace and decoder experimentation harnesses.
 
