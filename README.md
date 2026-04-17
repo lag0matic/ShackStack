@@ -3,9 +3,9 @@
 ShackStack is a Windows desktop ham radio application built with C# and Avalonia.
 This was written with the assistance of ChatGPT, Claude, and Other AI tools - I am not a professional coder, and there will be bugs and rough edges.
 
-This clean beta branch contains the operator-facing app code for the `V-0.1 BETA` release. It is intended to be the GitHub-ready application repo, separate from the larger local development workspace and decoder experimentation harnesses.
+This clean release-candidate branch contains the operator-facing app code for the `V-0.9.0 RC` release. It is intended to be the GitHub-ready application repo, separate from the larger local development workspace and decoder experimentation harnesses.
 
-## Current Beta Scope
+## Current Release Candidate Scope
 
 - direct Icom CI-V radio control
 - VFO A / VFO B, `A/B`, `A=B`, and split operation
@@ -82,7 +82,7 @@ dotnet publish .\src\ShackStack.Desktop\ShackStack.Desktop.csproj -c Release -r 
 
 ## Version
 
-- current beta: `V-0.1 BETA`
+- current release candidate: `V-0.9.0 RC`
 
 ## Notes
 

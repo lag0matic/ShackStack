@@ -1,8 +1,8 @@
 #define MyAppName "ShackStack"
-#define MyAppVersion "V-0.1 BETA"
+#define MyAppVersion "V-0.9.0 RC"
 #define MyAppPublisher "ShackStack"
 #define MyAppExeName "ShackStack.Desktop.exe"
-#define MySourceDir "..\\publish\\ShackStack-win-x64-v0.1-beta"
+#define MySourceDir "..\\publish\\ShackStack-win-x64-v0.9.0-rc"
 #define MyIconFile "..\\src\\ShackStack.Desktop\\Assets\\shackstack.ico"
 
 [Setup]
@@ -14,7 +14,7 @@ DefaultDirName={localappdata}\Programs\ShackStack
 DefaultGroupName=ShackStack
 AllowNoIcons=yes
 OutputDir=..\publish
-OutputBaseFilename=ShackStack-Setup-v0.1-beta
+OutputBaseFilename=ShackStack-Setup-v0.9.0-rc
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
