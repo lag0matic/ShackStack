@@ -34,11 +34,7 @@ internal static class BundledDecoderWorkerLocator
                 }
             }
 
-            var bundledExecutable = Path.Combine(
-                AppContext.BaseDirectory,
-                "DecoderWorkers",
-                workerBaseName,
-                $"{workerBaseName}.exe");
+            var bundledExecutable = ResolveBundledExecutable(workerBaseName);
 
             if (File.Exists(bundledExecutable))
             {
@@ -74,7 +70,7 @@ internal static class BundledDecoderWorkerLocator
 
         var fallbackName = workerBaseNames.FirstOrDefault() ?? "worker";
         return new DecoderWorkerLaunch(
-            Path.Combine(AppContext.BaseDirectory, "DecoderWorkers", fallbackName, $"{fallbackName}.exe"),
+            ResolveBundledExecutable(fallbackName),
             string.Empty,
             Path.Combine(AppContext.BaseDirectory, "DecoderWorkers", fallbackName),
             fallbackName,
@@ -179,5 +175,18 @@ internal static class BundledDecoderWorkerLocator
             Path.GetDirectoryName(projectPath)!,
             projectPath,
             true);
+    }
+
+    private static string ResolveBundledExecutable(string workerBaseName)
+    {
+        var executableName = string.Equals(workerBaseName, "wsjtx_gpl_sidecar", StringComparison.OrdinalIgnoreCase)
+            ? "ShackStack.DecoderHost.GplWsjtx.exe"
+            : $"{workerBaseName}.exe";
+
+        return Path.Combine(
+            AppContext.BaseDirectory,
+            "DecoderWorkers",
+            workerBaseName,
+            executableName);
     }
 }
