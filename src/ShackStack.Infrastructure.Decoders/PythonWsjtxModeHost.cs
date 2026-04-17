@@ -12,6 +12,14 @@ namespace ShackStack.Infrastructure.Decoders;
 public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
 {
     private const int WsjtxInputSampleRate = 12_000;
+    private static readonly string[] IgnoredWorkerStderrFragments =
+    [
+        "PyInstaller\\loader\\pyimod02_importers.py:384",
+        "pkg_resources is deprecated as an API",
+        "https://setuptools.pypa.io/en/latest/pkg_resources.html",
+        "The pkg_resources package is slated for removal as early as 2025-11-30",
+        "Refrain from using this package or pin to Setuptools<81."
+    ];
     private readonly IAudioService _audioService;
     private readonly IClockDisciplineService _clockDisciplineService;
     private readonly SimpleSubject<WsjtxModeTelemetry> _telemetry = new();
@@ -437,8 +445,26 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
                 continue;
             }
 
+            if (IsIgnorableWorkerStderr(line))
+            {
+                continue;
+            }
+
             PublishTelemetry($"Worker stderr: {line}");
         }
+    }
+
+    private static bool IsIgnorableWorkerStderr(string line)
+    {
+        foreach (var fragment in IgnoredWorkerStderrFragments)
+        {
+            if (line.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task SendAudioAsync(AudioBuffer buffer)

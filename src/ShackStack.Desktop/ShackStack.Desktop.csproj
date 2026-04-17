@@ -22,6 +22,10 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <Content Include="wsjtx-tools\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -48,4 +52,21 @@
     <ProjectReference Include="..\ShackStack.Infrastructure.Interop\ShackStack.Infrastructure.Interop.csproj" />
     <ProjectReference Include="..\ShackStack.Infrastructure.Decoders\ShackStack.Infrastructure.Decoders.csproj" />
   </ItemGroup>
+
+  <Target Name="MirrorWorkerAssetsToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <BundledWorkerFiles Include="$(ProjectDir)DecoderWorkers\**\*" />
+      <BundledWsjtxToolFiles Include="$(ProjectDir)wsjtx-tools\**\*" />
+    </ItemGroup>
+
+    <Copy
+      SourceFiles="@(BundledWorkerFiles)"
+      DestinationFiles="@(BundledWorkerFiles->'$(PublishDir)DecoderWorkers\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+
+    <Copy
+      SourceFiles="@(BundledWsjtxToolFiles)"
+      DestinationFiles="@(BundledWsjtxToolFiles->'$(PublishDir)wsjtx-tools\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+  </Target>
 </Project>
