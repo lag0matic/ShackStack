@@ -640,7 +640,7 @@
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
                       <TextBlock Grid.Row="0" Text="Weak-Signal Digital" FontSize="18" FontWeight="SemiBold" />
                       <TextBlock Grid.Row="1"
-                                 Text="FT8/FT4 and other WSJT-X-style modes need disciplined time, cycle timing, and a structured decode list. This panel is the scaffold for that workflow before we add a real engine."
+                                 Text="FT8 and FT4 operating lives in the Weak-Signal Desk."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
@@ -650,7 +650,7 @@
                             <TextBlock Text="Weak-Signal Desk"
                                        FontSize="15"
                                        FontWeight="SemiBold" />
-                            <TextBlock Text="This tab keeps the operating essentials handy. Open Desk for the fuller decode list, selected-message pane, and the future WSJT-X-style sequencing workspace."
+                            <TextBlock Text="Open Desk for the full decode list, conversation rail, and FT8/FT4 operating workflow."
                                        Foreground="#AAB1C7"
                                        TextWrapping="Wrap" />
                           </StackPanel>

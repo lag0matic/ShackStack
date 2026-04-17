@@ -11,6 +11,7 @@ using ShackStack.Core.Abstractions.Utilities;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text.Json;
 
 namespace ShackStack.UI.ViewModels;
@@ -49,6 +50,7 @@ public sealed record WsjtxMessageItem(
         string BadgeForeground);
 public sealed record WsjtxSuggestedMessageItem(string Label, string MessageText, string Intent);
 public sealed record WsjtxActiveSession(string OtherCall, int FrequencyOffsetHz, string ModeLabel);
+public sealed record WsjtxReplyAutomationModeItem(string Key, string Label, string Summary);
 public sealed record LongwaveSpotSummaryItem(
     string Id,
     string ActivatorCallsign,
@@ -259,6 +261,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private Pcm16AudioClip? _wsjtxPreparedTransmitClip;
     private bool _wsjtxSlotSendInFlight;
     private WsjtxModeTelemetry? _lastWsjtxTelemetry;
+    private DateTime _lastWsjtxDirectedAlertUtc = DateTime.MinValue;
     private readonly string _sstvReceivedDirectory;
     private readonly string _sstvReplyDirectory;
     private readonly string _sstvTemplateDirectory;
@@ -1081,7 +1084,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private bool wsjtxAutoSequenceEnabled = true;
 
     [ObservableProperty]
-    private bool wsjtxAutoStageRepliesEnabled = true;
+    private IReadOnlyList<WsjtxReplyAutomationModeItem> wsjtxReplyAutomationModeOptions =
+    [
+        new("manual", "Manual", "Suggest the next reply, but do not stage or ready it automatically."),
+        new("stage", "Auto Stage Only", "Auto-select and stage the next reply for the active FT8/FT4 conversation lane."),
+        new("ready", "Auto Ready Next", "Auto-stage, prepare, and arm the next reply for the locked FT8/FT4 conversation lane."),
+    ];
+
+    [ObservableProperty]
+    private WsjtxReplyAutomationModeItem selectedWsjtxReplyAutomationMode = new("stage", "Auto Stage Only", "Auto-select and stage the next reply for the active FT8/FT4 conversation lane.");
 
     [ObservableProperty]
     private string wsjtxRxStatus = "WSJT-style digital scaffold ready";
@@ -1100,6 +1111,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private ObservableCollection<WsjtxMessageItem> wsjtxRxFrequencyMessages = [];
+
+    [ObservableProperty]
+    private ObservableCollection<WsjtxMessageItem> wsjtxConversationMessages = [];
 
     [ObservableProperty]
     private WsjtxMessageItem? selectedWsjtxMessage;
@@ -1271,6 +1285,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public bool WsjtxHasRxFrequencyMessages => WsjtxRxFrequencyMessages.Count > 0;
 
+    public bool WsjtxHasConversationMessages => WsjtxConversationMessages.Count > 0;
+
     public string WsjtxSelectedMessageText => SelectedWsjtxMessage?.MessageText ?? "No decodes yet.";
 
     public string WsjtxRxFrequencyTitle => $"Rx Frequency ({WsjtxRxAudioFrequencyHz:+0;-0;0} Hz)";
@@ -1290,6 +1306,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string WsjtxQueuedTransmitPreview => WsjtxQueuedTransmitMessage?.MessageText ?? "No TX message staged.";
 
     public string WsjtxPreparedTransmitSummary => WsjtxPreparedTransmitStatus;
+
+    public string WsjtxReplyAutomationSummary => SelectedWsjtxReplyAutomationMode.Summary;
 
     public string WsjtxTransmitArmSummary
     {
@@ -1325,6 +1343,49 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public string WsjtxTransmitPlanSummary =>
         $"TX {WsjtxTxAudioFrequencyHz:+0;-0;0} Hz  |  RX {WsjtxRxAudioFrequencyHz:+0;-0;0} Hz  |  {(WsjtxHoldTxFrequency ? "Hold TX" : "TX follows RX")}";
+
+    public string WsjtxQsoRailSummary
+    {
+        get
+        {
+            var parts = new List<string>();
+
+            if (WsjtxCallingCq && WsjtxActiveSession is null)
+            {
+                parts.Add("Calling CQ");
+            }
+            else if (WsjtxActiveSession is not null)
+            {
+                parts.Add(WsjtxAwaitingReply
+                    ? $"Waiting for {WsjtxActiveSession.OtherCall}"
+                    : $"Reply from {WsjtxActiveSession.OtherCall}");
+            }
+            else
+            {
+                parts.Add("No active QSO");
+            }
+
+            if (!WsjtxAwaitingReply && WsjtxQueuedTransmitMessage is not null)
+            {
+                parts.Add($"Next: {WsjtxQueuedTransmitMessage.MessageText}");
+            }
+
+            if (WsjtxTransmitArmedLocal)
+            {
+                parts.Add("Ready for next slot");
+            }
+            else if (WsjtxPreparedTransmit is not null)
+            {
+                parts.Add("Prepared");
+            }
+
+            return string.Join("  |  ", parts);
+        }
+    }
+
+    public string WsjtxConversationStatus => WsjtxHasConversationMessages
+        ? "Current exchange"
+        : "No active conversation yet.";
 
     public string WsjtxActiveSessionSummary => WsjtxActiveSession is null
         ? (WsjtxCallingCq ? "Calling CQ and waiting for a reply." : "No active weak-signal contact.")
@@ -2315,7 +2376,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var state = ClassifyWsjtxQsoState(SelectedWsjtxSuggestedMessage.MessageText, myCall);
             if (!string.IsNullOrWhiteSpace(state.OtherCall))
             {
-                WsjtxActiveSession = new WsjtxActiveSession(state.OtherCall, WsjtxRxAudioFrequencyHz, WsjtxSelectedMode);
+                var sessionOffset = SelectedWsjtxMessage?.FrequencyOffsetHz
+                    ?? WsjtxActiveSession?.FrequencyOffsetHz
+                    ?? WsjtxRxAudioFrequencyHz;
+                WsjtxActiveSession = new WsjtxActiveSession(state.OtherCall, sessionOffset, WsjtxSelectedMode);
+                WsjtxRxAudioFrequencyHz = sessionOffset;
+                if (!WsjtxHoldTxFrequency)
+                {
+                    WsjtxTxAudioFrequencyHz = sessionOffset;
+                }
                 WsjtxCallingCq = false;
             }
         }
@@ -2367,16 +2436,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private async Task SendSelectedWsjtxReplyNextSlotAsync()
+    private async Task SendNextWsjtxMessageAsync()
     {
-        if (SelectedWsjtxSuggestedMessage is null)
+        if (SelectedWsjtxSuggestedMessage is not null
+            && (WsjtxQueuedTransmitMessage is null
+                || !string.Equals(WsjtxQueuedTransmitMessage.MessageText, SelectedWsjtxSuggestedMessage.MessageText, StringComparison.Ordinal)))
         {
-            WsjtxRxStatus = "Select a suggested reply first.";
+            StageSelectedWsjtxSuggestedMessage();
+        }
+
+        if (WsjtxQueuedTransmitMessage is null)
+        {
+            WsjtxRxStatus = "Select or stage the next weak-signal message first.";
             return;
         }
 
-        StageSelectedWsjtxSuggestedMessage();
-        await PrepareAndArmQueuedWsjtxTransmitAsync(SelectedWsjtxSuggestedMessage.Label);
+        await PrepareAndArmQueuedWsjtxTransmitAsync(WsjtxQueuedTransmitMessage.Label);
     }
 
     [RelayCommand]
@@ -2387,12 +2462,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _wsjtxPreparedTransmitClip = null;
         WsjtxActiveSession = null;
         WsjtxCallingCq = false;
+        WsjtxConversationMessages.Clear();
         WsjtxPreparedTransmitStatus = "No TX signal prepared.";
         WsjtxPreparedTransmitPath = "No prepared TX artifact.";
         WsjtxTransmitArmedLocal = false;
         WsjtxAwaitingReply = false;
         WsjtxTransmitArmStatus = "Nothing armed.";
         WsjtxRxStatus = "Cleared staged TX message";
+        OnPropertyChanged(nameof(WsjtxHasConversationMessages));
+        OnPropertyChanged(nameof(WsjtxConversationStatus));
     }
 
     [RelayCommand]
@@ -2454,6 +2532,41 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private async Task AutoReadyWsjtxQueuedTransmitAsync(string status, string actionLabel)
+    {
+        try
+        {
+            WsjtxPreparedTransmitStatus = "Auto-preparing next reply...";
+            WsjtxTransmitArmStatus = "Auto-readying next reply for the next slot.";
+            await PrepareAndArmQueuedWsjtxTransmitAsync(actionLabel).ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (WsjtxTransmitArmedLocal)
+                {
+                    WsjtxRxStatus = $"{status} | Auto-readied next reply";
+                    WsjtxTransmitArmStatus = "Next reply is ready for the next slot.";
+                }
+                else if (WsjtxPreparedTransmit is not null)
+                {
+                    WsjtxRxStatus = $"{status} | Auto-staged next reply, but arming needs attention";
+                }
+                else
+                {
+                    WsjtxRxStatus = $"{status} | Auto-ready failed";
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                WsjtxRxStatus = $"{status} | Auto-ready failed: {ex.Message}";
+                WsjtxTransmitArmStatus = "Auto-ready failed.";
+            });
+        }
+    }
+
     [RelayCommand]
     private void ArmPreparedWsjtxTransmit()
     {
@@ -2496,6 +2609,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         var incoming = BuildWsjtxMessageItem(message);
         var existingIndex = FindExistingWsjtxMessageIndex(WsjtxMessages, message);
+        var isNewMessage = existingIndex < 0;
         if (existingIndex >= 0)
         {
             var previouslySelected = SelectedWsjtxMessage is not null
@@ -2536,12 +2650,57 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         RebuildWsjtxRxFrequencyMessages();
+        TrackWsjtxConversationMessage(incoming);
+
+        if (isNewMessage && message.IsDirectedToMe && !incoming.IsOwnTransmit)
+        {
+            PlayWsjtxDirectedAlert();
+        }
+    }
+
+    private void PlayWsjtxDirectedAlert()
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastWsjtxDirectedAlertUtc).TotalSeconds < 3)
+        {
+            return;
+        }
+
+        _lastWsjtxDirectedAlertUtc = now;
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            _ = Task.Run(PlayWsjtxDirectedAlertCore);
+        }
+        catch
+        {
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void PlayWsjtxDirectedAlertCore()
+    {
+        try
+        {
+            Console.Beep(1046, 55);
+            Thread.Sleep(45);
+            Console.Beep(1318, 70);
+        }
+        catch
+        {
+        }
     }
 
     private void InsertOutgoingWsjtxMessage(WsjtxPreparedTransmit prepared)
     {
         var outgoing = BuildOutgoingWsjtxMessageItem(prepared);
         WsjtxMessages.Insert(0, outgoing);
+        InsertWsjtxConversationMessage(outgoing);
 
         while (WsjtxMessages.Count > 200)
         {
@@ -2555,6 +2714,67 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         RebuildWsjtxRxFrequencyMessages();
+    }
+
+    private void TrackWsjtxConversationMessage(WsjtxMessageItem incoming)
+    {
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        if (string.IsNullOrWhiteSpace(myCall))
+        {
+            return;
+        }
+
+        if (WsjtxCallingCq && incoming.IsDirectedToMe)
+        {
+            InsertWsjtxConversationMessage(incoming);
+            return;
+        }
+
+        if (WsjtxActiveSession is null)
+        {
+            return;
+        }
+
+        var state = ClassifyWsjtxQsoState(incoming.MessageText, myCall);
+        if (!string.Equals(state.OtherCall, WsjtxActiveSession.OtherCall, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (Math.Abs(incoming.FrequencyOffsetHz - WsjtxActiveSession.FrequencyOffsetHz) > GetWsjtxRxFrequencyWindowHz(incoming.ModeText))
+        {
+            return;
+        }
+
+        InsertWsjtxConversationMessage(incoming);
+    }
+
+    private void InsertWsjtxConversationMessage(WsjtxMessageItem message)
+    {
+        var existingIndex = WsjtxConversationMessages
+            .ToList()
+            .FindIndex(item =>
+                item.TimestampUtc == message.TimestampUtc
+                && item.FrequencyOffsetHz == message.FrequencyOffsetHz
+                && string.Equals(item.MessageText, message.MessageText, StringComparison.Ordinal)
+                && string.Equals(item.ModeText, message.ModeText, StringComparison.OrdinalIgnoreCase));
+
+        if (existingIndex >= 0)
+        {
+            WsjtxConversationMessages[existingIndex] = message;
+        }
+        else
+        {
+            WsjtxConversationMessages.Add(message);
+        }
+
+        while (WsjtxConversationMessages.Count > 24)
+        {
+            WsjtxConversationMessages.RemoveAt(0);
+        }
+
+        OnPropertyChanged(nameof(WsjtxHasConversationMessages));
+        OnPropertyChanged(nameof(WsjtxConversationStatus));
     }
 
     private int FindExistingWsjtxMessageIndex(IReadOnlyList<WsjtxMessageItem> collection, WsjtxDecodeMessage message)
@@ -2692,6 +2912,35 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private WsjtxMessageItem? FindActiveWsjtxConversationAnchor(string myCall)
+    {
+        if (WsjtxActiveSession is null || string.IsNullOrWhiteSpace(myCall))
+        {
+            return null;
+        }
+
+        return WsjtxMessages.FirstOrDefault(item =>
+        {
+            if (!string.Equals(item.ModeText, WsjtxActiveSession.ModeLabel, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var state = ClassifyWsjtxQsoState(item.MessageText, myCall);
+            if (!string.Equals(state.OtherCall, WsjtxActiveSession.OtherCall, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (item.IsOwnTransmit)
+            {
+                return false;
+            }
+
+            return true;
+        });
+    }
+
     private void PromoteTopWsjtxSuggestion(string status)
     {
         var top = WsjtxSuggestedMessages.FirstOrDefault();
@@ -2700,22 +2949,32 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        var hadPreparedAudio = WsjtxPreparedTransmit is not null || _wsjtxPreparedTransmitClip is not null;
         SelectedWsjtxSuggestedMessage = top;
-        WsjtxQueuedTransmitMessage = WsjtxAutoStageRepliesEnabled ? top : null;
+        WsjtxQueuedTransmitMessage = ShouldAutoStageWsjtxReplies ? top : null;
         WsjtxPreparedTransmit = null;
         _wsjtxPreparedTransmitClip = null;
-        WsjtxPreparedTransmitStatus = WsjtxAutoStageRepliesEnabled
-            ? "Reply auto-staged; prepare TX signal again."
-            : "Reply advanced; stage it when ready, then prepare TX signal.";
+        WsjtxPreparedTransmitStatus = ShouldAutoStageWsjtxReplies
+            ? (hadPreparedAudio
+                ? "Previous prepared audio is stale; next reply auto-staged."
+                : "Next reply auto-staged.")
+            : (hadPreparedAudio
+                ? "Previous prepared audio is stale; choose Send Next when ready."
+                : "Next reply suggested; choose Send Next when ready.");
         WsjtxPreparedTransmitPath = "No prepared TX artifact.";
         WsjtxTransmitArmedLocal = false;
         WsjtxAwaitingReply = false;
-        WsjtxTransmitArmStatus = WsjtxAutoStageRepliesEnabled
-            ? "Next reply staged automatically; re-prepare before arming."
-            : "Next reply suggested; stage it when ready.";
-        WsjtxRxStatus = WsjtxAutoStageRepliesEnabled
+        WsjtxTransmitArmStatus = ShouldAutoStageWsjtxReplies
+            ? "Next reply staged automatically."
+            : "Next reply suggested.";
+        WsjtxRxStatus = ShouldAutoStageWsjtxReplies
             ? $"{status} | Auto-staged next reply"
             : $"{status} | Next reply suggested";
+
+        if (ShouldAutoReadyWsjtxReplies && WsjtxQueuedTransmitMessage is not null)
+        {
+            _ = AutoReadyWsjtxQueuedTransmitAsync(status, WsjtxQueuedTransmitMessage.Label);
+        }
     }
 
     private static WsjtxMessageItem BuildWsjtxMessageItem(WsjtxDecodeMessage message)
@@ -3663,6 +3922,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         string.Equals(mode, "FT8", StringComparison.OrdinalIgnoreCase)
         || string.Equals(mode, "FT4", StringComparison.OrdinalIgnoreCase);
 
+    private bool ShouldAutoStageWsjtxReplies =>
+        string.Equals(SelectedWsjtxReplyAutomationMode.Key, "stage", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(SelectedWsjtxReplyAutomationMode.Key, "ready", StringComparison.OrdinalIgnoreCase);
+
+    private bool ShouldAutoReadyWsjtxReplies =>
+        string.Equals(SelectedWsjtxReplyAutomationMode.Key, "ready", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsVoiceSpotMode(string mode) =>
         string.Equals(mode, "SSB", StringComparison.OrdinalIgnoreCase)
         || string.Equals(mode, "USB", StringComparison.OrdinalIgnoreCase)
@@ -3990,6 +4256,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         UpdateWsjtxSessionNotes();
     }
 
+    partial void OnSelectedWsjtxReplyAutomationModeChanged(WsjtxReplyAutomationModeItem value)
+    {
+        OnPropertyChanged(nameof(WsjtxReplyAutomationSummary));
+    }
+
     partial void OnWsjtxHoldTxFrequencyChanged(bool value)
     {
         OnPropertyChanged(nameof(WsjtxTxTrackStatus));
@@ -4008,6 +4279,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnWsjtxQueuedTransmitMessageChanged(WsjtxSuggestedMessageItem? value)
     {
         OnPropertyChanged(nameof(WsjtxQueuedTransmitPreview));
+        OnPropertyChanged(nameof(WsjtxQsoRailSummary));
     }
 
     partial void OnWsjtxOperatorCallsignChanged(string value)
@@ -4021,22 +4293,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnWsjtxPreparedTransmitChanged(WsjtxPreparedTransmit? value)
     {
         OnPropertyChanged(nameof(WsjtxTransmitArmSummary));
+        OnPropertyChanged(nameof(WsjtxQsoRailSummary));
     }
 
     partial void OnWsjtxAwaitingReplyChanged(bool value)
     {
         OnPropertyChanged(nameof(WsjtxTransmitArmSummary));
         OnPropertyChanged(nameof(WsjtxActiveSessionSummary));
+        OnPropertyChanged(nameof(WsjtxQsoRailSummary));
     }
 
     partial void OnWsjtxActiveSessionChanged(WsjtxActiveSession? value)
     {
         OnPropertyChanged(nameof(WsjtxActiveSessionSummary));
+        OnPropertyChanged(nameof(WsjtxQsoRailSummary));
     }
 
     partial void OnWsjtxCallingCqChanged(bool value)
     {
         OnPropertyChanged(nameof(WsjtxActiveSessionSummary));
+        OnPropertyChanged(nameof(WsjtxQsoRailSummary));
     }
 
     partial void OnWsjtxPreparedTransmitStatusChanged(string value)
@@ -4047,6 +4323,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnWsjtxTransmitArmedLocalChanged(bool value)
     {
         OnPropertyChanged(nameof(WsjtxTransmitArmSummary));
+        OnPropertyChanged(nameof(WsjtxQsoRailSummary));
     }
 
     partial void OnWsjtxTransmitArmStatusChanged(string value)
@@ -5764,71 +6041,79 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var items = new List<WsjtxSuggestedMessageItem>();
         var myCall = FormatCallsign(WsjtxOperatorCallsign);
         var myGrid = FormatWeakSignalGrid(WsjtxOperatorGridSquare);
-        var mode = WsjtxSelectedMode;
-        var selected = SelectedWsjtxMessage;
+        var selected = FindActiveWsjtxConversationAnchor(myCall) ?? SelectedWsjtxMessage;
         var selectedState = ClassifyWsjtxQsoState(selected?.MessageText, myCall);
         var outboundReport = FormatWsjtxReport(selected?.SnrDb ?? -10);
-
-        if (!string.IsNullOrWhiteSpace(myCall))
-        {
-            if (!string.IsNullOrWhiteSpace(myGrid))
-            {
-                items.Add(new WsjtxSuggestedMessageItem("CQ", $"CQ {myCall} {myGrid}", "Call CQ on current TX offset"));
-            }
-            else
-            {
-                items.Add(new WsjtxSuggestedMessageItem("CQ", $"CQ {myCall}", "Call CQ on current TX offset"));
-            }
-        }
-
         var theirCall = selectedState.OtherCall ?? TryExtractCallsign(selected?.MessageText);
-        if (!string.IsNullOrWhiteSpace(myCall) && !string.IsNullOrWhiteSpace(theirCall))
-        {
-            if (selectedState.Stage is WsjtxQsoStage.Cq or WsjtxQsoStage.Qrz)
-            {
-                if (!string.IsNullOrWhiteSpace(myGrid))
-                {
-                    items.Insert(0, new WsjtxSuggestedMessageItem("Answer CQ", $"{theirCall} {myCall} {myGrid}", "Answer selected CQ on the tracked RX offset"));
-                }
-                else
-                {
-                    items.Insert(0, new WsjtxSuggestedMessageItem("Answer CQ", $"{theirCall} {myCall}", "Answer selected CQ on the tracked RX offset"));
-                }
-            }
-            else if (selectedState.Stage is WsjtxQsoStage.ReportToMe)
-            {
-                items.Insert(0, new WsjtxSuggestedMessageItem("Roger", $"{theirCall} {myCall} R{outboundReport}", $"Roger their report and send {outboundReport} on current TX offset"));
-            }
-            else if (selectedState.Stage is WsjtxQsoStage.RogerToMe)
-            {
-                items.Insert(0, new WsjtxSuggestedMessageItem("RR73", $"{theirCall} {myCall} RR73", "Acknowledge and move toward signoff on current TX offset"));
-            }
-            else if (selectedState.Stage is WsjtxQsoStage.Rr73ToMe or WsjtxQsoStage.SignoffToMe)
-            {
-                items.Insert(0, new WsjtxSuggestedMessageItem("73", $"{theirCall} {myCall} 73", "Send final signoff on current TX offset"));
-            }
 
-            items.Add(new WsjtxSuggestedMessageItem("Report", $"{theirCall} {myCall} {outboundReport}", $"Send signal report {outboundReport} on current TX offset"));
-            items.Add(new WsjtxSuggestedMessageItem("Roger", $"{theirCall} {myCall} R{outboundReport}", $"Send roger plus report {outboundReport} on current TX offset"));
-            items.Add(new WsjtxSuggestedMessageItem("RR73", $"{theirCall} {myCall} RR73", "Send RR73 on current TX offset"));
-            items.Add(new WsjtxSuggestedMessageItem("73", $"{theirCall} {myCall} 73", "Send 73 on current TX offset"));
-        }
+        var targetCall = string.IsNullOrWhiteSpace(theirCall) ? "<CALL>" : theirCall;
+        var cqText = string.IsNullOrWhiteSpace(myCall)
+            ? "CQ <MYCALL> <GRID>"
+            : string.IsNullOrWhiteSpace(myGrid)
+                ? $"CQ {myCall}"
+                : $"CQ {myCall} {myGrid}";
+        var answerCqText = string.IsNullOrWhiteSpace(myCall)
+            ? $"{targetCall} <MYCALL> <GRID>"
+            : string.IsNullOrWhiteSpace(myGrid)
+                ? $"{targetCall} {myCall}"
+                : $"{targetCall} {myCall} {myGrid}";
+        var reportText = string.IsNullOrWhiteSpace(myCall)
+            ? $"{targetCall} <MYCALL> {outboundReport}"
+            : $"{targetCall} {myCall} {outboundReport}";
+        var rogerText = string.IsNullOrWhiteSpace(myCall)
+            ? $"{targetCall} <MYCALL> R{outboundReport}"
+            : $"{targetCall} {myCall} R{outboundReport}";
+        var r73Text = string.IsNullOrWhiteSpace(myCall)
+            ? $"{targetCall} <MYCALL> R73"
+            : $"{targetCall} {myCall} R73";
+        var rr73Text = string.IsNullOrWhiteSpace(myCall)
+            ? $"{targetCall} <MYCALL> RR73"
+            : $"{targetCall} {myCall} RR73";
+        var signoffText = string.IsNullOrWhiteSpace(myCall)
+            ? $"{targetCall} <MYCALL> 73"
+            : $"{targetCall} {myCall} 73";
 
-        if (string.Equals(mode, "WSPR", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(myCall))
-        {
-            items.Clear();
-            if (!string.IsNullOrWhiteSpace(myGrid))
-            {
-                items.Add(new WsjtxSuggestedMessageItem("WSPR TX", $"{myCall} {myGrid} 30", "Stage a WSPR transmission"));
-            }
-            else
-            {
-                items.Add(new WsjtxSuggestedMessageItem("WSPR TX", $"{myCall} <GRID> 30", "Stage a WSPR transmission"));
-            }
-        }
+        items.Add(new WsjtxSuggestedMessageItem("CQ", cqText, "Call CQ on your current TX offset"));
+        items.Add(new WsjtxSuggestedMessageItem("Reply CQ", answerCqText, "Answer the selected CQ with your callsign and grid"));
+        items.Add(new WsjtxSuggestedMessageItem("Report", reportText, $"Send signal report {outboundReport}"));
+        items.Add(new WsjtxSuggestedMessageItem("Roger", rogerText, $"Roger and send report {outboundReport}"));
+        items.Add(new WsjtxSuggestedMessageItem("R73", r73Text, "Wrap the exchange with R73"));
+        items.Add(new WsjtxSuggestedMessageItem("RR73", rr73Text, "Wrap the exchange with RR73"));
+        items.Add(new WsjtxSuggestedMessageItem("73", signoffText, "Send a final 73"));
 
         WsjtxSuggestedMessages = new ObservableCollection<WsjtxSuggestedMessageItem>(items);
-        SelectedWsjtxSuggestedMessage = WsjtxSuggestedMessages.FirstOrDefault();
+
+        var preferredSelected = SelectedWsjtxSuggestedMessage is null
+            ? null
+            : WsjtxSuggestedMessages.FirstOrDefault(item =>
+                string.Equals(item.MessageText, SelectedWsjtxSuggestedMessage.MessageText, StringComparison.Ordinal));
+        var preferredQueued = WsjtxQueuedTransmitMessage is null
+            ? null
+            : WsjtxSuggestedMessages.FirstOrDefault(item =>
+                string.Equals(item.MessageText, WsjtxQueuedTransmitMessage.MessageText, StringComparison.Ordinal));
+
+        WsjtxSuggestedMessageItem? preferredByStage = null;
+        if (!string.IsNullOrWhiteSpace(theirCall))
+        {
+            preferredByStage = selectedState.Stage switch
+            {
+                WsjtxQsoStage.Cq or WsjtxQsoStage.Qrz => WsjtxSuggestedMessages.FirstOrDefault(item => item.Label == "Reply CQ"),
+                WsjtxQsoStage.ReportToMe => WsjtxSuggestedMessages.FirstOrDefault(item => item.Label == "Roger"),
+                WsjtxQsoStage.RogerToMe => WsjtxSuggestedMessages.FirstOrDefault(item => item.Label == "RR73"),
+                WsjtxQsoStage.Rr73ToMe or WsjtxQsoStage.SignoffToMe => WsjtxSuggestedMessages.FirstOrDefault(item => item.Label == "73"),
+                _ => null
+            };
+        }
+
+        SelectedWsjtxSuggestedMessage = preferredSelected
+            ?? preferredQueued
+            ?? preferredByStage
+            ?? WsjtxSuggestedMessages.FirstOrDefault();
+
+        if (preferredQueued is not null)
+        {
+            WsjtxQueuedTransmitMessage = preferredQueued;
+        }
         OnPropertyChanged(nameof(WsjtxSuggestedMessagePreview));
     }
 
