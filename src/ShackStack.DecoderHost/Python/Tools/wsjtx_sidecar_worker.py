@@ -51,7 +51,17 @@ def _parse_fortran_data_block(text: str, name: str) -> list[int]:
 
 
 def _load_ft8_ldpc_parity() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    parity_path = Path(__file__).resolve().parent.parent / "references" / "wsjt" / "ldpc_174_91_c_parity.f90"
+    base_dir = Path(__file__).resolve().parent.parent
+    candidate_paths = [
+        base_dir / "references" / "wsjt" / "ldpc_174_91_c_parity.f90",
+        base_dir / "_internal" / "references" / "wsjt" / "ldpc_174_91_c_parity.f90",
+    ]
+
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidate_paths.append(Path(meipass) / "references" / "wsjt" / "ldpc_174_91_c_parity.f90")
+
+    parity_path = next((path for path in candidate_paths if path.exists()), candidate_paths[0])
     text = parity_path.read_text(encoding="utf-8")
     mn_flat = _parse_fortran_data_block(text, "Mn")
     nm_flat = _parse_fortran_data_block(text, "Nm")

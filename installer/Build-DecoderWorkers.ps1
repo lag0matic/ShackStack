@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $pythonRoot = Join-Path $repoRoot "src\ShackStack.DecoderHost\Python"
 $toolsRoot = Join-Path $pythonRoot "Tools"
+$referencesRoot = Join-Path $pythonRoot "references"
 $distRoot = Join-Path $repoRoot "src\ShackStack.Desktop\DecoderWorkers"
 $pyiRoot = Join-Path $pythonRoot ".pyinstaller"
 $workRoot = Join-Path $pyiRoot "build"
@@ -34,26 +35,34 @@ foreach ($worker in $workers) {
         throw "Worker script not found: $scriptPath"
     }
 
-    & pyinstaller `
-        --noconfirm `
-        --clean `
-        --onedir `
-        --name $worker `
-        --distpath $distRoot `
-        --workpath $workRoot `
-        --specpath $specRoot `
-        --paths $pythonRoot `
-        --hidden-import scipy._cyutility `
-        --exclude-module torch `
-        --exclude-module matplotlib `
-        --exclude-module pytest `
-        --exclude-module pandas `
-        --exclude-module jupyter_client `
-        --exclude-module IPython `
-        --exclude-module sympy `
-        --exclude-module tkinter `
-        --exclude-module pygame `
-        $scriptPath
+    $pyInstallerArgs = @(
+        "--noconfirm"
+        "--clean"
+        "--onedir"
+        "--name", $worker
+        "--distpath", $distRoot
+        "--workpath", $workRoot
+        "--specpath", $specRoot
+        "--paths", $pythonRoot
+        "--hidden-import", "scipy._cyutility"
+        "--exclude-module", "torch"
+        "--exclude-module", "matplotlib"
+        "--exclude-module", "pytest"
+        "--exclude-module", "pandas"
+        "--exclude-module", "jupyter_client"
+        "--exclude-module", "IPython"
+        "--exclude-module", "sympy"
+        "--exclude-module", "tkinter"
+        "--exclude-module", "pygame"
+    )
+
+    if ($worker -eq "wsjtx_sidecar_worker" -and (Test-Path $referencesRoot)) {
+        $pyInstallerArgs += @("--add-data", "$referencesRoot;references")
+    }
+
+    $pyInstallerArgs += $scriptPath
+
+    & pyinstaller @pyInstallerArgs
 }
 
 if (Test-Path $gplWsjtxProject) {
