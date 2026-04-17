@@ -141,13 +141,34 @@ public sealed class JsonAppSettingsStore : IAppSettingsStore
 
     private static AppSettings NormalizeSettings(AppSettings settings)
     {
+        var station = settings.Station ?? AppSettings.Default.Station;
+        var radio = settings.Radio ?? AppSettings.Default.Radio;
+        var audio = settings.Audio ?? AppSettings.Default.Audio;
+        var interop = settings.Interop ?? AppSettings.Default.Interop;
+        var ui = settings.Ui ?? AppSettings.Default.Ui;
+        var longwave = settings.Longwave ?? AppSettings.Default.Longwave;
+
         return settings with
         {
-            Station = settings.Station,
-            Ui = settings.Ui with
+            Station = station,
+            Radio = radio,
+            Audio = audio,
+            Interop = interop,
+            Longwave = longwave with
             {
-                Theme = string.IsNullOrWhiteSpace(settings.Ui.Theme) ? "dark" : settings.Ui.Theme,
-                WaterfallColormap = string.IsNullOrWhiteSpace(settings.Ui.WaterfallColormap) ? "classic" : settings.Ui.WaterfallColormap,
+                BaseUrl = longwave.BaseUrl?.Trim() ?? string.Empty,
+                ClientApiToken = longwave.ClientApiToken?.Trim() ?? string.Empty,
+                DefaultLogbookName = string.IsNullOrWhiteSpace(longwave.DefaultLogbookName)
+                    ? AppSettings.Default.Longwave.DefaultLogbookName
+                    : longwave.DefaultLogbookName.Trim(),
+                DefaultLogbookNotes = string.IsNullOrWhiteSpace(longwave.DefaultLogbookNotes)
+                    ? AppSettings.Default.Longwave.DefaultLogbookNotes
+                    : longwave.DefaultLogbookNotes.Trim(),
+            },
+            Ui = ui with
+            {
+                Theme = string.IsNullOrWhiteSpace(ui.Theme) ? "dark" : ui.Theme,
+                WaterfallColormap = string.IsNullOrWhiteSpace(ui.WaterfallColormap) ? "classic" : ui.WaterfallColormap,
             }
         };
     }
@@ -180,6 +201,7 @@ public sealed class JsonAppSettingsStore : IAppSettingsStore
                 root.TryGetProperty("audio", out var audioElement)
                 && audioElement.ValueKind == JsonValueKind.Object
                 && audioElement.TryGetProperty("monitorVolumePercent", out _);
+            var hasLongwave = root.TryGetProperty("longwave", out _);
 
             return settings with
             {
@@ -204,7 +226,8 @@ public sealed class JsonAppSettingsStore : IAppSettingsStore
                     WaterfallCeilingPercent = hasWaterfallCeilingPercent
                         ? settings.Ui.WaterfallCeilingPercent
                         : AppSettings.Default.Ui.WaterfallCeilingPercent,
-                }
+                },
+                Longwave = hasLongwave ? settings.Longwave : AppSettings.Default.Longwave,
             };
         }
         catch

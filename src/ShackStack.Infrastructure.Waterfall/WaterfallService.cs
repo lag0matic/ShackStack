@@ -7,6 +7,9 @@ namespace ShackStack.Infrastructure.Waterfall;
 public sealed class WaterfallService : IWaterfallService, IWaterfallRenderSource
 {
     private const int DefaultHeight = 160;
+    private const float TemporalBlendFactor = 0.22f;
+    private const int SpectrumSmoothingRadius = 2;
+    private const int WaterfallSmoothingRadius = 1;
 
     private readonly SimpleSubject<SpectrumFrame> _spectrum = new();
     private readonly SimpleSubject<WaterfallRow> _waterfall = new();
@@ -50,8 +53,9 @@ public sealed class WaterfallService : IWaterfallService, IWaterfallRenderSource
         lock (_sync)
         {
             EnsureBuffers(row.Bins.Length);
+            var priorNewest = _history![0];
             ShiftRowsDown();
-            _history![0] = (float[])row.Bins.Clone();
+            _history![0] = PrepareIncomingRow(row.Bins, priorNewest);
             _centerFrequencyHz = row.CenterFrequencyHz;
             _spanHz = row.SpanHz;
             PublishLatestFrame();
@@ -122,7 +126,7 @@ public sealed class WaterfallService : IWaterfallService, IWaterfallRenderSource
             result[x] = Normalize(newest[sourceIndex]);
         }
 
-        return result;
+        return SmoothSeries(result, SpectrumSmoothingRadius);
     }
 
     private byte[] BuildWaterfallPixels()
@@ -131,10 +135,11 @@ public sealed class WaterfallService : IWaterfallService, IWaterfallRenderSource
         for (var y = 0; y < _height; y++)
         {
             var row = _history![y];
+            var smoothedRow = SmoothSeries(row, WaterfallSmoothingRadius);
             for (var x = 0; x < _width; x++)
             {
                 var sourceIndex = MapSourceIndex(x);
-                var value = Normalize(row[sourceIndex]);
+                var value = Normalize(smoothedRow[sourceIndex]);
                 var color = MapWaterfallColor(value);
                 var offset = ((y * _width) + x) * 4;
                 pixels[offset + 0] = color.b;
@@ -145,6 +150,52 @@ public sealed class WaterfallService : IWaterfallService, IWaterfallRenderSource
         }
 
         return pixels;
+    }
+
+    private static float[] PrepareIncomingRow(IReadOnlyList<float> incoming, IReadOnlyList<float>? previousNewest)
+    {
+        var smoothed = SmoothSeries(incoming, SpectrumSmoothingRadius);
+        if (previousNewest is null || previousNewest.Count != smoothed.Length)
+        {
+            return smoothed;
+        }
+
+        var blended = new float[smoothed.Length];
+        for (var i = 0; i < smoothed.Length; i++)
+        {
+            blended[i] = Math.Clamp(
+                (smoothed[i] * (1f - TemporalBlendFactor)) + (previousNewest[i] * TemporalBlendFactor),
+                0f,
+                1f);
+        }
+
+        return blended;
+    }
+
+    private static float[] SmoothSeries(IReadOnlyList<float> source, int radius)
+    {
+        if (source.Count == 0 || radius <= 0)
+        {
+            return source is float[] existing ? (float[])existing.Clone() : source.ToArray();
+        }
+
+        var smoothed = new float[source.Count];
+        for (var i = 0; i < source.Count; i++)
+        {
+            var total = 0f;
+            var weight = 0f;
+            for (var offset = -radius; offset <= radius; offset++)
+            {
+                var index = Math.Clamp(i + offset, 0, source.Count - 1);
+                var sampleWeight = radius + 1 - Math.Abs(offset);
+                total += source[index] * sampleWeight;
+                weight += sampleWeight;
+            }
+
+            smoothed[i] = weight > 0f ? total / weight : source[i];
+        }
+
+        return smoothed;
     }
 
     private int MapSourceIndex(int outputIndex)

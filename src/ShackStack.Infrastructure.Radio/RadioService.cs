@@ -21,6 +21,8 @@ public sealed class RadioService : IRadioService, IDisposable
     private RadioConnectionOptions? _lastOptions;
     private CancellationTokenSource? _smeterCts;
     private Task? _smeterTask;
+    private CancellationTokenSource? _controlStateCts;
+    private Task? _controlStateTask;
 
     public RadioService()
     {
@@ -54,10 +56,12 @@ public sealed class RadioService : IRadioService, IDisposable
         await SyncStateAsync(ct).ConfigureAwait(false);
         _session.StartReconciliationLoop(SyncCurrentStateAsync, ct, TimeSpan.FromSeconds(2));
         StartSmeterLoop(ct);
+        StartControlStateLoop(ct);
     }
 
     public async Task DisconnectAsync(CancellationToken ct)
     {
+        await StopControlStateLoopAsync().ConfigureAwait(false);
         await StopSmeterLoopAsync().ConfigureAwait(false);
         await _session.DisconnectAsync().ConfigureAwait(false);
         var current = _stateStore.Current;
@@ -614,6 +618,14 @@ public sealed class RadioService : IRadioService, IDisposable
             activeVfoKnown = true;
         }
 
+        // If the radio was simply retuned on the currently active VFO, the new
+        // frequency will not match either stored slot yet. In that case, trust the
+        // last known active VFO instead of dropping the update on the floor.
+        if (!activeVfoKnown)
+        {
+            activeVfoKnown = true;
+        }
+
         var nextVfoA = current.VfoAFrequencyHz;
         var nextVfoB = current.VfoBFrequencyHz;
         if (activeVfoKnown)
@@ -768,7 +780,7 @@ public sealed class RadioService : IRadioService, IDisposable
             {
                 while (!_smeterCts.IsCancellationRequested)
                 {
-                    await Task.Delay(100, _smeterCts.Token).ConfigureAwait(false);
+                    await Task.Delay(75, _smeterCts.Token).ConfigureAwait(false);
                     await PollSmeterAsync(_smeterCts.Token).ConfigureAwait(false);
                 }
             }
@@ -787,8 +799,72 @@ public sealed class RadioService : IRadioService, IDisposable
         }
 
         var smeter = await _icomCommands.GetSmeterAsync((byte)options.RadioAddress, ct).ConfigureAwait(false);
-        var current = _stateStore.Current;
-        _stateStore.Update(current with { IsConnected = true, Smeter = smeter });
+        _stateStore.Update(current => current with { IsConnected = true, Smeter = smeter });
+    }
+
+    private void StartControlStateLoop(CancellationToken ct)
+    {
+        _controlStateCts?.Cancel();
+        _controlStateCts?.Dispose();
+        _controlStateCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _controlStateTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (!_controlStateCts.IsCancellationRequested)
+                {
+                    await Task.Delay(500, _controlStateCts.Token).ConfigureAwait(false);
+                    await PollControlStateAsync(_controlStateCts.Token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }, _controlStateCts.Token);
+    }
+
+    private async Task PollControlStateAsync(CancellationToken ct)
+    {
+        var options = _lastOptions;
+        if (options is null)
+        {
+            return;
+        }
+
+        var radioAddress = (byte)options.RadioAddress;
+        var (mode, filterWidth, filterSlot) = await _icomCommands.GetModeAsync(radioAddress, ct).ConfigureAwait(false);
+        var preamp = await _icomCommands.GetPreampAsync(radioAddress, ct).ConfigureAwait(false);
+        var attDb = await _icomCommands.GetAttenuatorDbAsync(radioAddress, ct).ConfigureAwait(false);
+        var tuner = await _icomCommands.GetTunerEnabledAsync(radioAddress, ct).ConfigureAwait(false);
+        var noiseBlanker = await _icomCommands.GetNoiseBlankerEnabledAsync(radioAddress, ct).ConfigureAwait(false);
+        var noiseReductionEnabled = await _icomCommands.GetNoiseReductionEnabledAsync(radioAddress, ct).ConfigureAwait(false);
+        var noiseReductionLevel = await _icomCommands.GetNoiseReductionLevelAsync(radioAddress, ct).ConfigureAwait(false);
+        var autoNotchEnabled = await _icomCommands.GetAutoNotchEnabledAsync(radioAddress, ct).ConfigureAwait(false);
+        var manualNotchEnabled = await _icomCommands.GetManualNotchEnabledAsync(radioAddress, ct).ConfigureAwait(false);
+        var manualNotchWidth = await _icomCommands.GetManualNotchWidthAsync(radioAddress, ct).ConfigureAwait(false);
+        var manualNotchPosition = await _icomCommands.GetManualNotchPositionAsync(radioAddress, ct).ConfigureAwait(false);
+        var ipPlus = await _icomCommands.GetIpPlusEnabledAsync(radioAddress, ct).ConfigureAwait(false);
+        var filterShapeSoft = await _icomCommands.GetFilterShapeSoftAsync(radioAddress, ct).ConfigureAwait(false);
+
+        _stateStore.Update(current => current with
+        {
+            IsConnected = true,
+            Mode = mode,
+            FilterSlot = filterSlot,
+            FilterWidthHz = filterWidth,
+            PreampLevel = preamp,
+            AttenuatorDb = attDb,
+            IsTunerEnabled = tuner,
+            IsNoiseBlankerEnabled = noiseBlanker,
+            IsNoiseReductionEnabled = noiseReductionEnabled,
+            NoiseReductionLevel = noiseReductionEnabled ? noiseReductionLevel : 0,
+            IsAutoNotchEnabled = autoNotchEnabled,
+            IsManualNotchEnabled = manualNotchEnabled,
+            ManualNotchWidth = manualNotchWidth,
+            ManualNotchPosition = manualNotchPosition,
+            IsIpPlusEnabled = ipPlus,
+            IsFilterShapeSoft = filterShapeSoft,
+        });
     }
 
     private async Task StopSmeterLoopAsync()
@@ -813,6 +889,30 @@ public sealed class RadioService : IRadioService, IDisposable
         _smeterTask = null;
         _smeterCts.Dispose();
         _smeterCts = null;
+    }
+
+    private async Task StopControlStateLoopAsync()
+    {
+        if (_controlStateCts is null)
+        {
+            return;
+        }
+
+        _controlStateCts.Cancel();
+        if (_controlStateTask is not null)
+        {
+            try
+            {
+                await _controlStateTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        _controlStateTask = null;
+        _controlStateCts.Dispose();
+        _controlStateCts = null;
     }
 
     private void HandleUnsolicitedFrame(CivFrame frame)
@@ -842,6 +942,14 @@ public sealed class RadioService : IRadioService, IDisposable
                 }
             }
             else
+            {
+                activeVfoKnown = true;
+            }
+
+            // Manual tuning on the active VFO produces a new frequency that will not
+            // match the previous A/B slots yet. Keep following the current active VFO
+            // in that case so the dedicated VFO displays stay in sync.
+            if (!activeVfoKnown)
             {
                 activeVfoKnown = true;
             }
@@ -910,10 +1018,103 @@ public sealed class RadioService : IRadioService, IDisposable
             return;
         }
 
+        if (frame.Command == IcomCivConstants.ControlFunctionCommand && frame.Payload.Length >= 2)
+        {
+            var current = _stateStore.Current;
+            var enabled = frame.Payload[1] != 0x00;
+            switch (frame.Payload[0])
+            {
+                case 0x02:
+                    _stateStore.Update(current with
+                    {
+                        IsConnected = true,
+                        PreampLevel = Math.Clamp((int)frame.Payload[1], 0, 2),
+                    });
+                    return;
+                case IcomCivConstants.NoiseBlankerFunctionSubcommand:
+                    _stateStore.Update(current with { IsConnected = true, IsNoiseBlankerEnabled = enabled });
+                    return;
+                case IcomCivConstants.NoiseReductionFunctionSubcommand:
+                    _stateStore.Update(current with
+                    {
+                        IsConnected = true,
+                        IsNoiseReductionEnabled = enabled,
+                        NoiseReductionLevel = enabled ? current.NoiseReductionLevel : 0,
+                    });
+                    return;
+                case IcomCivConstants.AutoNotchFunctionSubcommand:
+                    _stateStore.Update(current with { IsConnected = true, IsAutoNotchEnabled = enabled });
+                    return;
+                case IcomCivConstants.ManualNotchFunctionSubcommand:
+                    _stateStore.Update(current with { IsConnected = true, IsManualNotchEnabled = enabled });
+                    return;
+                case IcomCivConstants.ManualNotchWidthFunctionSubcommand:
+                    _stateStore.Update(current with
+                    {
+                        IsConnected = true,
+                        ManualNotchWidth = Math.Clamp((int)frame.Payload[1], 0, 2),
+                    });
+                    return;
+                case IcomCivConstants.IpPlusFunctionSubcommand:
+                    _stateStore.Update(current with { IsConnected = true, IsIpPlusEnabled = enabled });
+                    return;
+                case IcomCivConstants.FilterShapeFunctionSubcommand:
+                    _stateStore.Update(current with { IsConnected = true, IsFilterShapeSoft = enabled });
+                    return;
+            }
+        }
+
+        if (frame.Command == IcomCivConstants.ControlLevelCommand && frame.Payload.Length >= 3)
+        {
+            var current = _stateStore.Current;
+            var value = DecodeBcdPayload(frame.Payload);
+            switch (frame.Payload[0])
+            {
+                case IcomCivConstants.NoiseReductionLevelSubcommand:
+                    _stateStore.Update(current with
+                    {
+                        IsConnected = true,
+                        NoiseReductionLevel = Math.Clamp((int)Math.Round(value * 15.0 / 255.0), 0, 15),
+                    });
+                    return;
+                case IcomCivConstants.ManualNotchPositionLevelSubcommand:
+                    _stateStore.Update(current with
+                    {
+                        IsConnected = true,
+                        ManualNotchPosition = Math.Clamp(value, 0, 255),
+                    });
+                    return;
+            }
+        }
+
+        if (frame.Command == 0x11 && frame.Payload.Length >= 1)
+        {
+            var packed = frame.Payload[0];
+            var attenuatorDb = ((packed >> 4) * 10) + (packed & 0x0F);
+            var current = _stateStore.Current;
+            _stateStore.Update(current with
+            {
+                IsConnected = true,
+                AttenuatorDb = Math.Clamp(attenuatorDb, 0, 99),
+            });
+            return;
+        }
+
         if (frame.Command == IcomCivConstants.SetControlState && frame.Payload.Length >= 2 && frame.Payload[0] == IcomCivConstants.PttSubcommand)
         {
             var current = _stateStore.Current;
             _stateStore.Update(current with { IsConnected = true, IsPttActive = frame.Payload[1] != 0x00 });
+            return;
+        }
+
+        if (frame.Command == IcomCivConstants.SetControlState && frame.Payload.Length >= 2 && frame.Payload[0] == 0x01)
+        {
+            var current = _stateStore.Current;
+            _stateStore.Update(current with
+            {
+                IsConnected = true,
+                IsTunerEnabled = frame.Payload[1] == 0x01,
+            });
         }
     }
 
@@ -938,8 +1139,22 @@ public sealed class RadioService : IRadioService, IDisposable
 
     public void Dispose()
     {
+        _controlStateCts?.Cancel();
         _smeterCts?.Cancel();
         _unsolicitedSubscription.Dispose();
         _streamSubscription.Dispose();
+    }
+
+    private static int DecodeBcdPayload(ReadOnlySpan<byte> payload)
+    {
+        var value = 0;
+        for (var index = 1; index < payload.Length; index++)
+        {
+            var b = payload[index];
+            value = (value * 10) + ((b >> 4) & 0x0F);
+            value = (value * 10) + (b & 0x0F);
+        }
+
+        return value;
     }
 }

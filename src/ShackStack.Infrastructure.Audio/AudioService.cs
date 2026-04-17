@@ -140,6 +140,40 @@ public sealed class AudioService : IAudioService, IDisposable
         return Task.CompletedTask;
     }
 
+    public Task StartTransmitPcmAsync(AudioRoute route, Pcm16AudioClip clip, CancellationToken ct)
+    {
+        lock (_sync)
+        {
+            StopTransmitLocked();
+
+            if (clip.PcmBytes.Length == 0)
+            {
+                throw new InvalidOperationException("PCM transmit clip is empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(route.TxDeviceId))
+            {
+                throw new InvalidOperationException("TX audio device is not configured.");
+            }
+
+            var txDevice = _enumerator.GetDevice(route.TxDeviceId);
+            var format = new WaveFormat(clip.SampleRate, 16, clip.Channels);
+
+            _txBuffer = new BufferedWaveProvider(format)
+            {
+                DiscardOnBufferOverflow = false,
+                BufferLength = Math.Max(clip.PcmBytes.Length, format.AverageBytesPerSecond)
+            };
+            _txBuffer.AddSamples(clip.PcmBytes, 0, clip.PcmBytes.Length);
+
+            _txPlayback = new WasapiOut(txDevice, AudioClientShareMode.Shared, false, 80);
+            _txPlayback.Init(_txBuffer);
+            _txPlayback.Play();
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task StopTransmitAsync(CancellationToken ct)
     {
         lock (_sync)

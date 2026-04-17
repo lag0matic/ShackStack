@@ -15,6 +15,7 @@ This clean beta branch contains the operator-facing app code for the `V-0.1 BETA
 - SSTV receive workflow with live preview and pop-out desk/archive
 - WeFAX receive workflow with live preview and pop-out desk/archive
 - decoder host plumbing for CW, RTTY, SSTV, and WeFAX
+- weak-signal digital scaffold for FT8/FT4 and future WSJT-style modes
 
 ## Solution Layout
 
@@ -30,6 +31,8 @@ This clean beta branch contains the operator-facing app code for the `V-0.1 BETA
   - radio, audio, waterfall, configuration, interop, and decoder implementations
 - `src/ShackStack.DecoderHost`
   - out-of-process decoder boundary components
+- `src/ShackStack.DecoderHost.GplWsjtx`
+  - planned separate GPL sidecar boundary for direct WSJT-X-derived weak-signal decoding
 - `installer`
   - Inno Setup packaging script
 
@@ -63,3 +66,5 @@ dotnet publish .\src\ShackStack.Desktop\ShackStack.Desktop.csproj -c Release -r 
 - Local publish artifacts are excluded from source control.
 - Local tests, scratch docs, and development notes are intentionally not included in this clean branch.
 - The broader Python decoder lab and experimentation workspace remain separate.
+- Weak-signal digital work is moving toward a dedicated external sidecar boundary so WSJT-X-derived decode logic can remain separated from the main app.
+- If present, the app will prefer an external GPL sidecar specified by `SHACKSTACK_WSJTX_GPL_SIDECAR_PATH` before falling back to the in-repo development worker.

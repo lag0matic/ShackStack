@@ -31,4 +31,16 @@ public sealed class RadioStateStore
 
         _stream.OnNext(next);
     }
+
+    public void Update(Func<RadioState, RadioState> updater)
+    {
+        RadioState next;
+        lock (_gate)
+        {
+            next = updater(_current);
+            _current = next;
+        }
+
+        _stream.OnNext(next);
+    }
 }

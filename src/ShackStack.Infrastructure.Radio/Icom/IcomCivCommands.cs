@@ -160,9 +160,17 @@ internal sealed class IcomCivCommands(CivSession session)
         }
 
         var raw = frame.Payload.Length >= 3
-            ? (frame.Payload[^2] << 8) | frame.Payload[^1]
-            : frame.Payload[^1];
-        return Math.Clamp((int)Math.Round(raw / 28.0), 0, 10);
+            ? DecodeBcdBe(frame.Payload[1..3])
+            : DecodeBcdBe(frame.Payload[^1..]);
+
+        // Icom S-meter responses are BCD-encoded but still top out around the
+        // same coarse 0..255-ish control range as other rig levels. Preserve more
+        // movement than the old 0..10 mapping, but normalize it back into the
+        // UI's 0..255 meter domain.
+        // The 7300's reported S-meter values tend to land noticeably below the
+        // visual front-panel indication if we map them linearly. Apply a modest
+        // calibration lift so the app meter tracks the rig more closely.
+        return Math.Clamp((int)Math.Round(raw * 255.0 / 150.0), 0, 255);
     }
 
     public async Task<int> GetCwPitchAsync(byte radioAddress, CancellationToken cancellationToken)

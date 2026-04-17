@@ -24,7 +24,73 @@ public sealed record SstvImageItem(string Label, string Path, DateTime Timestamp
 public sealed record SstvOverlayTemplateFile(string Name, IReadOnlyList<SstvOverlayTemplateItemFile> Items);
 public sealed record SstvOverlayTemplateItemFile(string Text, double X, double Y, double FontSize, string FontFamily, string Color);
 public sealed record SstvTemplateItem(string Name, string Path, DateTime Timestamp);
-public sealed record WefaxImageItem(string Label, string Path, DateTime Timestamp, Bitmap Bitmap);
+    public sealed record WefaxImageItem(string Label, string Path, DateTime Timestamp, Bitmap Bitmap);
+public sealed record WsjtxMessageItem(
+        DateTime TimestampUtc,
+        string TimeText,
+        string ModeText,
+        string SnrText,
+        string DtText,
+        string HzText,
+        string MessageText,
+        int FrequencyOffsetHz,
+        int SnrDb,
+        double DtSeconds,
+        bool IsDirectedToMe,
+        bool IsCq,
+        bool IsOwnTransmit,
+        string RowBackground,
+        string AccentBrush,
+        string MessageBrush,
+        string MetaBrush,
+        string BadgeText,
+        bool ShowBadge,
+        string BadgeBackground,
+        string BadgeForeground);
+public sealed record WsjtxSuggestedMessageItem(string Label, string MessageText, string Intent);
+public sealed record WsjtxActiveSession(string OtherCall, int FrequencyOffsetHz, string ModeLabel);
+public sealed record LongwaveSpotSummaryItem(
+    string Id,
+    string ActivatorCallsign,
+    string ParkReference,
+    double FrequencyKhz,
+    string Mode,
+    string Band,
+    string? Comments,
+    string? SpotterCallsign,
+    DateTime SpottedAtUtc,
+    bool IsLogged)
+{
+    public string FrequencyText => $"{FrequencyKhz / 1000d:0.000} MHz";
+    public string AgeText => $"{Math.Max(0, (int)(DateTime.UtcNow - SpottedAtUtc).TotalMinutes)}m ago";
+    public string SummaryText => string.IsNullOrWhiteSpace(Comments)
+        ? $"{ActivatorCallsign} @ {ParkReference}"
+        : $"{ActivatorCallsign} @ {ParkReference}  |  {Comments}";
+    public string BadgeText => IsLogged ? "LOGGED" : Mode;
+    public string BadgeBackground => IsLogged ? "#3B4A68" : "#1E6F5C";
+    public string BadgeForeground => IsLogged ? "#DDE7FF" : "#F4FFF8";
+    public string RowBackground => IsLogged ? "#111723" : "#0C1017";
+    public string MessageForeground => IsLogged ? "#8F9BB4" : "#E5ECFF";
+}
+public sealed record LongwaveLogbookItem(string Id, string Name, string OperatorCallsign, string? Notes)
+{
+    public string DisplayText => Name;
+}
+
+public sealed record LongwaveRecentContactItem(
+    string Id,
+    string StationCallsign,
+    string Mode,
+    string Band,
+    string TimeText,
+    string? ParkReference,
+    double FrequencyKhz)
+{
+    public string FrequencyText => $"{FrequencyKhz / 1000d:0.000} MHz";
+    public string SummaryText => string.IsNullOrWhiteSpace(ParkReference)
+        ? $"{StationCallsign}  |  {Band} {Mode}"
+        : $"{StationCallsign}  |  {Band} {Mode}  |  {ParkReference}";
+}
 
 public sealed class SstvOverlayItemViewModel : ObservableObject
 {
@@ -150,7 +216,10 @@ public sealed class SstvOverlayItemViewModel : ObservableObject
 
 public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
-    private int _displayedSmeterLevel;
+    private readonly DispatcherTimer _smeterUiTimer;
+    private readonly DispatcherTimer _longwaveRefreshTimer;
+    private double _displayedSmeterLevel;
+    private double _targetSmeterLevel;
     private bool _monitorAutostartAttempted;
     private string _activeBandLabel = "20m";
     private int _activeFilterSlot = 2;
@@ -170,6 +239,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IRttyDecoderHost? _rttyDecoderHost;
     private readonly ISstvDecoderHost? _sstvDecoderHost;
     private readonly IWefaxDecoderHost? _wefaxDecoderHost;
+    private readonly IWsjtxModeHost? _wsjtxModeHost;
+    private readonly ILongwaveService? _longwaveService;
     private readonly IDisposable? _radioSubscription;
     private readonly IDisposable? _audioLevelSubscription;
     private readonly IDisposable? _spectrumSubscription;
@@ -183,6 +254,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IDisposable? _sstvImageSubscription;
     private readonly IDisposable? _wefaxTelemetrySubscription;
     private readonly IDisposable? _wefaxImageSubscription;
+    private readonly IDisposable? _wsjtxTelemetrySubscription;
+    private readonly IDisposable? _wsjtxDecodeSubscription;
+    private Pcm16AudioClip? _wsjtxPreparedTransmitClip;
+    private bool _wsjtxSlotSendInFlight;
+    private WsjtxModeTelemetry? _lastWsjtxTelemetry;
     private readonly string _sstvReceivedDirectory;
     private readonly string _sstvReplyDirectory;
     private readonly string _sstvTemplateDirectory;
@@ -193,6 +269,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private bool _voiceRigSettingsDirty;
     private bool _hasReceivedVoiceRigStateFromRadio;
     private bool _suppressRuntimeUiStatePersistence;
+    private bool _isUpdatingNoiseReductionLevelFromRadio;
+    private DateTimeOffset _noiseReductionInteractionUntilUtc;
+    private readonly HashSet<string> _longwaveLoggedContactKeys = new(StringComparer.OrdinalIgnoreCase);
 
     public MainWindowViewModel(
         AppSettings settings,
@@ -203,11 +282,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         IWaterfallService? waterfallService = null,
         IWaterfallRenderSource? waterfallRenderSource = null,
         IBandConditionsService? bandConditionsService = null,
+        ILongwaveService? longwaveService = null,
         IInteropService? interopService = null,
         ICwDecoderHost? cwDecoderHost = null,
         IRttyDecoderHost? rttyDecoderHost = null,
         ISstvDecoderHost? sstvDecoderHost = null,
-        IWefaxDecoderHost? wefaxDecoderHost = null)
+        IWefaxDecoderHost? wefaxDecoderHost = null,
+        IWsjtxModeHost? wsjtxModeHost = null)
     {
         _settings = settings;
         _settingsPath = settingsPath;
@@ -217,11 +298,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _waterfallService = waterfallService;
         _waterfallRenderSource = waterfallRenderSource;
         _bandConditionsService = bandConditionsService;
+        _longwaveService = longwaveService;
         _interopService = interopService;
         _cwDecoderHost = cwDecoderHost;
         _rttyDecoderHost = rttyDecoderHost;
         _sstvDecoderHost = sstvDecoderHost;
         _wefaxDecoderHost = wefaxDecoderHost;
+        _wsjtxModeHost = wsjtxModeHost;
         _sstvReceivedDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "sstv");
         _sstvReplyDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "sstv-reply");
         _sstvTemplateDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "sstv-templates");
@@ -244,15 +327,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         DiagnosticsBandConditionsState = settings.Ui.BandConditionsEnabled ? "Enabled" : "Disabled";
         SettingsCallsign = FormatCallsign(settings.Station.Callsign);
         SettingsGridSquare = settings.Station.GridSquare;
+        WsjtxOperatorCallsign = FormatCallsign(settings.Station.Callsign);
+        WsjtxOperatorGridSquare = settings.Station.GridSquare.Trim().ToUpperInvariant();
         SettingsRadioBackend = settings.Radio.ControlBackend;
         SettingsCivPort = settings.Radio.CivPort;
         SettingsCivBaud = settings.Radio.CivBaud.ToString();
         SettingsCivAddress = FormatCivAddress(settings.Radio.CivAddress);
         SettingsTheme = settings.Ui.Theme;
         SettingsBandConditionsEnabled = settings.Ui.BandConditionsEnabled;
-        SettingsShowExperimentalCw = true;
+        SettingsShowExperimentalCw = settings.Ui.ShowExperimentalCw;
+        SettingsLongwaveEnabled = settings.Longwave.Enabled;
+        SettingsLongwaveBaseUrl = settings.Longwave.BaseUrl;
+        SettingsLongwaveClientApiToken = settings.Longwave.ClientApiToken;
+        SettingsLongwaveDefaultLogbookName = settings.Longwave.DefaultLogbookName;
+        SettingsLongwaveDefaultLogbookNotes = settings.Longwave.DefaultLogbookNotes;
         IsBandConditionsEnabled = settings.Ui.BandConditionsEnabled;
-        ShowCwPanel = true;
+        ShowCwPanel = settings.Ui.ShowExperimentalCw;
         SettingsFlrigEnabled = settings.Interop.FlrigEnabled;
         SettingsFlrigHost = settings.Interop.FlrigHost;
         SettingsFlrigPort = settings.Interop.FlrigPort.ToString();
@@ -260,6 +350,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WaterfallFloorPercent = Math.Clamp(settings.Ui.WaterfallFloorPercent, 0, 95);
         WaterfallCeilingPercent = Math.Clamp(settings.Ui.WaterfallCeilingPercent, WaterfallFloorPercent + 1, 100);
         VoiceMicGainPercent = 50;
+        LongwaveLogOperatorCallsign = FormatCallsign(settings.Station.Callsign);
+        ApplyLongwaveSettingsState(settings);
         VoiceCompressionPercent = 0;
         VoiceRfPowerPercent = 100;
         CwPitchHz = 700;
@@ -268,6 +360,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _voiceRigSettingsDirty = false;
         _cwRigSettingsDirty = false;
         SettingsStatusMessage = "Settings loaded";
+        RebuildWsjtxSuggestedMessages();
         LoadSstvArchiveImages();
         LoadWefaxArchiveImages();
         AvailableModes = BuildModePresets(RadioMode.Usb);
@@ -321,6 +414,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         CanDisconnect = false;
         UpdateBandConditionsVisibility();
         UpdateModePanelsVisibility();
+        _smeterUiTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+        _smeterUiTimer.Tick += (_, _) => AnimateSmeter();
+        _smeterUiTimer.Start();
+        _longwaveRefreshTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMinutes(1)
+        };
+        _longwaveRefreshTimer.Tick += async (_, _) => await OnLongwaveRefreshTimerTickAsync();
+        _longwaveRefreshTimer.Start();
 
         if (radioService is not null)
         {
@@ -495,6 +600,34 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 {
                     WefaxImageStatus = frame.Status;
                     UpdateWefaxPreview(frame.ImagePath);
+                });
+            }));
+        }
+
+        if (wsjtxModeHost is not null)
+        {
+            _wsjtxTelemetrySubscription = wsjtxModeHost.TelemetryStream.Subscribe(new Observer<WsjtxModeTelemetry>(telemetry =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _lastWsjtxTelemetry = telemetry;
+                    WsjtxRxStatus = telemetry.Status;
+                    WsjtxClockStatus = telemetry.ClockDisciplineStatus;
+                    WsjtxCycleLengthSeconds = telemetry.CycleLengthSeconds;
+                    WsjtxSecondsToNextCycle = telemetry.SecondsToNextCycle;
+                    WsjtxCycleDisplay = $"{telemetry.ModeLabel}  |  {telemetry.CycleLengthSeconds:0.#}s cycle  |  Next {telemetry.SecondsToNextCycle:0.0}s";
+                    UpdateWsjtxSessionNotes(telemetry);
+                    OnPropertyChanged(nameof(WsjtxTransmitArmSummary));
+                });
+            }));
+
+            _wsjtxDecodeSubscription = wsjtxModeHost.DecodeStream.Subscribe(new Observer<WsjtxDecodeMessage>(message =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    UpsertWsjtxMessage(message);
+                    HandleWsjtxAutoSequence(message);
+                    OnPropertyChanged(nameof(WsjtxHasMessages));
                 });
             }));
         }
@@ -814,6 +947,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string settingsStatusMessage = string.Empty;
 
     [ObservableProperty]
+    private bool settingsLongwaveEnabled;
+
+    [ObservableProperty]
+    private string settingsLongwaveBaseUrl = string.Empty;
+
+    [ObservableProperty]
+    private string settingsLongwaveClientApiToken = string.Empty;
+
+    [ObservableProperty]
+    private string settingsLongwaveDefaultLogbookName = "ShackStack Home";
+
+    [ObservableProperty]
+    private string settingsLongwaveDefaultLogbookNotes = "LONGWAVE_KIND=standard;POTA_MODE=hunting";
+
+    [ObservableProperty]
     private IReadOnlyList<AudioDeviceInfo> rxDeviceOptions = Array.Empty<AudioDeviceInfo>();
 
     [ObservableProperty]
@@ -916,6 +1064,273 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private string rttyDecodedText = string.Empty;
+
+    [ObservableProperty]
+    private IReadOnlyList<string> wsjtxModeOptions = WsjtxModeCatalog.GetOperatorModeLabels();
+
+    [ObservableProperty]
+    private string wsjtxSelectedMode = "FT8";
+
+    [ObservableProperty]
+    private IReadOnlyList<string> wsjtxFrequencyOptions = WsjtxModeCatalog.GetFrequencyLabels("FT8");
+
+    [ObservableProperty]
+    private string wsjtxSelectedFrequency = WsjtxModeCatalog.GetDefaultFrequencyLabel("FT8");
+
+    [ObservableProperty]
+    private bool wsjtxAutoSequenceEnabled = true;
+
+    [ObservableProperty]
+    private bool wsjtxAutoStageRepliesEnabled = true;
+
+    [ObservableProperty]
+    private string wsjtxRxStatus = "WSJT-style digital scaffold ready";
+
+    [ObservableProperty]
+    private string wsjtxClockStatus = "Checking system clock discipline...";
+
+    [ObservableProperty]
+    private string wsjtxCycleDisplay = "FT8  |  15.0s cycle  |  Next --.-s";
+
+    [ObservableProperty]
+    private string wsjtxSessionNotes = "WSJT-X weak-signal operating desk ready.";
+
+    [ObservableProperty]
+    private ObservableCollection<WsjtxMessageItem> wsjtxMessages = [];
+
+    [ObservableProperty]
+    private ObservableCollection<WsjtxMessageItem> wsjtxRxFrequencyMessages = [];
+
+    [ObservableProperty]
+    private WsjtxMessageItem? selectedWsjtxMessage;
+
+    [ObservableProperty]
+    private int wsjtxRxAudioFrequencyHz = 1500;
+
+    [ObservableProperty]
+    private int wsjtxTxAudioFrequencyHz = 1500;
+
+    [ObservableProperty]
+    private bool wsjtxHoldTxFrequency;
+
+    [ObservableProperty]
+    private ObservableCollection<WsjtxSuggestedMessageItem> wsjtxSuggestedMessages = [];
+
+    [ObservableProperty]
+    private ObservableCollection<LongwaveSpotSummaryItem> longwavePotaSpots = [];
+
+    [ObservableProperty]
+    private LongwaveSpotSummaryItem? selectedLongwavePotaSpot;
+
+    [ObservableProperty]
+    private ObservableCollection<LongwaveSpotSummaryItem> voiceLongwavePotaSpots = [];
+
+    [ObservableProperty]
+    private LongwaveSpotSummaryItem? selectedVoiceLongwavePotaSpot;
+
+    [ObservableProperty]
+    private IReadOnlyList<string> voiceLongwaveBandFilterOptions =
+    [
+        "All bands",
+        "160m",
+        "80m",
+        "40m",
+        "30m",
+        "20m",
+        "17m",
+        "15m",
+        "12m",
+        "10m",
+        "6m",
+    ];
+
+    [ObservableProperty]
+    private string selectedVoiceLongwaveBandFilter = "All bands";
+
+    [ObservableProperty]
+    private ObservableCollection<LongwaveLogbookItem> longwaveLogbooks = [];
+
+    [ObservableProperty]
+    private LongwaveLogbookItem? selectedLongwaveLogbook;
+
+    [ObservableProperty]
+    private ObservableCollection<LongwaveRecentContactItem> longwaveRecentContacts = [];
+
+    [ObservableProperty]
+    private LongwaveRecentContactItem? selectedLongwaveRecentContact;
+
+    [ObservableProperty]
+    private string longwaveNewLogbookName = string.Empty;
+
+    [ObservableProperty]
+    private bool isLongwaveBusy;
+
+    [ObservableProperty]
+    private string longwaveStatus = "Longwave integration disabled.";
+
+    [ObservableProperty]
+    private string longwaveOperatorSummary = "Longwave integration disabled.";
+
+    [ObservableProperty]
+    private string longwaveLogStatus = "Ready to log from rig or selected spot.";
+
+    [ObservableProperty]
+    private string longwaveLogOperatorCallsign = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveLogCallsign = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveLogMode = "SSB";
+
+    [ObservableProperty]
+    private string longwaveLogBand = "20m";
+
+    [ObservableProperty]
+    private string longwaveLogFrequencyKhz = "14074.0";
+
+    [ObservableProperty]
+    private string longwaveLogRstSent = "59";
+
+    [ObservableProperty]
+    private string longwaveLogRstReceived = "59";
+
+    [ObservableProperty]
+    private string longwaveLogParkReference = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveLogGridSquare = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveLogName = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveLogQth = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveLogCounty = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveLogState = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveLogCountry = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveLogDxcc = string.Empty;
+
+    private double? _longwaveLogLatitude;
+    private double? _longwaveLogLongitude;
+
+    [ObservableProperty]
+    private WsjtxSuggestedMessageItem? selectedWsjtxSuggestedMessage;
+
+    [ObservableProperty]
+    private WsjtxSuggestedMessageItem? wsjtxQueuedTransmitMessage;
+
+    [ObservableProperty]
+    private WsjtxPreparedTransmit? wsjtxPreparedTransmit;
+
+    [ObservableProperty]
+    private string wsjtxPreparedTransmitStatus = "No TX signal prepared.";
+
+    [ObservableProperty]
+    private string wsjtxPreparedTransmitPath = "No prepared TX artifact.";
+
+    [ObservableProperty]
+    private bool wsjtxTransmitArmedLocal;
+
+    [ObservableProperty]
+    private string wsjtxTransmitArmStatus = "Nothing armed.";
+
+    [ObservableProperty]
+    private double wsjtxSecondsToNextCycle = double.NaN;
+
+    [ObservableProperty]
+    private double wsjtxCycleLengthSeconds = 15.0;
+
+    [ObservableProperty]
+    private bool wsjtxAwaitingReply;
+
+
+    private double _lastObservedWsjtxSecondsToNextCycle = double.NaN;
+
+    [ObservableProperty]
+    private WsjtxActiveSession? wsjtxActiveSession;
+
+    [ObservableProperty]
+    private bool wsjtxCallingCq;
+
+    [ObservableProperty]
+    private string wsjtxOperatorCallsign = string.Empty;
+
+    [ObservableProperty]
+    private string wsjtxOperatorGridSquare = string.Empty;
+
+    public bool WsjtxHasMessages => WsjtxMessages.Count > 0;
+
+    public bool WsjtxHasRxFrequencyMessages => WsjtxRxFrequencyMessages.Count > 0;
+
+    public string WsjtxSelectedMessageText => SelectedWsjtxMessage?.MessageText ?? "No decodes yet.";
+
+    public string WsjtxRxFrequencyTitle => $"Rx Frequency ({WsjtxRxAudioFrequencyHz:+0;-0;0} Hz)";
+
+    public string WsjtxTxFrequencyTitle => $"Tx Offset ({WsjtxTxAudioFrequencyHz:+0;-0;0} Hz)";
+
+    public string WsjtxRxTrackStatus => SelectedWsjtxMessage is null
+        ? "Select a decode to track its audio offset."
+        : $"Selected offset {SelectedWsjtxMessage.FrequencyOffsetHz:+0;-0;0} Hz";
+
+    public string WsjtxTxTrackStatus => WsjtxHoldTxFrequency
+        ? $"TX held at {WsjtxTxAudioFrequencyHz:+0;-0;0} Hz"
+        : $"TX follows RX track ({WsjtxTxAudioFrequencyHz:+0;-0;0} Hz)";
+
+    public string WsjtxSuggestedMessagePreview => SelectedWsjtxSuggestedMessage?.MessageText ?? "No reply/CQ scaffolding yet.";
+
+    public string WsjtxQueuedTransmitPreview => WsjtxQueuedTransmitMessage?.MessageText ?? "No TX message staged.";
+
+    public string WsjtxPreparedTransmitSummary => WsjtxPreparedTransmitStatus;
+
+    public string WsjtxTransmitArmSummary
+    {
+        get
+        {
+            if (WsjtxTransmitArmedLocal)
+            {
+                var countdown = double.IsFinite(WsjtxSecondsToNextCycle)
+                    ? $"next slot in {WsjtxSecondsToNextCycle:0.0}s"
+                    : "next slot timing unavailable";
+                return $"ARMED  |  {countdown}  |  {WsjtxTransmitArmStatus}";
+            }
+
+            if (WsjtxAwaitingReply)
+            {
+                var countdown = double.IsFinite(WsjtxSecondsToNextCycle)
+                    ? $"Next slot {WsjtxSecondsToNextCycle:0.0}s away"
+                    : "Waiting for cycle timing";
+                return $"WAITING  |  {countdown}  |  {WsjtxTransmitArmStatus}";
+            }
+
+            if (WsjtxPreparedTransmit is not null)
+            {
+                var countdown = double.IsFinite(WsjtxSecondsToNextCycle)
+                    ? $"Next slot {WsjtxSecondsToNextCycle:0.0}s away"
+                    : "Waiting for cycle timing";
+                return $"READY  |  {countdown}  |  {WsjtxTransmitArmStatus}";
+            }
+
+            return WsjtxTransmitArmStatus;
+        }
+    }
+
+    public string WsjtxTransmitPlanSummary =>
+        $"TX {WsjtxTxAudioFrequencyHz:+0;-0;0} Hz  |  RX {WsjtxRxAudioFrequencyHz:+0;-0;0} Hz  |  {(WsjtxHoldTxFrequency ? "Hold TX" : "TX follows RX")}";
+
+    public string WsjtxActiveSessionSummary => WsjtxActiveSession is null
+        ? (WsjtxCallingCq ? "Calling CQ and waiting for a reply." : "No active weak-signal contact.")
+        : (WsjtxAwaitingReply
+            ? $"Waiting for {WsjtxActiveSession.OtherCall} on {WsjtxActiveSession.FrequencyOffsetHz:+0;-0;0} Hz"
+            : $"Working {WsjtxActiveSession.OtherCall} on {WsjtxActiveSession.FrequencyOffsetHz:+0;-0;0} Hz");
 
     [ObservableProperty]
     private IReadOnlyList<string> sstvModeOptions =
@@ -1199,6 +1614,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 FlrigHost = SettingsFlrigHost.Trim(),
                 FlrigPort = flrigPort,
             },
+            Longwave = _settings.Longwave with
+            {
+                Enabled = SettingsLongwaveEnabled,
+                BaseUrl = SettingsLongwaveBaseUrl.Trim(),
+                ClientApiToken = SettingsLongwaveClientApiToken.Trim(),
+                DefaultLogbookName = SettingsLongwaveDefaultLogbookName.Trim(),
+                DefaultLogbookNotes = SettingsLongwaveDefaultLogbookNotes.Trim(),
+            },
             Ui = _settings.Ui with
             {
                 Theme = SettingsTheme.Trim(),
@@ -1226,6 +1649,398 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var reloaded = await _settingsStore.LoadAsync(CancellationToken.None);
         ApplySettings(reloaded);
         SettingsStatusMessage = "Reloaded from disk";
+    }
+
+    [RelayCommand]
+    private async Task RefreshLongwaveSpotsAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveStatus = "Longwave service unavailable.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            LongwaveStatus = "Refreshing POTA spots...";
+            var settings = BuildCurrentLongwaveSettings();
+            var context = await _longwaveService.GetOperatorContextAsync(settings, CancellationToken.None);
+            var logbooks = await _longwaveService.GetLogbooksAsync(settings, CancellationToken.None);
+            var spots = await _longwaveService.GetPotaSpotsAsync(settings, CancellationToken.None);
+            LongwaveOperatorSummary = $"Longwave operator {context.Callsign}  |  {spots.Count} POTA spots loaded";
+            LongwaveLogbooks = new ObservableCollection<LongwaveLogbookItem>(
+                logbooks.Select(static logbook => new LongwaveLogbookItem(
+                    logbook.Id,
+                    logbook.Name,
+                    logbook.OperatorCallsign,
+                    logbook.Notes)));
+            SelectedLongwaveLogbook = SelectPreferredLongwaveLogbook(LongwaveLogbooks, SelectedLongwaveLogbook, settings.DefaultLogbookName);
+            var contacts = await _longwaveService.GetContactsAsync(settings, SelectedLongwaveLogbook?.Id, CancellationToken.None);
+            LongwavePotaSpots = new ObservableCollection<LongwaveSpotSummaryItem>(
+                spots.Select(spot => ToLongwaveSpotSummaryItem(spot, _longwaveLoggedContactKeys.Contains(spot.Id))));
+            RebuildVoiceLongwavePotaSpots();
+            LongwaveRecentContacts = new ObservableCollection<LongwaveRecentContactItem>(
+                contacts.Take(50).Select(ToLongwaveRecentContactItem));
+            LongwaveStatus = spots.Count == 0
+                ? "No POTA spots returned from Longwave."
+                : $"Loaded {spots.Count} POTA spots from Longwave.";
+            if (SelectedLongwaveLogbook is not null)
+            {
+                LongwaveLogStatus = $"Using Longwave logbook {SelectedLongwaveLogbook.Name}.";
+            }
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task TuneSelectedLongwaveSpotAsync()
+    {
+        if (SelectedLongwavePotaSpot is null)
+        {
+            LongwaveStatus = "Select a POTA spot first.";
+            return;
+        }
+
+        await TuneRadioForLongwaveSpotAsync(SelectedLongwavePotaSpot);
+    }
+
+    [RelayCommand]
+    private async Task TuneSelectedVoiceLongwaveSpotAsync()
+    {
+        if (SelectedVoiceLongwavePotaSpot is null)
+        {
+            LongwaveStatus = "Select a voice POTA spot first.";
+            return;
+        }
+
+        SelectedLongwavePotaSpot = SelectedVoiceLongwavePotaSpot;
+        await TuneRadioForLongwaveSpotAsync(SelectedVoiceLongwavePotaSpot);
+    }
+
+    [RelayCommand]
+    private async Task WorkSelectedVoiceLongwaveSpotAsync()
+    {
+        if (SelectedVoiceLongwavePotaSpot is null)
+        {
+            LongwaveStatus = "Select a voice POTA spot first.";
+            return;
+        }
+
+        SelectedLongwavePotaSpot = SelectedVoiceLongwavePotaSpot;
+        ApplySpotToLongwaveLog(SelectedVoiceLongwavePotaSpot);
+        await TuneRadioForLongwaveSpotAsync(SelectedVoiceLongwavePotaSpot);
+        LongwaveLogStatus = $"Ready to work {SelectedVoiceLongwavePotaSpot.ActivatorCallsign} at {SelectedVoiceLongwavePotaSpot.ParkReference}.";
+    }
+
+    [RelayCommand]
+    private void UseSelectedSpotForLongwaveLog()
+    {
+        if (SelectedLongwavePotaSpot is null)
+        {
+            LongwaveLogStatus = "Select a POTA spot first.";
+            return;
+        }
+
+        ApplySpotToLongwaveLog(SelectedLongwavePotaSpot);
+        LongwaveLogStatus = $"Prefilled log from {SelectedLongwavePotaSpot.ActivatorCallsign} at {SelectedLongwavePotaSpot.ParkReference}.";
+    }
+
+    [RelayCommand]
+    private void UseRigForLongwaveLog()
+    {
+        LongwaveLogFrequencyKhz = $"{CurrentFrequencyHz / 1000d:0.0}";
+        LongwaveLogBand = DeriveBandFromFrequencyKhz(CurrentFrequencyHz / 1000d);
+        LongwaveLogMode = MapRadioModeToLogMode(SelectedMode);
+        LongwaveLogOperatorCallsign = FormatCallsign(SettingsCallsign);
+        LongwaveLogGridSquare = SettingsGridSquare.Trim().ToUpperInvariant();
+        LongwaveLogStatus = $"Prefilled log from rig: {LongwaveLogBand} {LongwaveLogMode} at {LongwaveLogFrequencyKhz} kHz.";
+    }
+
+    [RelayCommand]
+    private async Task AutofillLongwaveLookupAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveLogStatus = "Longwave service unavailable.";
+            return;
+        }
+
+        var callsign = FormatCallsign(LongwaveLogCallsign);
+        if (string.IsNullOrWhiteSpace(callsign))
+        {
+            LongwaveLogStatus = "Enter or select a callsign first.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            LongwaveLogStatus = $"Looking up {callsign} via Longwave/QRZ...";
+            var lookup = await _longwaveService.LookupCallsignAsync(BuildCurrentLongwaveSettings(), callsign, CancellationToken.None);
+            ApplyLongwaveLookup(lookup);
+            LongwaveLogStatus = $"Autofilled location for {lookup.Callsign}.";
+        }
+        catch (Exception ex)
+        {
+            LongwaveLogStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task LogCurrentQsoAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveLogStatus = "Longwave service unavailable.";
+            return;
+        }
+
+        if (!double.TryParse(LongwaveLogFrequencyKhz, out var frequencyKhz) || frequencyKhz <= 0)
+        {
+            LongwaveLogStatus = "Enter a valid frequency in kHz.";
+            return;
+        }
+
+        var operatorCall = FormatCallsign(LongwaveLogOperatorCallsign);
+        var stationCall = FormatCallsign(LongwaveLogCallsign);
+        if (string.IsNullOrWhiteSpace(operatorCall) || string.IsNullOrWhiteSpace(stationCall))
+        {
+            LongwaveLogStatus = "Operator and station callsigns are required.";
+            return;
+        }
+
+        var qsoTime = DateTime.UtcNow;
+        var logKey = BuildLongwaveLogDedupeKey(stationCall, LongwaveLogMode, frequencyKhz, qsoTime);
+        if (!_longwaveLoggedContactKeys.Add(logKey))
+        {
+            LongwaveLogStatus = "This QSO was already logged from this session.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            LongwaveLogStatus = "Posting contact to Longwave...";
+            var settings = BuildCurrentLongwaveSettings();
+            var logbook = SelectedLongwaveLogbook is not null
+                ? new LongwaveLogbook(
+                    SelectedLongwaveLogbook.Id,
+                    SelectedLongwaveLogbook.Name,
+                    SelectedLongwaveLogbook.OperatorCallsign,
+                    null,
+                    null,
+                    SelectedLongwaveLogbook.Notes,
+                    0)
+                : await _longwaveService.GetOrCreateLogbookAsync(settings, operatorCall, CancellationToken.None);
+            var created = await _longwaveService.CreateContactAsync(
+                settings,
+                new LongwaveContactDraft(
+                    logbook.Id,
+                    stationCall,
+                    operatorCall,
+                    qsoTime.ToString("yyyyMMdd"),
+                    qsoTime.ToString("HHmmss"),
+                    string.IsNullOrWhiteSpace(LongwaveLogBand) ? DeriveBandFromFrequencyKhz(frequencyKhz) : LongwaveLogBand.Trim(),
+                    LongwaveLogMode.Trim().ToUpperInvariant(),
+                    frequencyKhz,
+                    LongwaveLogParkReference,
+                    LongwaveLogRstSent,
+                    LongwaveLogRstReceived,
+                    LongwaveLogName,
+                    LongwaveLogQth,
+                    LongwaveLogCounty,
+                    LongwaveLogGridSquare,
+                    LongwaveLogCountry,
+                    LongwaveLogState,
+                    LongwaveLogDxcc,
+                    _longwaveLogLatitude,
+                    _longwaveLogLongitude,
+                    SelectedLongwavePotaSpot is not null
+                        && string.Equals(SelectedLongwavePotaSpot.ActivatorCallsign, stationCall, StringComparison.OrdinalIgnoreCase)
+                        ? SelectedLongwavePotaSpot.Id
+                        : null),
+                CancellationToken.None);
+
+            LongwaveLogStatus = $"Logged {created.StationCallsign} to Longwave logbook {logbook.Name}.";
+            LongwaveStatus = $"Longwave logged {created.StationCallsign} on {created.Band} {created.Mode}.";
+            MarkLongwaveSpotLogged(created.SourceSpotId);
+            await RefreshLongwaveContactsAsync();
+        }
+        catch (Exception ex)
+        {
+            _longwaveLoggedContactKeys.Remove(logKey);
+            LongwaveLogStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task CreateLongwaveLogbookAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveStatus = "Longwave service unavailable.";
+            return;
+        }
+
+        var name = LongwaveNewLogbookName.Trim();
+        var operatorCall = FormatCallsign(LongwaveLogOperatorCallsign);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            LongwaveStatus = "Enter a logbook name first.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(operatorCall))
+        {
+            LongwaveStatus = "Operator callsign is required to create a logbook.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            var settings = BuildCurrentLongwaveSettings();
+            var created = await _longwaveService.CreateLogbookAsync(settings, name, operatorCall, null, CancellationToken.None);
+            LongwaveLogbooks.Insert(0, new LongwaveLogbookItem(created.Id, created.Name, created.OperatorCallsign, created.Notes));
+            SelectedLongwaveLogbook = LongwaveLogbooks.FirstOrDefault(item => item.Id == created.Id);
+            LongwaveNewLogbookName = string.Empty;
+            await RefreshLongwaveContactsAsync();
+            LongwaveStatus = $"Created logbook {created.Name}.";
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteSelectedLongwaveLogbookAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveStatus = "Longwave service unavailable.";
+            return;
+        }
+
+        if (SelectedLongwaveLogbook is null)
+        {
+            LongwaveStatus = "Select a logbook first.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            var target = SelectedLongwaveLogbook;
+            await _longwaveService.DeleteLogbookAsync(BuildCurrentLongwaveSettings(), target.Id, CancellationToken.None);
+            LongwaveLogbooks.Remove(target);
+            SelectedLongwaveLogbook = LongwaveLogbooks.FirstOrDefault();
+            await RefreshLongwaveContactsAsync();
+            LongwaveStatus = $"Deleted logbook {target.Name}.";
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteSelectedLongwaveContactAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveStatus = "Longwave service unavailable.";
+            return;
+        }
+
+        if (SelectedLongwaveRecentContact is null)
+        {
+            LongwaveStatus = "Select a contact first.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            var target = SelectedLongwaveRecentContact;
+            await _longwaveService.DeleteContactAsync(BuildCurrentLongwaveSettings(), target.Id, CancellationToken.None);
+            LongwaveRecentContacts.Remove(target);
+            SelectedLongwaveRecentContact = LongwaveRecentContacts.FirstOrDefault();
+            LongwaveStatus = $"Deleted contact {target.StationCallsign}.";
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void UseSelectedWsjtxForLongwaveLog()
+    {
+        var selected = SelectedWsjtxMessage;
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        var state = ClassifyWsjtxQsoState(selected?.MessageText, myCall);
+        var theirCall = state.OtherCall ?? TryExtractCallsign(selected?.MessageText);
+        if (selected is null || string.IsNullOrWhiteSpace(theirCall))
+        {
+            WsjtxRxStatus = "Select a decode with a callsign first.";
+            return;
+        }
+
+        LongwaveLogOperatorCallsign = myCall;
+        LongwaveLogCallsign = theirCall;
+        LongwaveLogMode = WsjtxSelectedMode.Trim().ToUpperInvariant();
+        LongwaveLogBand = DeriveBandFromFrequencyKhz(CurrentFrequencyHz / 1000d);
+        LongwaveLogFrequencyKhz = $"{CurrentFrequencyHz / 1000d:0.0}";
+        var snrText = selected.SnrDb.ToString("+#;-#;0");
+        LongwaveLogRstSent = snrText;
+        LongwaveLogRstReceived = snrText;
+        LongwaveLogStatus = $"Prefilled Longwave log from {theirCall} on {LongwaveLogBand} {LongwaveLogMode}.";
+    }
+
+    [RelayCommand]
+    private async Task LogSelectedWsjtxQsoAsync()
+    {
+        var selected = SelectedWsjtxMessage;
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        var theirCall = ClassifyWsjtxQsoState(selected?.MessageText, myCall).OtherCall ?? TryExtractCallsign(selected?.MessageText);
+        if (selected is null || string.IsNullOrWhiteSpace(theirCall))
+        {
+            WsjtxRxStatus = "Select a decode with a callsign first.";
+            return;
+        }
+
+        UseSelectedWsjtxForLongwaveLog();
+        await LogCurrentQsoAsync();
+        WsjtxRxStatus = LongwaveLogStatus;
     }
 
     [RelayCommand]
@@ -1306,6 +2121,843 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void ClearRttyDecodedText() => RttyDecodedText = string.Empty;
+
+    [RelayCommand]
+    private void StartWsjtxReceive()
+    {
+        if (_wsjtxModeHost is null)
+        {
+            WsjtxRxStatus = "WSJT-style host unavailable";
+            return;
+        }
+
+        _ = StartWsjtxReceiveCoreAsync();
+    }
+
+    [RelayCommand]
+    private void StopWsjtxReceive()
+    {
+        if (_wsjtxModeHost is null)
+        {
+            return;
+        }
+
+        _ = _wsjtxModeHost.StopAsync(CancellationToken.None);
+    }
+
+    [RelayCommand]
+    private void ResetWsjtxSession()
+    {
+        if (_wsjtxModeHost is not null)
+        {
+            _ = _wsjtxModeHost.ResetAsync(CancellationToken.None);
+        }
+
+        WsjtxMessages.Clear();
+        WsjtxRxFrequencyMessages.Clear();
+        OnPropertyChanged(nameof(WsjtxHasMessages));
+        OnPropertyChanged(nameof(WsjtxHasRxFrequencyMessages));
+        SelectedWsjtxMessage = null;
+        WsjtxRxAudioFrequencyHz = 1500;
+        WsjtxTxAudioFrequencyHz = 1500;
+        WsjtxHoldTxFrequency = false;
+        WsjtxActiveSession = null;
+        WsjtxCallingCq = false;
+        WsjtxSuggestedMessages.Clear();
+        SelectedWsjtxSuggestedMessage = null;
+        WsjtxQueuedTransmitMessage = null;
+        WsjtxPreparedTransmit = null;
+        _wsjtxPreparedTransmitClip = null;
+        WsjtxPreparedTransmitStatus = "No TX signal prepared.";
+        WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+        WsjtxTransmitArmedLocal = false;
+        WsjtxAwaitingReply = false;
+        WsjtxTransmitArmStatus = "Nothing armed.";
+        WsjtxRxStatus = "WSJT-style digital scaffold ready";
+        WsjtxClockStatus = "Checking system clock discipline...";
+        WsjtxCycleDisplay = $"{WsjtxSelectedMode}  |  {GetWsjtxCycleLengthSeconds(WsjtxSelectedMode):0.#}s cycle  |  Next --.-s";
+        WsjtxSessionNotes = DescribeWsjtxMode(WsjtxSelectedMode);
+    }
+
+    private void ResetWsjtxSessionView(string modeLabel, string status)
+    {
+        WsjtxMessages.Clear();
+        WsjtxRxFrequencyMessages.Clear();
+        OnPropertyChanged(nameof(WsjtxHasMessages));
+        OnPropertyChanged(nameof(WsjtxHasRxFrequencyMessages));
+        SelectedWsjtxMessage = null;
+        WsjtxRxAudioFrequencyHz = 1500;
+        WsjtxTxAudioFrequencyHz = 1500;
+        WsjtxHoldTxFrequency = false;
+        WsjtxActiveSession = null;
+        WsjtxCallingCq = false;
+        WsjtxSuggestedMessages.Clear();
+        SelectedWsjtxSuggestedMessage = null;
+        WsjtxQueuedTransmitMessage = null;
+        WsjtxPreparedTransmit = null;
+        _wsjtxPreparedTransmitClip = null;
+        WsjtxPreparedTransmitStatus = "No TX signal prepared.";
+        WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+        WsjtxTransmitArmedLocal = false;
+        WsjtxAwaitingReply = false;
+        WsjtxTransmitArmStatus = "Nothing armed.";
+        WsjtxRxStatus = status;
+        WsjtxClockStatus = "Checking system clock discipline...";
+        WsjtxCycleDisplay = $"{modeLabel}  |  {GetWsjtxCycleLengthSeconds(modeLabel):0.#}s cycle  |  Next --.-s";
+        WsjtxSessionNotes = DescribeWsjtxMode(modeLabel);
+    }
+
+    [RelayCommand]
+    private void ClearWsjtxMessages()
+    {
+        WsjtxMessages.Clear();
+        WsjtxRxFrequencyMessages.Clear();
+        SelectedWsjtxMessage = null;
+        WsjtxRxAudioFrequencyHz = 1500;
+        WsjtxTxAudioFrequencyHz = 1500;
+        WsjtxHoldTxFrequency = false;
+        WsjtxActiveSession = null;
+        WsjtxCallingCq = false;
+        WsjtxQueuedTransmitMessage = null;
+        WsjtxPreparedTransmit = null;
+        _wsjtxPreparedTransmitClip = null;
+        WsjtxPreparedTransmitStatus = "No TX signal prepared.";
+        WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+        WsjtxTransmitArmedLocal = false;
+        WsjtxAwaitingReply = false;
+        WsjtxTransmitArmStatus = "Nothing armed.";
+        OnPropertyChanged(nameof(WsjtxHasMessages));
+        OnPropertyChanged(nameof(WsjtxHasRxFrequencyMessages));
+    }
+
+    [RelayCommand]
+    private void TrackSelectedWsjtxOffset()
+    {
+        if (SelectedWsjtxMessage is null)
+        {
+            return;
+        }
+
+        WsjtxRxAudioFrequencyHz = SelectedWsjtxMessage.FrequencyOffsetHz;
+        if (!WsjtxHoldTxFrequency)
+        {
+            WsjtxTxAudioFrequencyHz = WsjtxRxAudioFrequencyHz;
+        }
+        WsjtxRxStatus = $"Tracking {WsjtxRxAudioFrequencyHz:+0;-0;0} Hz in Rx Frequency";
+    }
+
+    [RelayCommand]
+    private void ResetWsjtxRxFrequencyTrack()
+    {
+        WsjtxRxAudioFrequencyHz = 1500;
+        if (!WsjtxHoldTxFrequency)
+        {
+            WsjtxTxAudioFrequencyHz = 1500;
+        }
+        WsjtxRxStatus = "Rx Frequency reset to +1500 Hz";
+    }
+
+    [RelayCommand]
+    private void SetSelectedWsjtxTxOffset()
+    {
+        if (SelectedWsjtxMessage is null)
+        {
+            return;
+        }
+
+        WsjtxTxAudioFrequencyHz = SelectedWsjtxMessage.FrequencyOffsetHz;
+        WsjtxRxStatus = $"TX offset set to {WsjtxTxAudioFrequencyHz:+0;-0;0} Hz";
+    }
+
+    [RelayCommand]
+    private void SyncWsjtxTxToRx()
+    {
+        WsjtxTxAudioFrequencyHz = WsjtxRxAudioFrequencyHz;
+        WsjtxRxStatus = $"TX offset synced to {WsjtxTxAudioFrequencyHz:+0;-0;0} Hz";
+    }
+
+    [RelayCommand]
+    private void NudgeWsjtxTxOffsetDown50() => AdjustWsjtxTxOffset(-50);
+
+    [RelayCommand]
+    private void NudgeWsjtxTxOffsetUp50() => AdjustWsjtxTxOffset(50);
+
+    [RelayCommand]
+    private void NudgeWsjtxTxOffsetDown100() => AdjustWsjtxTxOffset(-100);
+
+    [RelayCommand]
+    private void NudgeWsjtxTxOffsetUp100() => AdjustWsjtxTxOffset(100);
+
+    private void AdjustWsjtxTxOffset(int deltaHz)
+    {
+        WsjtxHoldTxFrequency = true;
+        WsjtxTxAudioFrequencyHz = Math.Clamp(WsjtxTxAudioFrequencyHz + deltaHz, 200, 3900);
+        WsjtxRxStatus = $"TX offset set to {WsjtxTxAudioFrequencyHz:+0;-0;0} Hz";
+    }
+
+    [RelayCommand]
+    private void StageSelectedWsjtxSuggestedMessage()
+    {
+        if (SelectedWsjtxSuggestedMessage is null)
+        {
+            return;
+        }
+
+        WsjtxQueuedTransmitMessage = SelectedWsjtxSuggestedMessage;
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        if (string.Equals(SelectedWsjtxSuggestedMessage.Label, "CQ", StringComparison.OrdinalIgnoreCase))
+        {
+            WsjtxCallingCq = true;
+            WsjtxActiveSession = null;
+        }
+        else
+        {
+            var state = ClassifyWsjtxQsoState(SelectedWsjtxSuggestedMessage.MessageText, myCall);
+            if (!string.IsNullOrWhiteSpace(state.OtherCall))
+            {
+                WsjtxActiveSession = new WsjtxActiveSession(state.OtherCall, WsjtxRxAudioFrequencyHz, WsjtxSelectedMode);
+                WsjtxCallingCq = false;
+            }
+        }
+        WsjtxPreparedTransmitStatus = "Staged message ready.";
+        WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+        WsjtxPreparedTransmit = null;
+        _wsjtxPreparedTransmitClip = null;
+        WsjtxTransmitArmedLocal = false;
+        WsjtxAwaitingReply = false;
+        WsjtxTransmitArmStatus = "Prepared message not generated yet.";
+        WsjtxRxStatus = $"Staged TX: {SelectedWsjtxSuggestedMessage.Label}";
+    }
+
+    [RelayCommand]
+    private void StageWsjtxCq()
+    {
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        if (string.IsNullOrWhiteSpace(myCall))
+        {
+            WsjtxRxStatus = "No CQ message available. Set your callsign first.";
+            return;
+        }
+
+        var myGrid = FormatWeakSignalGrid(WsjtxOperatorGridSquare);
+        var cqText = string.IsNullOrWhiteSpace(myGrid)
+            ? $"CQ {myCall}"
+            : $"CQ {myCall} {myGrid}";
+
+        var cqMessage = new WsjtxSuggestedMessageItem("CQ", cqText, "Call CQ on current TX offset");
+        SelectedWsjtxSuggestedMessage = cqMessage;
+        WsjtxQueuedTransmitMessage = cqMessage;
+        WsjtxCallingCq = true;
+        WsjtxActiveSession = null;
+        WsjtxPreparedTransmitStatus = "Staged CQ ready.";
+        WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+        WsjtxPreparedTransmit = null;
+        _wsjtxPreparedTransmitClip = null;
+        WsjtxTransmitArmedLocal = false;
+        WsjtxAwaitingReply = false;
+        WsjtxTransmitArmStatus = "Prepared CQ not generated yet.";
+        WsjtxRxStatus = "Staged TX: CQ";
+    }
+
+    [RelayCommand]
+    private async Task CallWsjtxCqNextSlotAsync()
+    {
+        StageWsjtxCq();
+        await PrepareAndArmQueuedWsjtxTransmitAsync("CQ");
+    }
+
+    [RelayCommand]
+    private async Task SendSelectedWsjtxReplyNextSlotAsync()
+    {
+        if (SelectedWsjtxSuggestedMessage is null)
+        {
+            WsjtxRxStatus = "Select a suggested reply first.";
+            return;
+        }
+
+        StageSelectedWsjtxSuggestedMessage();
+        await PrepareAndArmQueuedWsjtxTransmitAsync(SelectedWsjtxSuggestedMessage.Label);
+    }
+
+    [RelayCommand]
+    private void ClearWsjtxQueuedMessage()
+    {
+        WsjtxQueuedTransmitMessage = null;
+        WsjtxPreparedTransmit = null;
+        _wsjtxPreparedTransmitClip = null;
+        WsjtxActiveSession = null;
+        WsjtxCallingCq = false;
+        WsjtxPreparedTransmitStatus = "No TX signal prepared.";
+        WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+        WsjtxTransmitArmedLocal = false;
+        WsjtxAwaitingReply = false;
+        WsjtxTransmitArmStatus = "Nothing armed.";
+        WsjtxRxStatus = "Cleared staged TX message";
+    }
+
+    [RelayCommand]
+    private async Task PrepareWsjtxQueuedTransmitAsync()
+    {
+        if (_wsjtxModeHost is null)
+        {
+            WsjtxPreparedTransmitStatus = "WSJT host unavailable";
+            WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+            return;
+        }
+
+        if (WsjtxQueuedTransmitMessage is null)
+        {
+            WsjtxPreparedTransmitStatus = "Stage a TX message first.";
+            WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+            return;
+        }
+
+        WsjtxPreparedTransmitStatus = $"Preparing {WsjtxSelectedMode} TX signal...";
+        WsjtxPreparedTransmitPath = "Working...";
+
+        var result = await _wsjtxModeHost
+            .PrepareTransmitAsync(
+                WsjtxSelectedMode,
+                WsjtxQueuedTransmitMessage.MessageText,
+                WsjtxTxAudioFrequencyHz,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            WsjtxPreparedTransmit = result.PreparedTransmit;
+            _wsjtxPreparedTransmitClip = result.PreparedClip;
+            WsjtxPreparedTransmitStatus = result.Status;
+            WsjtxPreparedTransmitPath = result.PreparedTransmit?.WaveFilePath ?? "No prepared TX artifact.";
+            WsjtxTransmitArmedLocal = false;
+            WsjtxAwaitingReply = false;
+            WsjtxTransmitArmStatus = result.PreparedTransmit is null
+                ? "Prepare TX signal to enable arming."
+                : $"Prepared {result.PreparedTransmit.GeneratorName} output; ready to arm.";
+            WsjtxRxStatus = result.Status;
+        });
+    }
+
+    private async Task PrepareAndArmQueuedWsjtxTransmitAsync(string actionLabel)
+    {
+        await PrepareWsjtxQueuedTransmitAsync();
+
+        if (WsjtxPreparedTransmit is null)
+        {
+            return;
+        }
+
+        ArmPreparedWsjtxTransmit();
+        if (WsjtxTransmitArmedLocal)
+        {
+            WsjtxRxStatus = $"{actionLabel} armed for next slot";
+        }
+    }
+
+    [RelayCommand]
+    private void ArmPreparedWsjtxTransmit()
+    {
+        if (WsjtxPreparedTransmit is null)
+        {
+            WsjtxTransmitArmedLocal = false;
+            WsjtxTransmitArmStatus = "Prepare TX signal before arming.";
+            WsjtxRxStatus = "Nothing prepared to arm";
+            return;
+        }
+
+        var interlockError = ValidateWsjtxLiveTransmitInterlock();
+        if (interlockError is not null)
+        {
+            WsjtxTransmitArmedLocal = false;
+            WsjtxAwaitingReply = false;
+            WsjtxTransmitArmStatus = interlockError;
+            WsjtxRxStatus = "TX blocked by interlock";
+            return;
+        }
+
+        WsjtxTransmitArmedLocal = true;
+        WsjtxAwaitingReply = false;
+        WsjtxTransmitArmStatus = $"Armed {WsjtxPreparedTransmit.ModeLabel} TX at {WsjtxPreparedTransmit.TxAudioFrequencyHz:+0;-0;0} Hz";
+        WsjtxRxStatus = "Live TX armed for next slot";
+    }
+
+    [RelayCommand]
+    private void DisarmWsjtxTransmit()
+    {
+        WsjtxTransmitArmedLocal = false;
+        WsjtxAwaitingReply = false;
+        WsjtxTransmitArmStatus = WsjtxPreparedTransmit is null
+            ? "Nothing armed."
+            : "Prepared TX retained; not armed.";
+        WsjtxRxStatus = "TX scaffold disarmed";
+    }
+
+    private void UpsertWsjtxMessage(WsjtxDecodeMessage message)
+    {
+        var incoming = BuildWsjtxMessageItem(message);
+        var existingIndex = FindExistingWsjtxMessageIndex(WsjtxMessages, message);
+        if (existingIndex >= 0)
+        {
+            var previouslySelected = SelectedWsjtxMessage is not null
+                && ReferenceEquals(WsjtxMessages[existingIndex], SelectedWsjtxMessage);
+            WsjtxMessages[existingIndex] = incoming;
+            if (previouslySelected)
+            {
+                SelectedWsjtxMessage = incoming;
+            }
+        }
+        else
+        {
+            WsjtxMessages.Insert(0, incoming);
+        }
+
+        for (var i = WsjtxMessages.Count - 1; i >= 0; i--)
+        {
+            if ((DateTime.UtcNow - WsjtxMessages[i].TimestampUtc).TotalMinutes > 30)
+            {
+                var wasSelected = ReferenceEquals(WsjtxMessages[i], SelectedWsjtxMessage);
+                WsjtxMessages.RemoveAt(i);
+                if (wasSelected)
+                {
+                    SelectedWsjtxMessage = null;
+                }
+            }
+        }
+
+        while (WsjtxMessages.Count > 200)
+        {
+            var removeIndex = WsjtxMessages.Count - 1;
+            var wasSelected = ReferenceEquals(WsjtxMessages[removeIndex], SelectedWsjtxMessage);
+            WsjtxMessages.RemoveAt(removeIndex);
+            if (wasSelected)
+            {
+                SelectedWsjtxMessage = null;
+            }
+        }
+
+        RebuildWsjtxRxFrequencyMessages();
+    }
+
+    private void InsertOutgoingWsjtxMessage(WsjtxPreparedTransmit prepared)
+    {
+        var outgoing = BuildOutgoingWsjtxMessageItem(prepared);
+        WsjtxMessages.Insert(0, outgoing);
+
+        while (WsjtxMessages.Count > 200)
+        {
+            var removeIndex = WsjtxMessages.Count - 1;
+            var wasSelected = ReferenceEquals(WsjtxMessages[removeIndex], SelectedWsjtxMessage);
+            WsjtxMessages.RemoveAt(removeIndex);
+            if (wasSelected)
+            {
+                SelectedWsjtxMessage = null;
+            }
+        }
+
+        RebuildWsjtxRxFrequencyMessages();
+    }
+
+    private int FindExistingWsjtxMessageIndex(IReadOnlyList<WsjtxMessageItem> collection, WsjtxDecodeMessage message)
+    {
+        var normalizedText = NormalizeWsjtxMessageText(message.MessageText);
+        var windowSeconds = GetWsjtxDuplicateWindowSeconds(message.ModeLabel);
+        for (var i = 0; i < collection.Count; i++)
+        {
+            var existing = collection[i];
+            if (!string.Equals(existing.ModeText, message.ModeLabel, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!string.Equals(NormalizeWsjtxMessageText(existing.MessageText), normalizedText, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (Math.Abs(existing.FrequencyOffsetHz - message.FrequencyOffsetHz) > 25)
+            {
+                continue;
+            }
+
+            if (Math.Abs((existing.TimestampUtc - message.TimestampUtc).TotalSeconds) > windowSeconds)
+            {
+                continue;
+            }
+
+            return i;
+        }
+
+        return -1;
+    }
+
+    private void RebuildWsjtxRxFrequencyMessages()
+    {
+        WsjtxRxFrequencyMessages.Clear();
+        foreach (var item in WsjtxMessages)
+        {
+            if (Math.Abs(item.FrequencyOffsetHz - WsjtxRxAudioFrequencyHz) <= GetWsjtxRxFrequencyWindowHz(item.ModeText))
+            {
+                WsjtxRxFrequencyMessages.Add(item);
+            }
+        }
+
+        OnPropertyChanged(nameof(WsjtxHasRxFrequencyMessages));
+    }
+
+    private void HandleWsjtxAutoSequence(WsjtxDecodeMessage message)
+    {
+        if (!WsjtxAutoSequenceEnabled)
+        {
+            return;
+        }
+
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        if (string.IsNullOrWhiteSpace(myCall))
+        {
+            return;
+        }
+
+        var state = ClassifyWsjtxQsoState(message.MessageText, myCall);
+        if (WsjtxCallingCq && message.IsDirectedToMe && !string.IsNullOrWhiteSpace(state.OtherCall))
+        {
+            if (!IsWsjtxMessageOnExpectedReplyLane(message))
+            {
+                return;
+            }
+
+            WsjtxCallingCq = false;
+            WsjtxActiveSession = new WsjtxActiveSession(state.OtherCall, message.FrequencyOffsetHz, message.ModeLabel);
+            SelectAndTrackWsjtxMessage(message);
+            PromoteTopWsjtxSuggestion($"AutoSeq: {state.OtherCall} replied to CQ");
+            return;
+        }
+
+        if (WsjtxActiveSession is null || string.IsNullOrWhiteSpace(state.OtherCall))
+        {
+            return;
+        }
+
+        if (!string.Equals(WsjtxActiveSession.ModeLabel, message.ModeLabel, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!string.Equals(WsjtxActiveSession.OtherCall, state.OtherCall, StringComparison.OrdinalIgnoreCase))
+        {
+            if (message.IsDirectedToMe && IsWsjtxMessageOnExpectedReplyLane(message))
+            {
+                WsjtxRxStatus = $"Additional caller {state.OtherCall} heard; staying with {WsjtxActiveSession.OtherCall}";
+            }
+            return;
+        }
+
+        if (Math.Abs(WsjtxActiveSession.FrequencyOffsetHz - message.FrequencyOffsetHz) > GetWsjtxRxFrequencyWindowHz(message.ModeLabel))
+        {
+            return;
+        }
+
+        WsjtxActiveSession = WsjtxActiveSession with { FrequencyOffsetHz = message.FrequencyOffsetHz };
+        SelectAndTrackWsjtxMessage(message);
+        PromoteTopWsjtxSuggestion($"AutoSeq: next reply for {state.OtherCall}");
+    }
+
+    private bool IsWsjtxMessageOnExpectedReplyLane(WsjtxDecodeMessage message)
+    {
+        var referenceHz = WsjtxHoldTxFrequency ? WsjtxTxAudioFrequencyHz : WsjtxRxAudioFrequencyHz;
+        if (WsjtxCallingCq)
+        {
+            referenceHz = WsjtxTxAudioFrequencyHz;
+        }
+
+        return Math.Abs(message.FrequencyOffsetHz - referenceHz) <= GetWsjtxRxFrequencyWindowHz(message.ModeLabel);
+    }
+
+    private void SelectAndTrackWsjtxMessage(WsjtxDecodeMessage message)
+    {
+        var match = WsjtxMessages.FirstOrDefault(item =>
+            item.TimestampUtc == message.TimestampUtc
+            && item.FrequencyOffsetHz == message.FrequencyOffsetHz
+            && string.Equals(item.MessageText, message.MessageText, StringComparison.Ordinal)
+            && string.Equals(item.ModeText, message.ModeLabel, StringComparison.OrdinalIgnoreCase));
+
+        if (match is not null)
+        {
+            SelectedWsjtxMessage = match;
+        }
+
+        WsjtxRxAudioFrequencyHz = message.FrequencyOffsetHz;
+        if (!WsjtxHoldTxFrequency)
+        {
+            WsjtxTxAudioFrequencyHz = message.FrequencyOffsetHz;
+        }
+    }
+
+    private void PromoteTopWsjtxSuggestion(string status)
+    {
+        var top = WsjtxSuggestedMessages.FirstOrDefault();
+        if (top is null)
+        {
+            return;
+        }
+
+        SelectedWsjtxSuggestedMessage = top;
+        WsjtxQueuedTransmitMessage = WsjtxAutoStageRepliesEnabled ? top : null;
+        WsjtxPreparedTransmit = null;
+        _wsjtxPreparedTransmitClip = null;
+        WsjtxPreparedTransmitStatus = WsjtxAutoStageRepliesEnabled
+            ? "Reply auto-staged; prepare TX signal again."
+            : "Reply advanced; stage it when ready, then prepare TX signal.";
+        WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+        WsjtxTransmitArmedLocal = false;
+        WsjtxAwaitingReply = false;
+        WsjtxTransmitArmStatus = WsjtxAutoStageRepliesEnabled
+            ? "Next reply staged automatically; re-prepare before arming."
+            : "Next reply suggested; stage it when ready.";
+        WsjtxRxStatus = WsjtxAutoStageRepliesEnabled
+            ? $"{status} | Auto-staged next reply"
+            : $"{status} | Next reply suggested";
+    }
+
+    private static WsjtxMessageItem BuildWsjtxMessageItem(WsjtxDecodeMessage message)
+    {
+        var localTime = message.TimestampUtc.ToLocalTime();
+        var isDirected = message.IsDirectedToMe;
+        var isCq = message.IsCq;
+        var normalized = NormalizeWsjtxMessageText(message.MessageText);
+        var highlight = GetWsjtxHighlight(normalized, isDirected, isCq, false);
+        return new WsjtxMessageItem(
+            message.TimestampUtc,
+            localTime.ToString("HH:mm:ss"),
+            message.ModeLabel,
+            $"{message.SnrDb} dB",
+            $"{message.DeltaTimeSeconds:+0.0;-0.0;0.0}",
+            $"{message.FrequencyOffsetHz:+0;-0;0} Hz",
+            message.MessageText,
+            message.FrequencyOffsetHz,
+            message.SnrDb,
+            message.DeltaTimeSeconds,
+            isDirected,
+            isCq,
+            false,
+            highlight.RowBackground,
+            highlight.AccentBrush,
+            highlight.MessageBrush,
+            highlight.MetaBrush,
+            highlight.BadgeText,
+            highlight.ShowBadge,
+            highlight.BadgeBackground,
+            highlight.BadgeForeground);
+    }
+
+    private static WsjtxMessageItem BuildOutgoingWsjtxMessageItem(WsjtxPreparedTransmit prepared)
+    {
+        var timestampUtc = DateTime.UtcNow;
+        var localTime = timestampUtc.ToLocalTime();
+        var normalized = NormalizeWsjtxMessageText(prepared.MessageText);
+        var highlight = GetWsjtxHighlight(normalized, false, normalized.StartsWith("CQ ", StringComparison.OrdinalIgnoreCase), true);
+        return new WsjtxMessageItem(
+            timestampUtc,
+            localTime.ToString("HH:mm:ss"),
+            prepared.ModeLabel,
+            "TX",
+            "--",
+            $"{prepared.TxAudioFrequencyHz:+0;-0;0} Hz",
+            prepared.MessageText,
+            prepared.TxAudioFrequencyHz,
+            0,
+            0,
+            false,
+            normalized.StartsWith("CQ ", StringComparison.OrdinalIgnoreCase),
+            true,
+            highlight.RowBackground,
+            highlight.AccentBrush,
+            highlight.MessageBrush,
+            highlight.MetaBrush,
+            highlight.BadgeText,
+            highlight.ShowBadge,
+            highlight.BadgeBackground,
+            highlight.BadgeForeground);
+    }
+
+    private static string NormalizeWsjtxMessageText(string messageText) =>
+        string.Join(' ', messageText
+            .Trim()
+            .ToUpperInvariant()
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private static WsjtxHighlightStyle GetWsjtxHighlight(string normalizedText, bool isDirected, bool isCq, bool isOwnTransmit)
+    {
+        if (isOwnTransmit)
+        {
+            return new WsjtxHighlightStyle(
+                "#231B12",
+                "#FFC27A",
+                "#FFF4E8",
+                "#D4B694",
+                "TX",
+                true,
+                "#7A4A1D",
+                "#FFF7EF");
+        }
+
+        if (isDirected)
+        {
+            return new WsjtxHighlightStyle(
+                "#182234",
+                "#AFC4FF",
+                "#F5F8FF",
+                "#B8C6EA",
+                "TO ME",
+                true,
+                "#27476E",
+                "#F5F8FF");
+        }
+
+        if (TryGetSpecialCqLabel(normalizedText, out var cqLabel))
+        {
+            return new WsjtxHighlightStyle(
+                cqLabel == "CQ DX" ? "#231722" : "#1A1F2C",
+                cqLabel == "CQ DX" ? "#FFB5EA" : "#C7D4FF",
+                cqLabel == "CQ DX" ? "#FFF0FB" : "#F2F5FF",
+                cqLabel == "CQ DX" ? "#DDBAD4" : "#B8C5EA",
+                cqLabel,
+                true,
+                cqLabel == "CQ DX" ? "#7A2E6A" : "#314D84",
+                cqLabel == "CQ DX" ? "#FFF4FD" : "#F5F8FF");
+        }
+
+        if (normalizedText == "QRZ" || normalizedText.StartsWith("QRZ ", StringComparison.OrdinalIgnoreCase))
+        {
+            return new WsjtxHighlightStyle(
+                "#222018",
+                "#F0D58F",
+                "#FFF9EA",
+                "#D4C49B",
+                "QRZ",
+                true,
+                "#6E5A21",
+                "#FFF8E7");
+        }
+
+        if (isCq)
+        {
+            return new WsjtxHighlightStyle(
+                "#17261D",
+                "#9DDEAE",
+                "#ECFFF1",
+                "#B5D7BF",
+                "CQ",
+                true,
+                "#255235",
+                "#F5FFF7");
+        }
+
+        return new WsjtxHighlightStyle(
+            "#0B1018",
+            "#AFC4FF",
+            "#E6EAF7",
+            "#98A2BE",
+            "FT",
+            false,
+            "Transparent",
+            "#C4C8D8");
+    }
+
+    private static bool TryGetSpecialCqLabel(string normalizedText, out string label)
+    {
+        label = string.Empty;
+        if (!normalizedText.StartsWith("CQ ", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var tokens = normalizedText.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length < 2)
+        {
+            return false;
+        }
+
+        var second = tokens[1];
+        if (string.Equals(second, "DX", StringComparison.OrdinalIgnoreCase))
+        {
+            label = "CQ DX";
+            return true;
+        }
+
+        if (IsDirectionalCqToken(second))
+        {
+            label = $"CQ {second}";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsDirectionalCqToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return false;
+        }
+
+        return token.ToUpperInvariant() switch
+        {
+            "AF" or "AN" or "AS" or "EU" or "NA" or "OC" or "SA" or
+            "JA" or "VK" or "DX" or "TEST" => true,
+            _ => token.Length is >= 1 and <= 4
+                && token.Any(char.IsLetter)
+                && token.All(ch => char.IsLetterOrDigit(ch) || ch == '/')
+                && !LooksLikeCallsign(token)
+        };
+    }
+
+    private static bool LooksLikeCallsign(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return false;
+        }
+
+        var upper = token.ToUpperInvariant();
+        return upper.Any(char.IsDigit) && upper.Any(char.IsLetter) && upper.Length >= 3;
+    }
+
+    private static double GetWsjtxDuplicateWindowSeconds(string modeLabel) => modeLabel.Trim().ToUpperInvariant() switch
+    {
+        "WSPR" or "FST4W" => 180,
+        "JT65" or "JT9" or "JT4" => 120,
+        _ => 90,
+    };
+
+    private static int GetWsjtxRxFrequencyWindowHz(string modeLabel) => modeLabel.Trim().ToUpperInvariant() switch
+    {
+        "WSPR" or "FST4W" => 20,
+        "MSK144" => 200,
+        _ => 100,
+    };
+
+    private sealed record WsjtxHighlightStyle(
+        string RowBackground,
+        string AccentBrush,
+        string MessageBrush,
+        string MetaBrush,
+        string BadgeText,
+        bool ShowBadge,
+        string BadgeBackground,
+        string BadgeForeground);
+
+    private enum WsjtxQsoStage
+    {
+        None,
+        Cq,
+        Qrz,
+        ReportToMe,
+        RogerToMe,
+        Rr73ToMe,
+        SignoffToMe,
+    }
+
+    private sealed record WsjtxQsoState(WsjtxQsoStage Stage, string? OtherCall);
 
     [RelayCommand]
     private void StartSstvReceive()
@@ -1551,6 +3203,39 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         await _rttyDecoderHost.StartAsync(CancellationToken.None);
     }
 
+    private async Task StartWsjtxReceiveCoreAsync()
+    {
+        if (_wsjtxModeHost is null)
+        {
+            return;
+        }
+
+        var resolvedModeLabel = ResolveWsjtxModeSelection(WsjtxSelectedMode, WsjtxSelectedFrequency);
+        if (!string.Equals(WsjtxSelectedMode, resolvedModeLabel, StringComparison.OrdinalIgnoreCase))
+        {
+            WsjtxSelectedMode = resolvedModeLabel;
+        }
+
+        ResetWsjtxSessionView(resolvedModeLabel, $"Starting {resolvedModeLabel} receive...");
+        await TuneRadioForWsjtxAsync(WsjtxSelectedFrequency);
+        var modeDefinition = WsjtxModeCatalog.GetMode(resolvedModeLabel);
+        var config = new WsjtxModeConfiguration(
+            resolvedModeLabel,
+            WsjtxSelectedFrequency,
+            WsjtxAutoSequenceEnabled,
+            false,
+            false,
+            false,
+            false,
+            modeDefinition.CycleLengthSeconds,
+            modeDefinition.RequiresAccurateClock,
+            WsjtxOperatorCallsign,
+            WsjtxOperatorGridSquare,
+            false);
+        await _wsjtxModeHost.ConfigureAsync(config, CancellationToken.None);
+        await _wsjtxModeHost.StartAsync(CancellationToken.None);
+    }
+
     private async Task StartWefaxReceiveCoreAsync(bool forceNow)
     {
         if (_wefaxDecoderHost is null)
@@ -1677,6 +3362,340 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             RadioStatusSummary = $"RTTY tune failed: {ex.Message}";
         }
+    }
+
+    private async Task TuneRadioForWsjtxAsync(string frequencyLabel)
+    {
+        if (_radioService is null || CanConnect)
+        {
+            return;
+        }
+
+        if (!TryParseUiFrequencyHz(frequencyLabel, out var hz))
+        {
+            return;
+        }
+
+        try
+        {
+            var mode = frequencyLabel.Contains("LSB", StringComparison.OrdinalIgnoreCase)
+                ? RadioMode.LsbData
+                : RadioMode.UsbData;
+            await _radioService.SetModeAsync(mode, CancellationToken.None);
+            await _radioService.SetFrequencyAsync(hz, CancellationToken.None);
+            RadioStatusSummary = $"Weak-signal digital tuned: {hz:N0} Hz {FormatModeDisplay(mode)}";
+        }
+        catch (Exception ex)
+        {
+            RadioStatusSummary = $"Weak-signal digital tune failed: {ex.Message}";
+        }
+    }
+
+    private async Task TuneRadioForLongwaveSpotAsync(LongwaveSpotSummaryItem spot)
+    {
+        if (_radioService is null || CanConnect)
+        {
+            LongwaveStatus = "Connect the radio before tuning a spot.";
+            return;
+        }
+
+        var hz = (long)Math.Round(spot.FrequencyKhz * 1000d);
+        var radioMode = MapSpotModeToRadioMode(spot.Mode, hz);
+
+        try
+        {
+            await _radioService.SetModeAsync(radioMode, CancellationToken.None);
+            await _radioService.SetFrequencyAsync(hz, CancellationToken.None);
+            LongwaveStatus = $"Tuned {spot.ActivatorCallsign} on {spot.FrequencyText} {spot.Mode}.";
+            RadioStatusSummary = $"POTA tuned: {hz:N0} Hz {FormatModeDisplay(radioMode)}";
+
+            if (IsWeakSignalSpotMode(spot.Mode))
+            {
+                SelectedModePanelTabIndex = 3;
+                WsjtxSelectedMode = NormalizeWeakSignalMode(spot.Mode);
+            }
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = $"Spot tune failed: {ex.Message}";
+        }
+    }
+
+    private void ApplySpotToLongwaveLog(LongwaveSpotSummaryItem spot)
+    {
+        LongwaveLogCallsign = spot.ActivatorCallsign;
+        LongwaveLogMode = spot.Mode.ToUpperInvariant();
+        LongwaveLogBand = spot.Band;
+        LongwaveLogFrequencyKhz = $"{spot.FrequencyKhz:0.0}";
+        LongwaveLogParkReference = spot.ParkReference;
+        LongwaveLogGridSquare = string.Empty;
+        if (IsWeakSignalSpotMode(spot.Mode))
+        {
+            LongwaveLogRstSent = "-10";
+            LongwaveLogRstReceived = "-10";
+        }
+    }
+
+    private void ApplyLongwaveLookup(LongwaveCallsignLookup lookup)
+    {
+        LongwaveLogCallsign = lookup.Callsign;
+        LongwaveLogName = lookup.Name ?? string.Empty;
+        LongwaveLogQth = lookup.Qth ?? string.Empty;
+        LongwaveLogCounty = lookup.County ?? string.Empty;
+        LongwaveLogGridSquare = lookup.GridSquare?.Trim().ToUpperInvariant() ?? LongwaveLogGridSquare;
+        LongwaveLogCountry = lookup.Country ?? string.Empty;
+        LongwaveLogState = lookup.State?.Trim().ToUpperInvariant() ?? string.Empty;
+        LongwaveLogDxcc = lookup.Dxcc ?? string.Empty;
+        _longwaveLogLatitude = lookup.Latitude;
+        _longwaveLogLongitude = lookup.Longitude;
+    }
+
+    private void ApplyLongwaveSettingsState(AppSettings settings)
+    {
+        var current = BuildCurrentLongwaveSettings(settings);
+        if (current.Enabled)
+        {
+            if (string.IsNullOrWhiteSpace(LongwaveStatus)
+                || string.Equals(LongwaveStatus, "Longwave integration disabled.", StringComparison.Ordinal)
+                || string.Equals(LongwaveStatus, "Enable Longwave in Settings to use POTA spots and logging.", StringComparison.Ordinal))
+            {
+                LongwaveStatus = "Longwave ready. Refresh spots or log a contact.";
+            }
+
+            LongwaveOperatorSummary = "Longwave integration enabled.";
+
+            if (string.IsNullOrWhiteSpace(LongwaveLogStatus)
+                || string.Equals(LongwaveLogStatus, "Enable Longwave in Settings to log contacts here.", StringComparison.Ordinal))
+            {
+                LongwaveLogStatus = "Ready to log from rig or selected spot.";
+            }
+        }
+        else
+        {
+            LongwaveStatus = "Enable Longwave in Settings to use POTA spots and logging.";
+            LongwaveOperatorSummary = "Longwave integration disabled.";
+            LongwaveLogStatus = "Enable Longwave in Settings to log contacts here.";
+        }
+    }
+
+    private LongwaveSettings BuildCurrentLongwaveSettings() => BuildCurrentLongwaveSettings(_settings);
+
+    private LongwaveSettings BuildCurrentLongwaveSettings(AppSettings fallback) =>
+        new(
+            SettingsLongwaveEnabled,
+            string.IsNullOrWhiteSpace(SettingsLongwaveBaseUrl) ? fallback.Longwave.BaseUrl : SettingsLongwaveBaseUrl.Trim(),
+            string.IsNullOrWhiteSpace(SettingsLongwaveClientApiToken) ? fallback.Longwave.ClientApiToken : SettingsLongwaveClientApiToken.Trim(),
+            string.IsNullOrWhiteSpace(SettingsLongwaveDefaultLogbookName) ? fallback.Longwave.DefaultLogbookName : SettingsLongwaveDefaultLogbookName.Trim(),
+            string.IsNullOrWhiteSpace(SettingsLongwaveDefaultLogbookNotes) ? fallback.Longwave.DefaultLogbookNotes : SettingsLongwaveDefaultLogbookNotes.Trim());
+
+    private static LongwaveSpotSummaryItem ToLongwaveSpotSummaryItem(LongwaveSpot spot, bool isLogged) =>
+        new(
+            spot.Id,
+            spot.ActivatorCallsign,
+            spot.ParkReference,
+            spot.FrequencyKhz,
+            spot.Mode,
+            spot.Band,
+            spot.Comments,
+            spot.SpotterCallsign,
+            spot.SpottedAtUtc,
+            isLogged);
+
+    private static LongwaveRecentContactItem ToLongwaveRecentContactItem(LongwaveContact contact) =>
+        new(
+            contact.Id,
+            contact.StationCallsign,
+            contact.Mode,
+            contact.Band,
+            $"{contact.QsoDate} {contact.TimeOn}",
+            contact.ParkReference,
+            contact.FrequencyKhz);
+
+    private void MarkLongwaveSpotLogged(string? sourceSpotId)
+    {
+        if (string.IsNullOrWhiteSpace(sourceSpotId))
+        {
+            return;
+        }
+
+        for (var i = 0; i < LongwavePotaSpots.Count; i++)
+        {
+            var item = LongwavePotaSpots[i];
+            if (!string.Equals(item.Id, sourceSpotId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var updated = item with { IsLogged = true };
+            LongwavePotaSpots[i] = updated;
+            if (SelectedLongwavePotaSpot?.Id == updated.Id)
+            {
+                SelectedLongwavePotaSpot = updated;
+            }
+            if (SelectedVoiceLongwavePotaSpot?.Id == updated.Id)
+            {
+                SelectedVoiceLongwavePotaSpot = updated;
+            }
+            break;
+        }
+
+        RebuildVoiceLongwavePotaSpots();
+    }
+
+    private void RebuildVoiceLongwavePotaSpots()
+    {
+        var bandFilter = SelectedVoiceLongwaveBandFilter;
+        VoiceLongwavePotaSpots = new ObservableCollection<LongwaveSpotSummaryItem>(
+            LongwavePotaSpots
+                .Where(static spot => IsVoiceSpotMode(spot.Mode))
+                .Where(spot => string.Equals(bandFilter, "All bands", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(spot.Band, bandFilter, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(static spot => spot.IsLogged)
+                .ThenByDescending(static spot => spot.SpottedAtUtc));
+
+        if (SelectedVoiceLongwavePotaSpot is not null)
+        {
+            SelectedVoiceLongwavePotaSpot = VoiceLongwavePotaSpots.FirstOrDefault(item => item.Id == SelectedVoiceLongwavePotaSpot.Id);
+        }
+    }
+
+    private async Task RefreshLongwaveContactsAsync()
+    {
+        if (_longwaveService is null)
+        {
+            return;
+        }
+
+        var contacts = await _longwaveService.GetContactsAsync(BuildCurrentLongwaveSettings(), SelectedLongwaveLogbook?.Id, CancellationToken.None);
+        LongwaveRecentContacts = new ObservableCollection<LongwaveRecentContactItem>(
+            contacts.Take(50).Select(ToLongwaveRecentContactItem));
+        if (SelectedLongwaveRecentContact is not null)
+        {
+            SelectedLongwaveRecentContact = LongwaveRecentContacts.FirstOrDefault(item => item.Id == SelectedLongwaveRecentContact.Id);
+        }
+    }
+
+    private async Task RefreshLongwaveContactsForSelectionAsync()
+    {
+        try
+        {
+            await RefreshLongwaveContactsAsync();
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = ex.Message;
+        }
+    }
+
+    private async Task OnLongwaveRefreshTimerTickAsync()
+    {
+        if (_longwaveService is null || IsLongwaveBusy)
+        {
+            return;
+        }
+
+        var settings = BuildCurrentLongwaveSettings();
+        if (!settings.Enabled
+            || string.IsNullOrWhiteSpace(settings.BaseUrl)
+            || string.IsNullOrWhiteSpace(settings.ClientApiToken))
+        {
+            return;
+        }
+
+        try
+        {
+            await RefreshLongwaveSpotsAsync();
+        }
+        catch
+        {
+        }
+    }
+
+    private static string BuildLongwaveLogDedupeKey(string stationCall, string mode, double frequencyKhz, DateTime timestampUtc) =>
+        $"{stationCall}|{mode.Trim().ToUpperInvariant()}|{Math.Round(frequencyKhz, 1):0.0}|{timestampUtc:yyyyMMddHHmm}";
+
+    private static LongwaveLogbookItem? SelectPreferredLongwaveLogbook(
+        IEnumerable<LongwaveLogbookItem> available,
+        LongwaveLogbookItem? currentSelection,
+        string preferredName)
+    {
+        var items = available.ToArray();
+        if (currentSelection is not null)
+        {
+            var currentMatch = items.FirstOrDefault(item => string.Equals(item.Id, currentSelection.Id, StringComparison.Ordinal));
+            if (currentMatch is not null)
+            {
+                return currentMatch;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(preferredName))
+        {
+            var preferred = items.FirstOrDefault(item => string.Equals(item.Name, preferredName.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (preferred is not null)
+            {
+                return preferred;
+            }
+        }
+
+        return items.FirstOrDefault();
+    }
+
+    private static RadioMode MapSpotModeToRadioMode(string mode, long frequencyHz)
+    {
+        var upper = mode.Trim().ToUpperInvariant();
+        return upper switch
+        {
+            "FT8" or "FT4" => frequencyHz < 10_000_000 ? RadioMode.LsbData : RadioMode.UsbData,
+            "RTTY" => RadioMode.Rtty,
+            "CW" => RadioMode.Cw,
+            "AM" => RadioMode.Am,
+            "FM" => RadioMode.Fm,
+            "SSTV" => frequencyHz < 10_000_000 ? RadioMode.LsbData : RadioMode.UsbData,
+            "SSB" => frequencyHz < 10_000_000 ? RadioMode.Lsb : RadioMode.Usb,
+            "USB" => RadioMode.Usb,
+            "LSB" => RadioMode.Lsb,
+            _ => frequencyHz < 10_000_000 ? RadioMode.Lsb : RadioMode.Usb,
+        };
+    }
+
+    private static bool IsWeakSignalSpotMode(string mode) =>
+        string.Equals(mode, "FT8", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(mode, "FT4", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsVoiceSpotMode(string mode) =>
+        string.Equals(mode, "SSB", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(mode, "USB", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(mode, "LSB", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(mode, "FM", StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeWeakSignalMode(string mode) =>
+        string.Equals(mode, "FT4", StringComparison.OrdinalIgnoreCase) ? "FT4" : "FT8";
+
+    private static string MapRadioModeToLogMode(RadioMode mode) => mode switch
+    {
+        RadioMode.Lsb or RadioMode.Usb => "SSB",
+        RadioMode.LsbData or RadioMode.UsbData => "DATA",
+        RadioMode.Cw => "CW",
+        RadioMode.Am => "AM",
+        RadioMode.Fm => "FM",
+        RadioMode.Rtty => "RTTY",
+        _ => "SSB",
+    };
+
+    private static string DeriveBandFromFrequencyKhz(double frequencyKhz)
+    {
+        if (frequencyKhz is >= 1800 and < 2000) return "160m";
+        if (frequencyKhz is >= 3500 and < 4000) return "80m";
+        if (frequencyKhz is >= 7000 and < 7300) return "40m";
+        if (frequencyKhz is >= 10100 and < 10150) return "30m";
+        if (frequencyKhz is >= 14000 and < 14350) return "20m";
+        if (frequencyKhz is >= 18068 and < 18168) return "17m";
+        if (frequencyKhz is >= 21000 and < 21450) return "15m";
+        if (frequencyKhz is >= 24890 and < 24990) return "12m";
+        if (frequencyKhz is >= 28000 and < 29700) return "10m";
+        if (frequencyKhz is >= 50000 and < 54000) return "6m";
+        return "HF";
     }
 
     private static string NormalizeSstvModeSelection(string selection) => selection switch
@@ -1933,12 +3952,348 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(WefaxSelectedReceivedPath));
     }
 
+    partial void OnSelectedWsjtxMessageChanged(WsjtxMessageItem? value)
+    {
+        OnPropertyChanged(nameof(WsjtxSelectedMessageText));
+        OnPropertyChanged(nameof(WsjtxRxTrackStatus));
+        RebuildWsjtxSuggestedMessages();
+    }
+
+    partial void OnWsjtxRxAudioFrequencyHzChanged(int value)
+    {
+        OnPropertyChanged(nameof(WsjtxRxFrequencyTitle));
+        OnPropertyChanged(nameof(WsjtxTransmitPlanSummary));
+        if (!WsjtxHoldTxFrequency)
+        {
+            OnPropertyChanged(nameof(WsjtxTxTrackStatus));
+            OnPropertyChanged(nameof(WsjtxTxFrequencyTitle));
+        }
+        RebuildWsjtxRxFrequencyMessages();
+    }
+
+    partial void OnWsjtxTxAudioFrequencyHzChanged(int value)
+    {
+        var clamped = Math.Clamp(value, 200, 3900);
+        if (clamped != value)
+        {
+            WsjtxTxAudioFrequencyHz = clamped;
+            return;
+        }
+
+        OnPropertyChanged(nameof(WsjtxTxFrequencyTitle));
+        OnPropertyChanged(nameof(WsjtxTxTrackStatus));
+        OnPropertyChanged(nameof(WsjtxTransmitPlanSummary));
+    }
+
+    partial void OnWsjtxAutoSequenceEnabledChanged(bool value)
+    {
+        UpdateWsjtxSessionNotes();
+    }
+
+    partial void OnWsjtxHoldTxFrequencyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(WsjtxTxTrackStatus));
+        OnPropertyChanged(nameof(WsjtxTransmitPlanSummary));
+        if (!value)
+        {
+            WsjtxTxAudioFrequencyHz = WsjtxRxAudioFrequencyHz;
+        }
+    }
+
+    partial void OnSelectedWsjtxSuggestedMessageChanged(WsjtxSuggestedMessageItem? value)
+    {
+        OnPropertyChanged(nameof(WsjtxSuggestedMessagePreview));
+    }
+
+    partial void OnWsjtxQueuedTransmitMessageChanged(WsjtxSuggestedMessageItem? value)
+    {
+        OnPropertyChanged(nameof(WsjtxQueuedTransmitPreview));
+    }
+
+    partial void OnWsjtxOperatorCallsignChanged(string value)
+    {
+    }
+
+    partial void OnSelectedTxDeviceChanged(AudioDeviceInfo? value)
+    {
+    }
+
+    partial void OnWsjtxPreparedTransmitChanged(WsjtxPreparedTransmit? value)
+    {
+        OnPropertyChanged(nameof(WsjtxTransmitArmSummary));
+    }
+
+    partial void OnWsjtxAwaitingReplyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(WsjtxTransmitArmSummary));
+        OnPropertyChanged(nameof(WsjtxActiveSessionSummary));
+    }
+
+    partial void OnWsjtxActiveSessionChanged(WsjtxActiveSession? value)
+    {
+        OnPropertyChanged(nameof(WsjtxActiveSessionSummary));
+    }
+
+    partial void OnWsjtxCallingCqChanged(bool value)
+    {
+        OnPropertyChanged(nameof(WsjtxActiveSessionSummary));
+    }
+
+    partial void OnWsjtxPreparedTransmitStatusChanged(string value)
+    {
+        OnPropertyChanged(nameof(WsjtxPreparedTransmitSummary));
+    }
+
+    partial void OnWsjtxTransmitArmedLocalChanged(bool value)
+    {
+        OnPropertyChanged(nameof(WsjtxTransmitArmSummary));
+    }
+
+    partial void OnWsjtxTransmitArmStatusChanged(string value)
+    {
+        OnPropertyChanged(nameof(WsjtxTransmitArmSummary));
+    }
+
+    partial void OnWsjtxSecondsToNextCycleChanged(double value)
+    {
+        TryAutoCompleteArmedWsjtxTransmit(value);
+        OnPropertyChanged(nameof(WsjtxTransmitArmSummary));
+    }
+
+    private void TryAutoCompleteArmedWsjtxTransmit(double currentSecondsToNextCycle)
+    {
+        var previous = _lastObservedWsjtxSecondsToNextCycle;
+        _lastObservedWsjtxSecondsToNextCycle = currentSecondsToNextCycle;
+
+        if (!WsjtxTransmitArmedLocal || WsjtxPreparedTransmit is null || _wsjtxSlotSendInFlight)
+        {
+            return;
+        }
+
+        if (!double.IsFinite(previous) || !double.IsFinite(currentSecondsToNextCycle))
+        {
+            return;
+        }
+
+        // When the cycle boundary passes, SecondsToNextCycle jumps back up near the mode's full cycle length.
+        if (currentSecondsToNextCycle <= previous + 0.75)
+        {
+            return;
+        }
+
+        _ = ExecuteArmedWsjtxTransmitAsync();
+    }
+
+    private string? ValidateWsjtxLiveTransmitInterlock()
+    {
+        if (_radioService is null || CanConnect)
+        {
+            return "Live TX blocked: radio is not connected.";
+        }
+
+        if (_audioService is null)
+        {
+            return "Live TX blocked: audio service unavailable.";
+        }
+
+        if (SelectedTxDevice is null)
+        {
+            return "Live TX blocked: no TX audio device configured.";
+        }
+
+        if (string.IsNullOrWhiteSpace(FormatCallsign(WsjtxOperatorCallsign)))
+        {
+            return "Live TX blocked: operator callsign is not set.";
+        }
+
+        if (WsjtxQueuedTransmitMessage is null)
+        {
+            return "Live TX blocked: no staged TX message.";
+        }
+
+        if (WsjtxPreparedTransmit is null || _wsjtxPreparedTransmitClip is null)
+        {
+            return "Live TX blocked: prepare TX audio first.";
+        }
+
+        return null;
+    }
+
+    private async Task ExecuteArmedWsjtxTransmitAsync()
+    {
+        if (WsjtxPreparedTransmit is null)
+        {
+            return;
+        }
+
+        if (_wsjtxSlotSendInFlight)
+        {
+            return;
+        }
+
+        _wsjtxSlotSendInFlight = true;
+        var prepared = WsjtxPreparedTransmit;
+        var preparedClip = _wsjtxPreparedTransmitClip;
+        var sentMessage = prepared.MessageText;
+        var attemptedLiveTransmit = false;
+        var pttRaised = false;
+        var txAudioStarted = false;
+        WsjtxTransmitArmedLocal = false;
+
+        try
+        {
+            var interlockError = ValidateWsjtxLiveTransmitInterlock();
+            if (interlockError is not null)
+            {
+                WsjtxAwaitingReply = false;
+                WsjtxTransmitArmStatus = interlockError;
+                WsjtxRxStatus = "Live TX blocked before send";
+                return;
+            }
+
+            var route = BuildCurrentAudioRoute();
+            var liveClip = preparedClip!;
+            var audioService = _audioService!;
+            var radioService = _radioService!;
+            var clipDurationMs = Math.Max(250, (int)Math.Ceiling(
+                liveClip.PcmBytes.Length / (double)(liveClip.SampleRate * liveClip.Channels * 2) * 1000.0));
+
+            attemptedLiveTransmit = true;
+            await radioService.SetPttAsync(true, CancellationToken.None).ConfigureAwait(false);
+            pttRaised = true;
+            await Task.Delay(60, CancellationToken.None).ConfigureAwait(false);
+            await audioService.StartTransmitPcmAsync(route, liveClip, CancellationToken.None).ConfigureAwait(false);
+            txAudioStarted = true;
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                VoiceTxStatus = "WSJT TX audio live";
+                WsjtxRxStatus = $"Live TX on-air: {sentMessage}";
+                RadioStatusSummary = $"Weak-signal TX live  |  {prepared.ModeLabel}  |  {prepared.TxAudioFrequencyHz:+0;-0;0} Hz";
+            });
+
+            await Task.Delay(clipDurationMs + 150, CancellationToken.None).ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() => CompleteArmedWsjtxTransmit(prepared, sentMessage, true));
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                if (_radioService is not null)
+                {
+                    await _radioService.SetPttAsync(false, CancellationToken.None).ConfigureAwait(false);
+                }
+
+                if (_audioService is not null)
+                {
+                    await _audioService.StopTransmitAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+            }
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                VoiceTxStatus = "TX audio idle";
+                WsjtxAwaitingReply = false;
+                WsjtxTransmitArmStatus = $"TX failed: {ex.Message}";
+                WsjtxRxStatus = "Live TX failed";
+                RadioStatusSummary = $"Weak-signal TX failed: {ex.Message}";
+            });
+        }
+        finally
+        {
+            if (attemptedLiveTransmit)
+            {
+                try
+                {
+                    if (txAudioStarted && _audioService is not null)
+                    {
+                        await _audioService.StopTransmitAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    if (pttRaised && _radioService is not null)
+                    {
+                        await _radioService.SetPttAsync(false, CancellationToken.None).ConfigureAwait(false);
+                    }
+                }
+                catch
+                {
+                }
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    VoiceTxStatus = "TX audio idle";
+                });
+            }
+
+            _wsjtxSlotSendInFlight = false;
+        }
+    }
+
+    private void CompleteArmedWsjtxTransmit(WsjtxPreparedTransmit prepared, string sentMessage, bool wasLiveTransmit)
+    {
+        InsertOutgoingWsjtxMessage(prepared);
+        WsjtxPreparedTransmitStatus = wasLiveTransmit
+            ? $"On-air TX sent ({prepared.GeneratorName})."
+            : $"Prepared artifact retained after slot send ({prepared.GeneratorName}).";
+        WsjtxRxStatus = wasLiveTransmit
+            ? $"Live TX sent on slot: {sentMessage}"
+            : $"Simulated TX sent on slot: {sentMessage}";
+
+        if (WsjtxCallingCq)
+        {
+            WsjtxAwaitingReply = true;
+            WsjtxTransmitArmStatus = "CQ sent; waiting for a reply on the tracked lane.";
+        }
+        else if (WsjtxActiveSession is not null)
+        {
+            WsjtxAwaitingReply = true;
+            WsjtxTransmitArmStatus = $"Waiting for {WsjtxActiveSession.OtherCall} on {WsjtxActiveSession.FrequencyOffsetHz:+0;-0;0} Hz";
+        }
+        else
+        {
+            WsjtxAwaitingReply = false;
+            WsjtxTransmitArmStatus = $"Slot send complete at {prepared.TxAudioFrequencyHz:+0;-0;0} Hz";
+        }
+    }
+
+    partial void OnWsjtxSelectedModeChanged(string value)
+    {
+        WsjtxFrequencyOptions = WsjtxModeCatalog.GetFrequencyLabels(value);
+        if (!WsjtxFrequencyOptions.Contains(WsjtxSelectedFrequency, StringComparer.OrdinalIgnoreCase))
+        {
+            WsjtxSelectedFrequency = WsjtxModeCatalog.GetDefaultFrequencyLabel(value);
+        }
+
+        var mode = WsjtxModeCatalog.GetMode(value);
+        WsjtxAutoSequenceEnabled = mode.SupportsAutoSequence && WsjtxAutoSequenceEnabled;
+        WsjtxCycleDisplay = $"{mode.Label}  |  {mode.CycleLengthSeconds:0.#}s cycle  |  Next --.-s";
+        WsjtxSessionNotes = DescribeWsjtxMode(value);
+        ClearWsjtxMessages();
+        WsjtxRxStatus = $"Mode selected: {value}";
+        RebuildWsjtxSuggestedMessages();
+    }
+
     partial void OnNoiseReductionLevelChanged(int value)
     {
         var clamped = Math.Clamp(value, 0, 15);
         if (clamped != value)
         {
             NoiseReductionLevel = clamped;
+            return;
+        }
+
+        if (!_isUpdatingNoiseReductionLevelFromRadio)
+        {
+            _noiseReductionInteractionUntilUtc = DateTimeOffset.UtcNow.AddSeconds(4);
         }
     }
 
@@ -2544,6 +4899,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             var enable = !IsNoiseReductionEnabled;
             var level = enable ? Math.Max(NoiseReductionLevel, 5) : 0;
+            _noiseReductionInteractionUntilUtc = DateTimeOffset.UtcNow.AddSeconds(2);
             await _radioService.SetNoiseReductionAsync(enable, level, CancellationToken.None);
         }
         catch (Exception ex)
@@ -2563,6 +4919,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             var level = Math.Clamp(NoiseReductionLevel, 0, 15);
+            _noiseReductionInteractionUntilUtc = DateTimeOffset.UtcNow.AddSeconds(2);
             await _radioService.SetNoiseReductionAsync(level > 0 || IsNoiseReductionEnabled, level, CancellationToken.None);
         }
         catch (Exception ex)
@@ -2784,7 +5141,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    partial void OnCanConnectChanged(bool value) => ConnectCommand.NotifyCanExecuteChanged();
+    partial void OnCanConnectChanged(bool value)
+    {
+        ConnectCommand.NotifyCanExecuteChanged();
+    }
 
     partial void OnCanDisconnectChanged(bool value) => DisconnectCommand.NotifyCanExecuteChanged();
 
@@ -2799,8 +5159,65 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        WsjtxOperatorCallsign = normalized;
+        LongwaveLogOperatorCallsign = normalized;
+        RebuildWsjtxSuggestedMessages();
         UpdateHeaderCallsign();
     }
+
+    partial void OnSettingsGridSquareChanged(string value)
+    {
+        var normalized = value.Trim().ToUpperInvariant();
+        if (!string.Equals(value, normalized, StringComparison.Ordinal))
+        {
+            SettingsGridSquare = normalized;
+            return;
+        }
+
+        WsjtxOperatorGridSquare = normalized;
+        RebuildWsjtxSuggestedMessages();
+    }
+
+    partial void OnSelectedLongwavePotaSpotChanged(LongwaveSpotSummaryItem? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        LongwaveStatus = $"Selected {value.ActivatorCallsign} on {value.FrequencyText} {value.Mode}.";
+    }
+
+    partial void OnSelectedVoiceLongwavePotaSpotChanged(LongwaveSpotSummaryItem? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        SelectedLongwavePotaSpot = value;
+        LongwaveStatus = $"Selected voice spot {value.ActivatorCallsign} on {value.FrequencyText} {value.Mode}.";
+    }
+
+    partial void OnSelectedVoiceLongwaveBandFilterChanged(string value) => RebuildVoiceLongwavePotaSpots();
+
+    partial void OnSelectedLongwaveLogbookChanged(LongwaveLogbookItem? value)
+    {
+        if (value is null)
+        {
+            LongwaveRecentContacts = [];
+            return;
+        }
+
+        LongwaveLogStatus = $"Using Longwave logbook {value.Name}.";
+        _ = RefreshLongwaveContactsForSelectionAsync();
+    }
+
+    partial void OnSettingsLongwaveEnabledChanged(bool value) => ApplyLongwaveSettingsState(_settings);
+    partial void OnSettingsLongwaveBaseUrlChanged(string value) => ApplyLongwaveSettingsState(_settings);
+    partial void OnSettingsLongwaveClientApiTokenChanged(string value) => ApplyLongwaveSettingsState(_settings);
+    partial void OnSettingsLongwaveDefaultLogbookNameChanged(string value) => ApplyLongwaveSettingsState(_settings);
+    partial void OnSettingsLongwaveDefaultLogbookNotesChanged(string value) => ApplyLongwaveSettingsState(_settings);
 
     partial void OnConnectionStateChanged(string value) => UpdateHeaderCallsign();
 
@@ -2820,7 +5237,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     partial void OnSettingsShowExperimentalCwChanged(bool value)
     {
-        ShowCwPanel = true;
+        ShowCwPanel = value;
         UpdateModePanelsVisibility();
     }
 
@@ -2950,9 +5367,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SettingsCivAddress = FormatCivAddress(settings.Radio.CivAddress);
         SettingsTheme = settings.Ui.Theme;
         SettingsBandConditionsEnabled = settings.Ui.BandConditionsEnabled;
-        SettingsShowExperimentalCw = true;
+        SettingsShowExperimentalCw = settings.Ui.ShowExperimentalCw;
+        SettingsLongwaveEnabled = settings.Longwave.Enabled;
+        SettingsLongwaveBaseUrl = settings.Longwave.BaseUrl;
+        SettingsLongwaveClientApiToken = settings.Longwave.ClientApiToken;
+        SettingsLongwaveDefaultLogbookName = settings.Longwave.DefaultLogbookName;
+        SettingsLongwaveDefaultLogbookNotes = settings.Longwave.DefaultLogbookNotes;
         IsBandConditionsEnabled = settings.Ui.BandConditionsEnabled;
-        ShowCwPanel = true;
+        ShowCwPanel = settings.Ui.ShowExperimentalCw;
         SettingsFlrigEnabled = settings.Interop.FlrigEnabled;
         SettingsFlrigHost = settings.Interop.FlrigHost;
         SettingsFlrigPort = settings.Interop.FlrigPort.ToString();
@@ -2960,6 +5382,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WaterfallFloorPercent = Math.Clamp(settings.Ui.WaterfallFloorPercent, 0, 95);
         WaterfallCeilingPercent = Math.Clamp(settings.Ui.WaterfallCeilingPercent, WaterfallFloorPercent + 1, 100);
         _voiceRigSettingsDirty = false;
+        LongwaveLogOperatorCallsign = FormatCallsign(settings.Station.Callsign);
+        ApplyLongwaveSettingsState(settings);
         CanConnect = _radioService is not null
             && !CanDisconnect
             && string.Equals(_settings.Radio.ControlBackend, "direct", StringComparison.OrdinalIgnoreCase)
@@ -3236,6 +5660,23 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private static string FormatCallsign(string callsign) => callsign.Trim().ToUpperInvariant();
 
+    private static string FormatWeakSignalGrid(string gridSquare)
+    {
+        var normalized = gridSquare.Trim().ToUpperInvariant();
+        return normalized.Length >= 4 ? normalized[..4] : normalized;
+    }
+
+    private void UpdateWsjtxSessionNotes(WsjtxModeTelemetry? telemetry = null)
+    {
+        telemetry ??= _lastWsjtxTelemetry;
+        if (telemetry is null)
+        {
+            return;
+        }
+
+        WsjtxSessionNotes = $"{telemetry.ActiveWorker}  |  Sync {(telemetry.IsClockSynchronized ? "locked" : "open")}  |  AutoSeq {(WsjtxAutoSequenceEnabled ? "on" : "off")}  |  TX {(telemetry.IsTransmitArmed ? "armed" : "idle")}  |  Decodes {telemetry.DecodeCount}";
+    }
+
     private void UpdateHeaderCallsign()
     {
         if (!string.Equals(ConnectionState, "Connected", StringComparison.OrdinalIgnoreCase))
@@ -3278,6 +5719,237 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         "425 Hz / 45.45 baud" => (425, 45.45),
         _ => (170, 45.45),
     };
+
+    private static double GetWsjtxCycleLengthSeconds(string modeLabel) =>
+        WsjtxModeCatalog.GetMode(modeLabel).CycleLengthSeconds;
+
+    private static string ResolveWsjtxModeSelection(string selectedMode, string frequencyLabel)
+    {
+        if (!string.IsNullOrWhiteSpace(frequencyLabel))
+        {
+            if (frequencyLabel.Contains("FT4", StringComparison.OrdinalIgnoreCase))
+            {
+                return "FT4";
+            }
+
+            if (frequencyLabel.Contains("FT8", StringComparison.OrdinalIgnoreCase))
+            {
+                return "FT8";
+            }
+
+            if (frequencyLabel.Contains("Q65", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Q65";
+            }
+
+            if (frequencyLabel.Contains("WSPR", StringComparison.OrdinalIgnoreCase))
+            {
+                return "WSPR";
+            }
+        }
+
+        return selectedMode;
+    }
+
+    private static string DescribeWsjtxMode(string modeLabel)
+    {
+        var mode = WsjtxModeCatalog.GetMode(modeLabel);
+        var sequenceText = mode.SupportsAutoSequence ? "Auto-sequence capable." : "Manual/semi-manual sequencing expected.";
+        var clockText = mode.RequiresAccurateClock ? "Tight UTC discipline matters." : "Clock still matters, but this mode is less timing-sensitive.";
+        return $"{mode.Label} ready. {sequenceText} {clockText}";
+    }
+
+    private void RebuildWsjtxSuggestedMessages()
+    {
+        var items = new List<WsjtxSuggestedMessageItem>();
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        var myGrid = FormatWeakSignalGrid(WsjtxOperatorGridSquare);
+        var mode = WsjtxSelectedMode;
+        var selected = SelectedWsjtxMessage;
+        var selectedState = ClassifyWsjtxQsoState(selected?.MessageText, myCall);
+        var outboundReport = FormatWsjtxReport(selected?.SnrDb ?? -10);
+
+        if (!string.IsNullOrWhiteSpace(myCall))
+        {
+            if (!string.IsNullOrWhiteSpace(myGrid))
+            {
+                items.Add(new WsjtxSuggestedMessageItem("CQ", $"CQ {myCall} {myGrid}", "Call CQ on current TX offset"));
+            }
+            else
+            {
+                items.Add(new WsjtxSuggestedMessageItem("CQ", $"CQ {myCall}", "Call CQ on current TX offset"));
+            }
+        }
+
+        var theirCall = selectedState.OtherCall ?? TryExtractCallsign(selected?.MessageText);
+        if (!string.IsNullOrWhiteSpace(myCall) && !string.IsNullOrWhiteSpace(theirCall))
+        {
+            if (selectedState.Stage is WsjtxQsoStage.Cq or WsjtxQsoStage.Qrz)
+            {
+                if (!string.IsNullOrWhiteSpace(myGrid))
+                {
+                    items.Insert(0, new WsjtxSuggestedMessageItem("Answer CQ", $"{theirCall} {myCall} {myGrid}", "Answer selected CQ on the tracked RX offset"));
+                }
+                else
+                {
+                    items.Insert(0, new WsjtxSuggestedMessageItem("Answer CQ", $"{theirCall} {myCall}", "Answer selected CQ on the tracked RX offset"));
+                }
+            }
+            else if (selectedState.Stage is WsjtxQsoStage.ReportToMe)
+            {
+                items.Insert(0, new WsjtxSuggestedMessageItem("Roger", $"{theirCall} {myCall} R{outboundReport}", $"Roger their report and send {outboundReport} on current TX offset"));
+            }
+            else if (selectedState.Stage is WsjtxQsoStage.RogerToMe)
+            {
+                items.Insert(0, new WsjtxSuggestedMessageItem("RR73", $"{theirCall} {myCall} RR73", "Acknowledge and move toward signoff on current TX offset"));
+            }
+            else if (selectedState.Stage is WsjtxQsoStage.Rr73ToMe or WsjtxQsoStage.SignoffToMe)
+            {
+                items.Insert(0, new WsjtxSuggestedMessageItem("73", $"{theirCall} {myCall} 73", "Send final signoff on current TX offset"));
+            }
+
+            items.Add(new WsjtxSuggestedMessageItem("Report", $"{theirCall} {myCall} {outboundReport}", $"Send signal report {outboundReport} on current TX offset"));
+            items.Add(new WsjtxSuggestedMessageItem("Roger", $"{theirCall} {myCall} R{outboundReport}", $"Send roger plus report {outboundReport} on current TX offset"));
+            items.Add(new WsjtxSuggestedMessageItem("RR73", $"{theirCall} {myCall} RR73", "Send RR73 on current TX offset"));
+            items.Add(new WsjtxSuggestedMessageItem("73", $"{theirCall} {myCall} 73", "Send 73 on current TX offset"));
+        }
+
+        if (string.Equals(mode, "WSPR", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(myCall))
+        {
+            items.Clear();
+            if (!string.IsNullOrWhiteSpace(myGrid))
+            {
+                items.Add(new WsjtxSuggestedMessageItem("WSPR TX", $"{myCall} {myGrid} 30", "Stage a WSPR transmission"));
+            }
+            else
+            {
+                items.Add(new WsjtxSuggestedMessageItem("WSPR TX", $"{myCall} <GRID> 30", "Stage a WSPR transmission"));
+            }
+        }
+
+        WsjtxSuggestedMessages = new ObservableCollection<WsjtxSuggestedMessageItem>(items);
+        SelectedWsjtxSuggestedMessage = WsjtxSuggestedMessages.FirstOrDefault();
+        OnPropertyChanged(nameof(WsjtxSuggestedMessagePreview));
+    }
+
+    private static string? TryExtractCallsign(string? messageText)
+    {
+        if (string.IsNullOrWhiteSpace(messageText))
+        {
+            return null;
+        }
+
+        var tokens = messageText
+            .ToUpperInvariant()
+            .Replace("[ANALYSIS]", string.Empty, StringComparison.Ordinal)
+            .Split([' ', '\t', '\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var token in tokens)
+        {
+            if (token.Length < 3 || token.Length > 12)
+            {
+                continue;
+            }
+
+            var hasLetter = token.Any(char.IsLetter);
+            var hasDigit = token.Any(char.IsDigit);
+            if (!hasLetter || !hasDigit)
+            {
+                continue;
+            }
+
+            if (token.All(ch => char.IsLetterOrDigit(ch) || ch == '/'))
+            {
+                return token;
+            }
+        }
+
+        return null;
+    }
+
+    private static WsjtxQsoState ClassifyWsjtxQsoState(string? messageText, string myCall)
+    {
+        if (string.IsNullOrWhiteSpace(messageText) || string.IsNullOrWhiteSpace(myCall))
+        {
+            return new WsjtxQsoState(WsjtxQsoStage.None, null);
+        }
+
+        var tokens = messageText
+            .ToUpperInvariant()
+            .Split([' ', '\t', '\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (tokens.Length == 0)
+        {
+            return new WsjtxQsoState(WsjtxQsoStage.None, null);
+        }
+
+        if (tokens[0] == "CQ" || tokens[0] == "QRZ")
+        {
+            return new WsjtxQsoState(tokens[0] == "CQ" ? WsjtxQsoStage.Cq : WsjtxQsoStage.Qrz, TryExtractOtherCall(tokens, myCall));
+        }
+
+        if (tokens.Length >= 3 && tokens[0] == myCall)
+        {
+            var other = tokens[1];
+            var tail = tokens[^1];
+            if (IsRogerReportToken(tail) || IsSignalReportToken(tail))
+            {
+                return new WsjtxQsoState(WsjtxQsoStage.ReportToMe, other);
+            }
+
+            if (tail == "RR73")
+            {
+                return new WsjtxQsoState(WsjtxQsoStage.Rr73ToMe, other);
+            }
+
+            if (tail == "73")
+            {
+                return new WsjtxQsoState(WsjtxQsoStage.SignoffToMe, other);
+            }
+        }
+
+        if (tokens.Length >= 3 && tokens[1] == myCall)
+        {
+            var other = tokens[0];
+            var tail = tokens[^1];
+            if (tail == "RRR" || tail == "RR73")
+            {
+                return new WsjtxQsoState(WsjtxQsoStage.RogerToMe, other);
+            }
+        }
+
+        return new WsjtxQsoState(WsjtxQsoStage.None, TryExtractOtherCall(tokens, myCall));
+    }
+
+    private static string? TryExtractOtherCall(string[] tokens, string myCall)
+    {
+        foreach (var token in tokens)
+        {
+            if (token == myCall)
+            {
+                continue;
+            }
+
+            if (LooksLikeCallsign(token))
+            {
+                return token;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsSignalReportToken(string token) =>
+        System.Text.RegularExpressions.Regex.IsMatch(token, @"^[+-]\d{2}$");
+
+    private static bool IsRogerReportToken(string token) =>
+        System.Text.RegularExpressions.Regex.IsMatch(token, @"^R[+-]\d{2}$");
+
+    private static string FormatWsjtxReport(int snrDb)
+    {
+        var clamped = Math.Clamp(snrDb, -30, 20);
+        return clamped >= 0 ? $"+{clamped:00}" : clamped.ToString("00");
+    }
 
     private static bool TryParseUiFrequencyHz(string frequencyLabel, out long hz)
     {
@@ -3372,7 +6044,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         IsTunerEnabled = state.IsTunerEnabled;
         IsNoiseBlankerEnabled = state.IsNoiseBlankerEnabled;
         IsNoiseReductionEnabled = state.IsNoiseReductionEnabled;
-        NoiseReductionLevel = state.NoiseReductionLevel;
+        if (DateTimeOffset.UtcNow >= _noiseReductionInteractionUntilUtc || NoiseReductionLevel == state.NoiseReductionLevel)
+        {
+            _isUpdatingNoiseReductionLevelFromRadio = true;
+            NoiseReductionLevel = state.NoiseReductionLevel;
+            _isUpdatingNoiseReductionLevelFromRadio = false;
+        }
         IsAutoNotchEnabled = state.IsAutoNotchEnabled;
         IsManualNotchEnabled = state.IsManualNotchEnabled;
         ManualNotchWidth = state.ManualNotchWidth;
@@ -3586,44 +6263,80 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void ApplySmeterLevel(int targetLevel)
     {
-        var clampedTarget = Math.Clamp(targetLevel, 0, 10);
-        if (clampedTarget > _displayedSmeterLevel)
+        _targetSmeterLevel = Math.Clamp(targetLevel / 25.5, 0.0, 10.0);
+        if (_targetSmeterLevel > _displayedSmeterLevel)
         {
-            _displayedSmeterLevel = clampedTarget;
+            _displayedSmeterLevel = _targetSmeterLevel;
+            RenderSmeter();
         }
-        else
+    }
+
+    private void AnimateSmeter()
+    {
+        var delta = _targetSmeterLevel - _displayedSmeterLevel;
+        if (Math.Abs(delta) < 0.02)
         {
-            var delta = _displayedSmeterLevel - clampedTarget;
-            var decayStep = delta >= 4 ? 3 : delta >= 2 ? 2 : 1;
-            _displayedSmeterLevel = Math.Max(clampedTarget, _displayedSmeterLevel - decayStep);
+            if (Math.Abs(delta) > 0)
+            {
+                _displayedSmeterLevel = _targetSmeterLevel;
+                RenderSmeter();
+            }
+
+            return;
         }
 
-        SmeterDisplay = _displayedSmeterLevel >= 10 ? "S9+" : $"S{_displayedSmeterLevel}";
+        var step = delta > 0
+            ? Math.Max(0.15, delta * 0.45)
+            : Math.Min(-0.08, delta * 0.20);
+
+        _displayedSmeterLevel = Math.Clamp(_displayedSmeterLevel + step, 0.0, 10.0);
+        RenderSmeter();
+    }
+
+    private void RenderSmeter()
+    {
+        var roundedDisplay = (int)Math.Round(_displayedSmeterLevel, MidpointRounding.AwayFromZero);
+        SmeterDisplay = roundedDisplay >= 10 ? "S9+" : $"S{roundedDisplay}";
         SmeterSegmentBrushes = BuildSmeterBrushes(_displayedSmeterLevel);
     }
 
-    private static IReadOnlyList<IBrush> BuildSmeterBrushes(int level)
+    private static IReadOnlyList<IBrush> BuildSmeterBrushes(double level)
     {
         var brushes = new IBrush[11];
-        var clamped = Math.Clamp(level, 0, 10);
+        var clamped = Math.Clamp(level, 0.0, 10.0);
         for (var i = 0; i < brushes.Length; i++)
         {
-            var active = i < clamped;
+            var segmentFill = Math.Clamp(clamped - i, 0.0, 1.0);
+            var active = segmentFill > 0.001;
             if (i < 7)
             {
-                brushes[i] = new SolidColorBrush(Color.Parse(active ? "#1D9E75" : "#0A1A10"));
+                brushes[i] = BuildMeterSegmentBrush(active ? "#1D9E75" : "#0A1A10", segmentFill);
             }
             else
             {
-                brushes[i] = new SolidColorBrush(Color.Parse(active ? "#EF9F27" : "#1A1200"));
+                brushes[i] = BuildMeterSegmentBrush(active ? "#EF9F27" : "#1A1200", segmentFill);
             }
         }
 
         return brushes;
     }
 
+    private static IBrush BuildMeterSegmentBrush(string activeColorHex, double fill)
+    {
+        var active = Color.Parse(activeColorHex);
+        var off = Color.Parse(activeColorHex == "#EF9F27" ? "#1A1200" : "#0A1A10");
+        var clamped = Math.Clamp(fill, 0.0, 1.0);
+        byte Lerp(byte from, byte to) => (byte)Math.Round(from + ((to - from) * clamped));
+        return new SolidColorBrush(Color.FromRgb(
+            Lerp(off.R, active.R),
+            Lerp(off.G, active.G),
+            Lerp(off.B, active.B)));
+    }
+
     public void Dispose()
     {
+        _smeterUiTimer.Stop();
+        _longwaveRefreshTimer.Stop();
         _cwSendCts?.Cancel();
         _radioSubscription?.Dispose();
         _audioLevelSubscription?.Dispose();
@@ -3634,6 +6347,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _cwDecodeSubscription?.Dispose();
         _rttyTelemetrySubscription?.Dispose();
         _rttyDecodeSubscription?.Dispose();
+        _wsjtxTelemetrySubscription?.Dispose();
+        _wsjtxDecodeSubscription?.Dispose();
         _sstvTelemetrySubscription?.Dispose();
         _sstvImageSubscription?.Dispose();
         _wefaxTelemetrySubscription?.Dispose();

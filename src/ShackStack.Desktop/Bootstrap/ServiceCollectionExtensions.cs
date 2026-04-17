@@ -5,6 +5,7 @@ using ShackStack.Infrastructure.Configuration;
 using ShackStack.Infrastructure.Decoders;
 using ShackStack.Infrastructure.Interop;
 using ShackStack.Infrastructure.Interop.BandConditions;
+using ShackStack.Infrastructure.Interop.Longwave;
 using ShackStack.Infrastructure.Radio;
 using ShackStack.Infrastructure.Waterfall;
 using ShackStack.UI.ViewModels;
@@ -24,10 +25,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWaterfallRenderSource>(provider => provider.GetRequiredService<WaterfallService>());
         services.AddSingleton<IInteropService, InteropService>();
         services.AddSingleton<IBandConditionsService, HamqslBandConditionsService>();
+        services.AddSingleton<ILongwaveService, LongwaveService>();
+        services.AddSingleton<IClockDisciplineService, SystemClockDisciplineService>();
         services.AddSingleton<ICwDecoderHost, PythonCwDecoderHost>();
         services.AddSingleton<IRttyDecoderHost, PythonRttyDecoderHost>();
         services.AddSingleton<ISstvDecoderHost, PythonSstvDecoderHost>();
         services.AddSingleton<IWefaxDecoderHost, PythonWefaxDecoderHost>();
+        services.AddSingleton<IWsjtxModeHost, PythonWsjtxModeHost>();
         services.AddSingleton<DecoderManager>();
         services.AddSingleton<AppStartup>();
         services.AddSingleton<AppContext>();
@@ -46,11 +50,13 @@ public static class ServiceCollectionExtensions
             var waterfallService = provider.GetRequiredService<IWaterfallService>();
             var waterfallRenderSource = provider.GetRequiredService<IWaterfallRenderSource>();
             var bandConditionsService = provider.GetRequiredService<IBandConditionsService>();
+            var longwaveService = provider.GetRequiredService<ILongwaveService>();
             var interopService = provider.GetRequiredService<IInteropService>();
             var cwDecoderHost = provider.GetRequiredService<ICwDecoderHost>();
             var rttyDecoderHost = provider.GetRequiredService<IRttyDecoderHost>();
             var sstvDecoderHost = provider.GetRequiredService<ISstvDecoderHost>();
             var wefaxDecoderHost = provider.GetRequiredService<IWefaxDecoderHost>();
+            var wsjtxModeHost = provider.GetRequiredService<IWsjtxModeHost>();
             return new MainWindowViewModel(
                 context.Settings,
                 context.SettingsFilePath,
@@ -60,11 +66,13 @@ public static class ServiceCollectionExtensions
                 waterfallService,
                 waterfallRenderSource,
                 bandConditionsService,
+                longwaveService,
                 interopService,
                 cwDecoderHost,
                 rttyDecoderHost,
                 sstvDecoderHost,
-                wefaxDecoderHost);
+                wefaxDecoderHost,
+                wsjtxModeHost);
         });
 
         return services;

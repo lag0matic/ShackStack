@@ -14,8 +14,11 @@ $workers = @(
     "cw_sidecar_worker",
     "rtty_sidecar_worker",
     "sstv_sidecar_worker",
-    "wefax_sidecar_worker"
+    "wefax_sidecar_worker",
+    "wsjtx_sidecar_worker"
 )
+
+$gplWsjtxProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplWsjtx\ShackStack.DecoderHost.GplWsjtx.csproj"
 
 if (Test-Path $distRoot) {
     Remove-Item -Recurse -Force $distRoot
@@ -51,6 +54,15 @@ foreach ($worker in $workers) {
         --exclude-module tkinter `
         --exclude-module pygame `
         $scriptPath
+}
+
+if (Test-Path $gplWsjtxProject) {
+    $gplDist = Join-Path $distRoot "wsjtx_gpl_sidecar"
+    & dotnet publish $gplWsjtxProject `
+        -c Release `
+        -r win-x64 `
+        --self-contained false `
+        -o $gplDist
 }
 
 Write-Host "Decoder workers built into $distRoot"

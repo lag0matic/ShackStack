@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 
 START_HZ = 300.0
 STOP_HZ = 450.0
+MAX_IMAGE_ROWS = 5000
 
 
 @dataclass
@@ -343,7 +344,9 @@ class WefaxDecoderPrototype:
             self._image_rows.append(row)
             if self._line_cb:
                 self._line_cb(row)
-            if len(self._image_rows) >= 600:
+            # Allow long live fax runs to continue until a real stop condition
+            # occurs, while still keeping a very high safety ceiling.
+            if len(self._image_rows) >= MAX_IMAGE_ROWS:
                 self._finish_image()
                 return
 
