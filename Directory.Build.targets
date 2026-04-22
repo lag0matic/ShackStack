@@ -1,0 +1,9 @@
+<Project>
+  <!--
+    Avalonia 11.3.x injects a telemetry build task that writes under the user's
+    local profile during every compile. On this machine that log path can be
+    unavailable/locked, which makes otherwise-good builds fail before CoreCompile.
+    Override the imported target to a no-op so local builds stay deterministic.
+  -->
+  <Target Name="AvaloniaStats" />
+</Project>

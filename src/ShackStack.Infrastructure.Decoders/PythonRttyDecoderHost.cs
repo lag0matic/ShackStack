@@ -262,26 +262,7 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
     {
         _isRunning = false;
         _audioSubscription.Dispose();
-        try
-        {
-            _stdin?.Dispose();
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            if (_process is not null && !_process.HasExited)
-            {
-                _process.Kill(entireProcessTree: true);
-            }
-        }
-        catch
-        {
-        }
-
-        _process?.Dispose();
+        DecoderHostProcessCleanup.Shutdown(_process, _stdin, _stdoutTask, _stderrTask, _writeGate);
         _writeGate.Dispose();
     }
 }

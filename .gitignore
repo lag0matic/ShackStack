@@ -13,6 +13,8 @@ src/ShackStack.DecoderHost/Python/.pyinstaller/
 *.pdb
 *.cache
 *.tmp
+.tmp-*
+.tmp-*/
 *.log
 Thumbs.db
 Desktop.ini

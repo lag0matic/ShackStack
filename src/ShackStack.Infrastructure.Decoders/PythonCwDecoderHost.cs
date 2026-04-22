@@ -255,24 +255,7 @@ public sealed class PythonCwDecoderHost : ICwDecoderHost, IDisposable
     {
         _isRunning = false;
         _audioSubscription.Dispose();
-
-        try
-        {
-            if (_process is not null && !_process.HasExited)
-            {
-                _ = SendMessageAsync(new { type = "shutdown" }, CancellationToken.None);
-                if (!_process.WaitForExit(500))
-                {
-                    _process.Kill(true);
-                }
-            }
-        }
-        catch
-        {
-        }
-
-        _stdin?.Dispose();
-        _process?.Dispose();
+        DecoderHostProcessCleanup.Shutdown(_process, _stdin, _stdoutTask, _stderrTask, _writeGate);
         _writeGate.Dispose();
     }
 }

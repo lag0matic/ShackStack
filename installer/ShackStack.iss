@@ -1,9 +1,24 @@
-#define MyAppName "ShackStack"
-#define MyAppVersion "V-0.9.0 RC"
-#define MyAppPublisher "ShackStack"
-#define MyAppExeName "ShackStack.Desktop.exe"
-#define MySourceDir "..\\publish\\ShackStack-win-x64-v0.9.0-rc"
-#define MyIconFile "..\\src\\ShackStack.Desktop\\Assets\\shackstack.ico"
+#ifndef MyAppName
+  #define MyAppName "ShackStack"
+#endif
+#ifndef MyAppVersion
+  #define MyAppVersion "V-0.9.0 RC"
+#endif
+#ifndef MyAppPublisher
+  #define MyAppPublisher "ShackStack"
+#endif
+#ifndef MyAppExeName
+  #define MyAppExeName "ShackStack.Desktop.exe"
+#endif
+#ifndef MySourceDir
+  #define MySourceDir "..\\publish\\ShackStack-win-x64-v0.9.0-rc"
+#endif
+#ifndef MyIconFile
+  #define MyIconFile "..\\src\\ShackStack.Desktop\\Assets\\shackstack.ico"
+#endif
+#ifndef MyOutputBaseFilename
+  #define MyOutputBaseFilename "ShackStack-Setup-v0.9.0-rc"
+#endif
 
 [Setup]
 AppId={{E8E76384-BA95-4F5F-9BE0-3D8F329EAF01}
@@ -14,7 +29,7 @@ DefaultDirName={localappdata}\Programs\ShackStack
 DefaultGroupName=ShackStack
 AllowNoIcons=yes
 OutputDir=..\publish
-OutputBaseFilename=ShackStack-Setup-v0.9.0-rc
+OutputBaseFilename={#MyOutputBaseFilename}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

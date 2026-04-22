@@ -190,6 +190,18 @@
               <TextBlock Grid.Column="0" Text="Grid" Foreground="#7F879B" VerticalAlignment="Center" />
               <TextBlock Grid.Column="1" Text="{Binding WsjtxOperatorGridSquare}" Foreground="#C4C8D8" />
             </Grid>
+            <TextBlock Text="Current QSO" FontSize="16" FontWeight="SemiBold" />
+            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
+              <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="{Binding WsjtxCurrentQsoCallsign}" Foreground="#E9F3FF" FontWeight="SemiBold" />
+            </Grid>
+            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
+              <TextBlock Grid.Column="0" Text="QRZ" Foreground="#7F879B" VerticalAlignment="Top" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="{Binding WsjtxCurrentQsoLookupSummary}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding WsjtxCurrentQsoLookupDetails}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
+              </StackPanel>
+            </Grid>
             <TextBlock Text="Longwave Log" FontSize="16" FontWeight="SemiBold" />
             <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
             <Grid ColumnDefinitions="72,*" ColumnSpacing="10">

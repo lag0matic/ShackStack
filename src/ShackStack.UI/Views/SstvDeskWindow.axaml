@@ -138,6 +138,22 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <Border Background="#101521" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,4,0,0">
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="TX" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="Prepare the current reply composition as native SSTV audio, then key the rig and send it live." Foreground="#AAB1C7" TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                      <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
+                      <ComboBox Grid.Column="1" ItemsSource="{Binding SstvTxModeOptions}" SelectedItem="{Binding SstvSelectedTxMode}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                      <Button Grid.Column="0" Content="Prepare TX" Command="{Binding PrepareSstvReplyTransmitCommand}" />
+                      <Button Grid.Column="1" Content="Send Now" Command="{Binding SendSstvReplyTransmitCommand}" />
+                    </Grid>
+                    <TextBlock Text="{Binding SstvTransmitStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding SstvPreparedTransmitPath}" Foreground="#7F879B" TextWrapping="Wrap" />
+                  </StackPanel>
+                </Border>
               </StackPanel>
             </ScrollViewer>
           </Border>

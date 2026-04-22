@@ -13,6 +13,20 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
+using DrawingBitmap = System.Drawing.Bitmap;
+using DrawingBrush = System.Drawing.SolidBrush;
+using DrawingColor = System.Drawing.Color;
+using DrawingFont = System.Drawing.Font;
+using DrawingFontStyle = System.Drawing.FontStyle;
+using DrawingGraphics = System.Drawing.Graphics;
+using DrawingImageFormat = System.Drawing.Imaging.ImageFormat;
+using DrawingImageLockMode = System.Drawing.Imaging.ImageLockMode;
+using DrawingPixelFormat = System.Drawing.Imaging.PixelFormat;
+using DrawingRectangle = System.Drawing.Rectangle;
+using DrawingRectangleF = System.Drawing.RectangleF;
+using DrawingStringAlignment = System.Drawing.StringAlignment;
+using DrawingStringFormat = System.Drawing.StringFormat;
+using DrawingTextRenderingHint = System.Drawing.Text.TextRenderingHint;
 
 namespace ShackStack.UI.ViewModels;
 
@@ -240,6 +254,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly ICwDecoderHost? _cwDecoderHost;
     private readonly IRttyDecoderHost? _rttyDecoderHost;
     private readonly ISstvDecoderHost? _sstvDecoderHost;
+    private readonly ISstvTransmitService? _sstvTransmitService;
     private readonly IWefaxDecoderHost? _wefaxDecoderHost;
     private readonly IWsjtxModeHost? _wsjtxModeHost;
     private readonly ILongwaveService? _longwaveService;
@@ -259,12 +274,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IDisposable? _wsjtxTelemetrySubscription;
     private readonly IDisposable? _wsjtxDecodeSubscription;
     private Pcm16AudioClip? _wsjtxPreparedTransmitClip;
+    private Pcm16AudioClip? _sstvPreparedTransmitClip;
     private bool _wsjtxSlotSendInFlight;
+    private bool _sstvTxSendInFlight;
     private WsjtxModeTelemetry? _lastWsjtxTelemetry;
     private DateTime _lastWsjtxDirectedAlertUtc = DateTime.MinValue;
     private readonly string _sstvReceivedDirectory;
     private readonly string _sstvReplyDirectory;
     private readonly string _sstvTemplateDirectory;
+    private readonly string _sstvTxDirectory;
     private readonly string _wefaxReceivedDirectory;
     private bool _isUpdatingCwRigSettingsFromRadio;
     private bool _cwRigSettingsDirty;
@@ -290,6 +308,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ICwDecoderHost? cwDecoderHost = null,
         IRttyDecoderHost? rttyDecoderHost = null,
         ISstvDecoderHost? sstvDecoderHost = null,
+        ISstvTransmitService? sstvTransmitService = null,
         IWefaxDecoderHost? wefaxDecoderHost = null,
         IWsjtxModeHost? wsjtxModeHost = null)
     {
@@ -306,15 +325,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _cwDecoderHost = cwDecoderHost;
         _rttyDecoderHost = rttyDecoderHost;
         _sstvDecoderHost = sstvDecoderHost;
+        _sstvTransmitService = sstvTransmitService;
         _wefaxDecoderHost = wefaxDecoderHost;
         _wsjtxModeHost = wsjtxModeHost;
         _sstvReceivedDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "sstv");
         _sstvReplyDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "sstv-reply");
         _sstvTemplateDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "sstv-templates");
+        _sstvTxDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "sstv-tx");
         _wefaxReceivedDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "wefax");
         Directory.CreateDirectory(_sstvReceivedDirectory);
         Directory.CreateDirectory(_sstvReplyDirectory);
         Directory.CreateDirectory(_sstvTemplateDirectory);
+        Directory.CreateDirectory(_sstvTxDirectory);
         Directory.CreateDirectory(_wefaxReceivedDirectory);
         Theme = settings.Ui.Theme;
         WindowWidth = settings.Ui.WindowWidth;
@@ -359,7 +381,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         VoiceRfPowerPercent = 100;
         CwPitchHz = 700;
         CwWpm = 20;
-        CwDecoderProfile = "Adaptive";
+        CwDecoderProfile = "Auto";
         _voiceRigSettingsDirty = false;
         _cwRigSettingsDirty = false;
         SettingsStatusMessage = "Settings loaded";
@@ -1013,10 +1035,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private int cwWpm = 20;
 
     [ObservableProperty]
-    private string cwDecoderProfile = "Adaptive";
+    private string cwDecoderProfile = "Auto";
 
     [ObservableProperty]
-    private IReadOnlyList<string> cwDecoderProfiles = ["Adaptive", "Hybrid", "Minimal", "External"];
+    private IReadOnlyList<string> cwDecoderProfiles = ["Auto"];
 
     [ObservableProperty]
     private string cwDecoderStatus = "Ready";
@@ -1281,6 +1303,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private string wsjtxOperatorGridSquare = string.Empty;
 
+    [ObservableProperty]
+    private string wsjtxCurrentQsoCallsign = "No active QSO";
+
+    [ObservableProperty]
+    private string wsjtxCurrentQsoLookupSummary = "Start or track a contact to see a quick QRZ summary here.";
+
+    [ObservableProperty]
+    private string wsjtxCurrentQsoLookupDetails = string.Empty;
+
+    [ObservableProperty]
+    private string wsjtxCurrentQsoLookupStatus = "Idle";
+
+    private int _wsjtxLookupGeneration;
+
     public bool WsjtxHasMessages => WsjtxMessages.Count > 0;
 
     public bool WsjtxHasRxFrequencyMessages => WsjtxRxFrequencyMessages.Count > 0;
@@ -1480,6 +1516,27 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         "TNX SSTV - 73 DE KE9CRR",
         "QSL W8STR DE KE9CRR",
     ];
+
+    [ObservableProperty]
+    private IReadOnlyList<string> sstvTxModeOptions =
+    [
+        "Martin 1",
+        "Martin 2",
+        "Scottie 1",
+        "Scottie 2",
+        "Scottie DX",
+        "Robot 36",
+        "PD 120",
+    ];
+
+    [ObservableProperty]
+    private string sstvSelectedTxMode = "Martin 1";
+
+    [ObservableProperty]
+    private string sstvTransmitStatus = "Prepare a reply image to stage SSTV TX.";
+
+    [ObservableProperty]
+    private string sstvPreparedTransmitPath = "No prepared SSTV TX artifact.";
 
     public Bitmap? SstvSelectedReceivedBitmap => SelectedSstvReceivedImage?.Bitmap;
 
@@ -3062,14 +3119,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (isDirected)
         {
             return new WsjtxHighlightStyle(
-                "#182234",
-                "#AFC4FF",
-                "#F5F8FF",
-                "#B8C6EA",
+                "#20345B",
+                "#7DC2FF",
+                "#F7FBFF",
+                "#D1E4FF",
                 "TO ME",
                 true,
-                "#27476E",
-                "#F5F8FF");
+                "#0D6EBA",
+                "#FFFFFF");
         }
 
         if (TryGetSpecialCqLabel(normalizedText, out var cqLabel))
@@ -3242,6 +3299,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private void ForceStartSstvReceive()
+    {
+        if (_sstvDecoderHost is null)
+        {
+            SstvRxStatus = "SSTV decoder host unavailable";
+            return;
+        }
+
+        _ = ForceStartSstvReceiveCoreAsync();
+    }
+
+    [RelayCommand]
     private void ResetSstvSession()
     {
         if (_sstvDecoderHost is not null)
@@ -3322,6 +3391,178 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (!string.IsNullOrWhiteSpace(template) && SelectedSstvReplyOverlayItem is not null)
         {
             SelectedSstvReplyOverlayItem.Text = template;
+            SstvTransmitStatus = "Reply text changed; prepare TX when ready.";
+        }
+    }
+
+    [RelayCommand]
+    [SupportedOSPlatform("windows")]
+    private async Task PrepareSstvReplyTransmitAsync()
+    {
+        if (_sstvTransmitService is null)
+        {
+            SstvTransmitStatus = "Native SSTV TX builder unavailable";
+            return;
+        }
+
+        if (SelectedSstvReplyBaseImage is null)
+        {
+            SstvTransmitStatus = "Choose a reply base image first";
+            return;
+        }
+
+        try
+        {
+            var timestamp = DateTime.Now;
+            Directory.CreateDirectory(_sstvTxDirectory);
+            var stem = $"{timestamp:yyyyMMdd_HHmmss}_{SstvSelectedTxMode.ToLowerInvariant().Replace(' ', '_')}";
+            var pngPath = Path.Combine(_sstvTxDirectory, $"{stem}.png");
+            var wavPath = Path.Combine(_sstvTxDirectory, $"{stem}.wav");
+            var rgb24 = RenderCurrentSstvReplyRgb24(
+                SelectedSstvReplyBaseImage.Path,
+                SstvReplyOverlayItems,
+                pngPath,
+                out var width,
+                out var height);
+
+            _sstvPreparedTransmitClip = await _sstvTransmitService
+                .BuildTransmitClipAsync(SstvSelectedTxMode, rgb24, width, height, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            WriteWaveFile(wavPath, _sstvPreparedTransmitClip);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SstvPreparedTransmitPath = $"{pngPath}  |  {wavPath}";
+                var durationSeconds = _sstvPreparedTransmitClip.PcmBytes.Length / (double)(_sstvPreparedTransmitClip.SampleRate * _sstvPreparedTransmitClip.Channels * 2);
+                SstvTransmitStatus = $"Prepared {SstvSelectedTxMode} TX ({durationSeconds:0.0}s)";
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                _sstvPreparedTransmitClip = null;
+                SstvPreparedTransmitPath = "No prepared SSTV TX artifact.";
+                SstvTransmitStatus = $"SSTV TX prepare failed: {ex.Message}";
+            });
+        }
+    }
+
+    [RelayCommand]
+    [SupportedOSPlatform("windows")]
+    private async Task SendSstvReplyTransmitAsync()
+    {
+        if (_sstvTxSendInFlight)
+        {
+            return;
+        }
+
+        _sstvTxSendInFlight = true;
+        var txAudioStarted = false;
+        var pttRaised = false;
+
+        try
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SstvTransmitStatus = $"Preparing {SstvSelectedTxMode} for live TX...";
+            });
+
+            await PrepareSstvReplyTransmitAsync().ConfigureAwait(false);
+
+            if (_sstvPreparedTransmitClip is null)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    SstvTransmitStatus = "SSTV TX blocked: prepare step did not produce audio.";
+                });
+                return;
+            }
+
+            var interlockError = ValidateSstvLiveTransmitInterlock();
+            if (interlockError is not null)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    SstvTransmitStatus = interlockError;
+                    VoiceTxStatus = "TX audio idle";
+                    RadioStatusSummary = interlockError;
+                });
+                return;
+            }
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SstvTransmitStatus = $"Keying radio for {SstvSelectedTxMode}...";
+            });
+
+            await TuneRadioForSstvAsync(SstvSelectedFrequency).ConfigureAwait(false);
+
+            var route = BuildCurrentAudioRoute();
+            var clip = _sstvPreparedTransmitClip;
+            var clipDurationMs = Math.Max(500, (int)Math.Ceiling(
+                clip.PcmBytes.Length / (double)(clip.SampleRate * clip.Channels * 2) * 1000.0));
+
+            await _radioService!.SetPttAsync(true, CancellationToken.None).ConfigureAwait(false);
+            pttRaised = true;
+            await Task.Delay(60, CancellationToken.None).ConfigureAwait(false);
+            await _audioService!.StartTransmitPcmAsync(route, clip, CancellationToken.None).ConfigureAwait(false);
+            txAudioStarted = true;
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                VoiceTxStatus = "SSTV TX audio live";
+                SstvTransmitStatus = $"Sending {SstvSelectedTxMode} on-air";
+                RadioStatusSummary = $"SSTV TX live  |  {SstvSelectedTxMode}  |  {SstvSelectedFrequency}";
+            });
+
+            await Task.Delay(clipDurationMs + 150, CancellationToken.None).ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SstvTransmitStatus = $"SSTV TX sent: {SstvSelectedTxMode}";
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SstvTransmitStatus = $"SSTV TX failed: {ex.Message}";
+                VoiceTxStatus = "TX audio idle";
+                RadioStatusSummary = $"SSTV TX failed: {ex.Message}";
+            });
+        }
+        finally
+        {
+            try
+            {
+                if (txAudioStarted && _audioService is not null)
+                {
+                    await _audioService.StopTransmitAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (pttRaised && _radioService is not null)
+                {
+                    await _radioService.SetPttAsync(false, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+            }
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                VoiceTxStatus = "TX audio idle";
+            });
+
+            _sstvTxSendInFlight = false;
         }
     }
 
@@ -3400,6 +3641,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             SelectedSstvReplyOverlayItem = SstvReplyOverlayItems.FirstOrDefault();
             SstvReplyTemplateName = payload.Name;
             SstvReplyTemplateStatus = $"Loaded template '{payload.Name}'";
+            SstvTransmitStatus = "Reply layout changed; prepare TX when ready.";
         }
         catch (Exception ex)
         {
@@ -3420,6 +3662,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         };
         SstvReplyOverlayItems.Add(item);
         SelectedSstvReplyOverlayItem = item;
+        SstvTransmitStatus = "Reply layout changed; prepare TX when ready.";
     }
 
     [RelayCommand]
@@ -3433,6 +3676,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var item = SelectedSstvReplyOverlayItem;
         SstvReplyOverlayItems.Remove(item);
         SelectedSstvReplyOverlayItem = SstvReplyOverlayItems.FirstOrDefault();
+        SstvTransmitStatus = "Reply layout changed; prepare TX when ready.";
     }
 
     private async Task StartSstvReceiveCoreAsync()
@@ -3446,6 +3690,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var config = new SstvDecoderConfiguration(NormalizeSstvModeSelection(SstvSelectedMode), SstvSelectedFrequency, SstvManualSlant, SstvManualOffset);
         await _sstvDecoderHost.ConfigureAsync(config, CancellationToken.None);
         await _sstvDecoderHost.StartAsync(CancellationToken.None);
+    }
+
+    private async Task ForceStartSstvReceiveCoreAsync()
+    {
+        if (_sstvDecoderHost is null)
+        {
+            return;
+        }
+
+        await TuneRadioForSstvAsync(SstvSelectedFrequency);
+        var config = new SstvDecoderConfiguration(NormalizeSstvModeSelection(SstvSelectedMode), SstvSelectedFrequency, SstvManualSlant, SstvManualOffset);
+        await _sstvDecoderHost.ConfigureAsync(config, CancellationToken.None);
+        await _sstvDecoderHost.StartAsync(CancellationToken.None);
+        await _sstvDecoderHost.ForceStartAsync(CancellationToken.None);
+        SstvRxStatus = $"Force-start requested for {config.Mode}";
+        SstvSessionNotes = "Manual force-start will try sync-based start first, then best-effort decode from buffered audio if the preamble was missed.";
     }
 
     private async Task StartRttyReceiveCoreAsync()
@@ -3540,8 +3800,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 ? RadioMode.LsbData
                 : RadioMode.UsbData;
             await _radioService.SetModeAsync(mode, CancellationToken.None);
+            await ApplyPureDigitalReceivePresetAsync().ConfigureAwait(false);
             await _radioService.SetFrequencyAsync(dialHz, CancellationToken.None);
-            RadioStatusSummary = $"WeFAX tuned: {dialHz:N0} Hz {FormatModeDisplay(mode)}";
+            RadioStatusSummary = $"WeFAX tuned: {dialHz:N0} Hz {FormatModeDisplay(mode)}  |  FIL1 NB/NR/AN off";
         }
         catch (Exception ex)
         {
@@ -3574,6 +3835,31 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             RadioStatusSummary = $"SSTV tune failed: {ex.Message}";
         }
+    }
+
+    private string? ValidateSstvLiveTransmitInterlock()
+    {
+        if (_radioService is null || CanConnect)
+        {
+            return "SSTV TX blocked: radio not connected.";
+        }
+
+        if (_audioService is null)
+        {
+            return "SSTV TX blocked: audio service unavailable.";
+        }
+
+        if (SelectedTxDevice is null)
+        {
+            return "SSTV TX blocked: TX audio device not configured.";
+        }
+
+        if (_sstvPreparedTransmitClip is null)
+        {
+            return "SSTV TX blocked: prepare TX audio first.";
+        }
+
+        return null;
     }
 
     [RelayCommand]
@@ -3641,13 +3927,30 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 ? RadioMode.LsbData
                 : RadioMode.UsbData;
             await _radioService.SetModeAsync(mode, CancellationToken.None);
+            await ApplyPureDigitalReceivePresetAsync().ConfigureAwait(false);
             await _radioService.SetFrequencyAsync(hz, CancellationToken.None);
-            RadioStatusSummary = $"Weak-signal digital tuned: {hz:N0} Hz {FormatModeDisplay(mode)}";
+            RadioStatusSummary = $"Weak-signal digital tuned: {hz:N0} Hz {FormatModeDisplay(mode)}  |  FIL1 NB/NR/AN off";
         }
         catch (Exception ex)
         {
             RadioStatusSummary = $"Weak-signal digital tune failed: {ex.Message}";
         }
+    }
+
+    private async Task ApplyPureDigitalReceivePresetAsync()
+    {
+        if (_radioService is null)
+        {
+            return;
+        }
+
+        // Digital image/weak-signal modes want the cleanest practical receive
+        // path, so disable DSP helpers that can distort the tones we need to decode.
+        await _radioService.SetFilterSlotAsync(1, CancellationToken.None);
+        await _radioService.SetNoiseBlankerAsync(false, CancellationToken.None);
+        await _radioService.SetAutoNotchAsync(false, CancellationToken.None);
+        await _radioService.SetManualNotchAsync(false, 1, 128, CancellationToken.None);
+        await _radioService.SetNoiseReductionAsync(false, 0, CancellationToken.None);
     }
 
     private async Task TuneRadioForLongwaveSpotAsync(LongwaveSpotSummaryItem spot)
@@ -3707,6 +4010,111 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         LongwaveLogDxcc = lookup.Dxcc ?? string.Empty;
         _longwaveLogLatitude = lookup.Latitude;
         _longwaveLogLongitude = lookup.Longitude;
+    }
+
+    private async Task RefreshWsjtxCurrentQsoLookupAsync(WsjtxActiveSession? session)
+    {
+        var generation = Interlocked.Increment(ref _wsjtxLookupGeneration);
+        if (session is null || string.IsNullOrWhiteSpace(session.OtherCall))
+        {
+            ClearWsjtxCurrentQsoLookup();
+            return;
+        }
+
+        var callsign = FormatCallsign(session.OtherCall);
+        WsjtxCurrentQsoCallsign = callsign;
+
+        if (_longwaveService is null)
+        {
+            WsjtxCurrentQsoLookupSummary = "Longwave/QRZ lookup service unavailable.";
+            WsjtxCurrentQsoLookupDetails = string.Empty;
+            WsjtxCurrentQsoLookupStatus = "Unavailable";
+            return;
+        }
+
+        try
+        {
+            WsjtxCurrentQsoLookupSummary = $"Looking up {callsign}...";
+            WsjtxCurrentQsoLookupDetails = string.Empty;
+            WsjtxCurrentQsoLookupStatus = "Looking up";
+            var lookup = await _longwaveService.LookupCallsignAsync(BuildCurrentLongwaveSettings(), callsign, CancellationToken.None);
+            if (generation != _wsjtxLookupGeneration)
+            {
+                return;
+            }
+
+            WsjtxCurrentQsoCallsign = lookup.Callsign;
+            WsjtxCurrentQsoLookupSummary = BuildWsjtxLookupSummary(lookup);
+            WsjtxCurrentQsoLookupDetails = BuildWsjtxLookupDetails(lookup);
+            WsjtxCurrentQsoLookupStatus = string.IsNullOrWhiteSpace(lookup.QrzUrl) ? "Ready" : lookup.QrzUrl!;
+        }
+        catch (Exception ex)
+        {
+            if (generation != _wsjtxLookupGeneration)
+            {
+                return;
+            }
+
+            WsjtxCurrentQsoLookupSummary = $"Lookup failed for {callsign}.";
+            WsjtxCurrentQsoLookupDetails = ex.Message;
+            WsjtxCurrentQsoLookupStatus = "Lookup failed";
+        }
+    }
+
+    private void ClearWsjtxCurrentQsoLookup()
+    {
+        WsjtxCurrentQsoCallsign = "No active QSO";
+        WsjtxCurrentQsoLookupSummary = "Start or track a contact to see a quick QRZ summary here.";
+        WsjtxCurrentQsoLookupDetails = string.Empty;
+        WsjtxCurrentQsoLookupStatus = "Idle";
+    }
+
+    private static string BuildWsjtxLookupSummary(LongwaveCallsignLookup lookup)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(lookup.Name))
+        {
+            parts.Add(lookup.Name!.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(lookup.Qth))
+        {
+            parts.Add(lookup.Qth!.Trim());
+        }
+        else if (!string.IsNullOrWhiteSpace(lookup.State))
+        {
+            parts.Add(lookup.State!.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(lookup.Country))
+        {
+            parts.Add(lookup.Country!.Trim());
+        }
+
+        return parts.Count > 0
+            ? string.Join("  |  ", parts)
+            : $"QRZ match found for {lookup.Callsign}.";
+    }
+
+    private static string BuildWsjtxLookupDetails(LongwaveCallsignLookup lookup)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(lookup.GridSquare))
+        {
+            parts.Add($"Grid {lookup.GridSquare.Trim().ToUpperInvariant()}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(lookup.County))
+        {
+            parts.Add(lookup.County!.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(lookup.Dxcc))
+        {
+            parts.Add(lookup.Dxcc!.Trim());
+        }
+
+        return string.Join("  |  ", parts);
     }
 
     private void ApplyLongwaveSettingsState(AppSettings settings)
@@ -4307,6 +4715,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(WsjtxActiveSessionSummary));
         OnPropertyChanged(nameof(WsjtxQsoRailSummary));
+        _ = RefreshWsjtxCurrentQsoLookupAsync(value);
     }
 
     partial void OnWsjtxCallingCqChanged(bool value)
@@ -4588,6 +4997,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(SstvReplyPreviewBitmap));
         OnPropertyChanged(nameof(SstvReplyHasBaseImage));
         OnPropertyChanged(nameof(SstvReplyShowPlaceholder));
+        SstvTransmitStatus = value is null
+            ? "Choose a reply image to prepare TX."
+            : "Reply image changed; prepare TX when ready.";
     }
 
     partial void OnSelectedSstvReplyLayoutTemplateChanged(SstvTemplateItem? value)
@@ -4596,6 +5008,111 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             SstvReplyTemplateName = value.Name;
         }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static byte[] RenderCurrentSstvReplyRgb24(
+        string baseImagePath,
+        IReadOnlyList<SstvOverlayItemViewModel> overlays,
+        string outputImagePath,
+        out int width,
+        out int height)
+    {
+        using var source = new DrawingBitmap(baseImagePath);
+        width = source.Width;
+        height = source.Height;
+        using var composed = new DrawingBitmap(width, height, DrawingPixelFormat.Format24bppRgb);
+        using (var graphics = DrawingGraphics.FromImage(composed))
+        {
+            graphics.Clear(DrawingColor.Black);
+            graphics.TextRenderingHint = DrawingTextRenderingHint.AntiAliasGridFit;
+            graphics.DrawImage(source, 0, 0, width, height);
+
+            foreach (var overlay in overlays)
+            {
+                if (string.IsNullOrWhiteSpace(overlay.Text))
+                {
+                    continue;
+                }
+
+                using var brush = new DrawingBrush(DrawingColor.FromArgb(overlay.Red, overlay.Green, overlay.Blue));
+                using var font = CreateSstvDrawingFont(overlay.FontFamilyName, (float)overlay.FontSize);
+                using var format = new DrawingStringFormat
+                {
+                    Alignment = DrawingStringAlignment.Center,
+                };
+                var x = (float)Math.Max(0.0, overlay.X);
+                var y = (float)Math.Max(0.0, overlay.Y);
+                var rect = new DrawingRectangleF(x, y, Math.Max(80f, width - x), Math.Max(40f, height - y));
+                graphics.DrawString(overlay.Text, font, brush, rect, format);
+            }
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(outputImagePath)!);
+        composed.Save(outputImagePath, DrawingImageFormat.Png);
+
+        var rgb24 = new byte[width * height * 3];
+        var rectLock = new DrawingRectangle(0, 0, width, height);
+        var data = composed.LockBits(rectLock, DrawingImageLockMode.ReadOnly, DrawingPixelFormat.Format24bppRgb);
+        try
+        {
+            for (var y = 0; y < height; y++)
+            {
+                var row = data.Scan0 + (y * data.Stride);
+                var bgr = new byte[width * 3];
+                Marshal.Copy(row, bgr, 0, bgr.Length);
+                for (var x = 0; x < width; x++)
+                {
+                    var src = x * 3;
+                    var dst = ((y * width) + x) * 3;
+                    rgb24[dst] = bgr[src + 2];
+                    rgb24[dst + 1] = bgr[src + 1];
+                    rgb24[dst + 2] = bgr[src];
+                }
+            }
+        }
+        finally
+        {
+            composed.UnlockBits(data);
+        }
+
+        return rgb24;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static DrawingFont CreateSstvDrawingFont(string fontFamilyName, float fontSize)
+    {
+        try
+        {
+            return new DrawingFont(fontFamilyName, fontSize, DrawingFontStyle.Bold, System.Drawing.GraphicsUnit.Pixel);
+        }
+        catch
+        {
+            return new DrawingFont("Segoe UI", fontSize, DrawingFontStyle.Bold, System.Drawing.GraphicsUnit.Pixel);
+        }
+    }
+
+    private static void WriteWaveFile(string path, Pcm16AudioClip clip)
+    {
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+        var dataLength = clip.PcmBytes.Length;
+        var byteRate = clip.SampleRate * clip.Channels * 2;
+        var blockAlign = (short)(clip.Channels * 2);
+        writer.Write("RIFF"u8.ToArray());
+        writer.Write(36 + dataLength);
+        writer.Write("WAVE"u8.ToArray());
+        writer.Write("fmt "u8.ToArray());
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)clip.Channels);
+        writer.Write(clip.SampleRate);
+        writer.Write(byteRate);
+        writer.Write(blockAlign);
+        writer.Write((short)16);
+        writer.Write("data"u8.ToArray());
+        writer.Write(dataLength);
+        writer.Write(clip.PcmBytes);
     }
 
     [RelayCommand]

@@ -20,7 +20,16 @@ from typing import Callable, Optional
 
 import numpy as np
 from PIL import Image
-from scipy.signal import butter, hilbert, medfilt, sosfilt, sosfilt_zi
+from scipy.signal import (
+    butter,
+    correlate,
+    find_peaks,
+    hilbert,
+    medfilt,
+    sosfilt,
+    sosfilt_zi,
+    stft,
+)
 
 from .wefax_engine import BLACK_HZ, IOC, LPM, WHITE_HZ, WefaxEncoder
 
@@ -83,6 +92,7 @@ class WefaxDecoderPrototype:
         self._state = self.STATE_IDLE
         self._force_start = False
         self._line_buffer = np.array([], dtype=np.float32)
+        self._sync_probe_buffer = np.array([], dtype=np.float32)
         self._phasing_rows: list[np.ndarray] = []
         self._phasing_offsets: list[int] = []
         self._image_rows: list[np.ndarray] = []
@@ -90,8 +100,13 @@ class WefaxDecoderPrototype:
         self._recent_stop_scores: deque[float] = deque(maxlen=20)
         self._recent_signal_scores: deque[float] = deque(maxlen=12)
         self._recent_subcarrier_offsets: deque[float] = deque(maxlen=24)
+        self._recent_carrier_centers: deque[float] = deque(maxlen=10)
+        self._recent_carrier_spreads: deque[float] = deque(maxlen=10)
         self._aligned_offset = 0
         self._block_size = int(self._sr * 0.1)
+        self._audio_history = np.array([], dtype=np.float32)
+        self._audio_history_limit = int(self._sr * 12.0)
+        self._blocks_since_carrier_estimate = 0
         self._row_alignment_window = 24
         self._row_alignment_history: deque[int] = deque(maxlen=16)
         self._line_clock_error_history: deque[int] = deque(maxlen=24)
@@ -136,6 +151,7 @@ class WefaxDecoderPrototype:
         self._start_state = None
         self._stop_state = None
         self._line_buffer = np.array([], dtype=np.float32)
+        self._sync_probe_buffer = np.array([], dtype=np.float32)
         self._phasing_rows = []
         self._phasing_offsets = []
         self._image_rows = []
@@ -144,11 +160,15 @@ class WefaxDecoderPrototype:
         self._recent_stop_scores.clear()
         self._recent_signal_scores.clear()
         self._recent_subcarrier_offsets.clear()
+        self._recent_carrier_centers.clear()
+        self._recent_carrier_spreads.clear()
         self._row_alignment_history.clear()
         self._line_clock_error_history.clear()
         self._seam_offset_history.clear()
         self._aligned_offset = 0
         self._samples_per_line = self._nominal_samples_per_line
+        self._audio_history = np.array([], dtype=np.float32)
+        self._blocks_since_carrier_estimate = 0
         self._force_start = False
         self._set_state(self.STATE_IDLE)
         self._emit_telemetry()
@@ -219,6 +239,7 @@ class WefaxDecoderPrototype:
         )
 
     def _process_block(self, samples: np.ndarray) -> None:
+        self._remember_audio(samples)
         gray = self._demod_gray(samples)
         start_score = self._tone_score(samples, self._start_sos, "_start_state")
         stop_score = self._tone_score(samples, self._stop_sos, "_stop_state")
@@ -228,9 +249,11 @@ class WefaxDecoderPrototype:
         self._recent_signal_scores.append(signal_score)
 
         if self._state in (self.STATE_WAIT_START, self.STATE_IDLE):
-            if self._force_start or self._start_detected():
+            self._append_sync_probe(gray)
+            if self._force_start or self._start_detected() or self._structure_detected():
                 self._force_start = False
                 self._line_buffer = np.array([], dtype=np.float32)
+                self._sync_probe_buffer = np.array([], dtype=np.float32)
                 self._phasing_rows = []
                 self._phasing_offsets = []
                 self._image_rows = []
@@ -248,6 +271,91 @@ class WefaxDecoderPrototype:
                 self._set_state(self.STATE_WAIT_START)
 
         self._emit_telemetry()
+
+    def _append_sync_probe(self, gray: np.ndarray) -> None:
+        self._sync_probe_buffer = np.concatenate([self._sync_probe_buffer, gray.astype(np.float32, copy=False)])
+        max_len = int(round(self._nominal_samples_per_line * 8))
+        if len(self._sync_probe_buffer) > max_len:
+            self._sync_probe_buffer = self._sync_probe_buffer[-max_len:]
+
+    def _remember_audio(self, samples: np.ndarray) -> None:
+        self._audio_history = np.concatenate([self._audio_history, samples.astype(np.float32, copy=False)])
+        if len(self._audio_history) > self._audio_history_limit:
+            self._audio_history = self._audio_history[-self._audio_history_limit :]
+        self._blocks_since_carrier_estimate += 1
+        if self._blocks_since_carrier_estimate < 10:
+            return
+        self._blocks_since_carrier_estimate = 0
+        self._update_carrier_estimate()
+
+    def _update_carrier_estimate(self) -> None:
+        if len(self._audio_history) < int(self._sr * 2.0):
+            return
+        try:
+            carriers = self._find_carrier_pair(self._audio_history)
+        except Exception:
+            return
+        if carriers is None:
+            return
+        f1, f2 = carriers
+        spread = f2 - f1
+        if not 500.0 <= spread <= 1100.0:
+            return
+        center = (f1 + f2) * 0.5
+        offset = float(np.clip(center - 1900.0, -250.0, 250.0))
+        self._recent_carrier_centers.append(offset)
+        self._recent_carrier_spreads.append(spread)
+
+    def _find_carrier_pair(self, samples: np.ndarray) -> tuple[float, float] | None:
+        history = samples.astype(np.float32, copy=False)
+        if len(history) > int(self._sr * 8.0):
+            history = history[-int(self._sr * 8.0) :]
+
+        freqs, _, spec = stft(history, fs=self._sr, nperseg=2048, noverlap=1536, padded=False, boundary=None)
+        if spec.size == 0:
+            return None
+
+        band_mask = (freqs >= 1000.0) & (freqs <= 2800.0)
+        if not np.any(band_mask):
+            return None
+
+        freqs = freqs[band_mask]
+        spectrum = np.max(np.abs(spec[band_mask]), axis=-1)
+        if len(spectrum) < 8 or float(np.max(spectrum)) <= 0.0:
+            return None
+
+        peak_indexes, props = find_peaks(
+            spectrum,
+            height=float(np.min(spectrum) + 0.2 * (np.max(spectrum) - np.min(spectrum))),
+            distance=5,
+        )
+        if len(peak_indexes) < 2:
+            return None
+
+        heights = props.get("peak_heights", spectrum[peak_indexes])
+        order = np.argsort(heights)[::-1]
+        peak_freqs = freqs[peak_indexes]
+
+        best_pair: tuple[float, float] | None = None
+        best_score = float("-inf")
+        top = min(len(order), 8)
+        for i in range(top):
+            for j in range(i + 1, top):
+                f1 = float(peak_freqs[order[i]])
+                f2 = float(peak_freqs[order[j]])
+                low, high = sorted((f1, f2))
+                spread = high - low
+                if not 500.0 <= spread <= 1100.0:
+                    continue
+                center = (low + high) * 0.5
+                # Prefer the canonical WEFAX center near 1900 Hz while still
+                # allowing for real mistuning on USB audio.
+                score = float(heights[order[i]] + heights[order[j]]) - abs(center - 1900.0) * 0.01
+                if score > best_score:
+                    best_score = score
+                    best_pair = (low, high)
+
+        return best_pair
 
     def _demod_gray(self, samples: np.ndarray) -> np.ndarray:
         if self._bp_state is None:
@@ -283,18 +391,51 @@ class WefaxDecoderPrototype:
         return max(0.0, min(1.0, power / (total * 1.5)))
 
     def _estimate_subcarrier_offset(self, inst_freq: np.ndarray) -> float:
+        carrier_offset = float(np.median(self._recent_carrier_centers)) if self._recent_carrier_centers else None
         inband = inst_freq[(inst_freq > 1300) & (inst_freq < 2500)]
         if len(inband) < max(32, len(inst_freq) // 8):
-            return float(np.median(self._recent_subcarrier_offsets)) if self._recent_subcarrier_offsets else 0.0
+            if self._recent_subcarrier_offsets:
+                return float(np.median(self._recent_subcarrier_offsets))
+            return carrier_offset if carrier_offset is not None else 0.0
         center = float(np.median(inband))
         offset = float(np.clip(center - 1900.0, -120.0, 120.0))
+        if carrier_offset is not None:
+            offset = (offset * 0.45) + (carrier_offset * 0.55)
         self._recent_subcarrier_offsets.append(offset)
         return float(np.median(self._recent_subcarrier_offsets))
 
     def _start_detected(self) -> bool:
-        if len(self._recent_start_scores) < self._recent_start_scores.maxlen:
+        if len(self._recent_start_scores) < max(8, self._recent_start_scores.maxlen // 2):
             return False
-        return float(np.mean(self._recent_start_scores)) > 0.42
+        if len(self._recent_signal_scores) < 6:
+            return False
+
+        recent_start = float(np.mean(list(self._recent_start_scores)[-8:]))
+        recent_signal = float(np.mean(list(self._recent_signal_scores)[-6:]))
+        carrier_seen = bool(self._recent_carrier_centers)
+
+        if recent_signal < 0.005:
+            return False
+
+        # Strong, obvious start tones should still trigger quickly.
+        if recent_start > 0.36:
+            return True
+
+        # Real on-air starts are often weaker or partially chewed up by the
+        # receiver passband. If we already see a plausible WEFAX carrier pair
+        # and decent signal energy, accept a lower start-tone confidence.
+        return carrier_seen and recent_start > 0.26
+
+    def _structure_detected(self) -> bool:
+        nominal = int(round(self._nominal_samples_per_line))
+        if len(self._sync_probe_buffer) < nominal * 4:
+            return False
+        if len(self._recent_signal_scores) < 6:
+            return False
+        if float(np.mean(list(self._recent_signal_scores)[-6:])) < 0.006:
+            return False
+        guess = self._find_sync_phase(self._sync_probe_buffer, nominal)
+        return guess is not None
 
     def _stop_detected(self) -> bool:
         if len(self._recent_stop_scores) < 8:
@@ -392,6 +533,22 @@ class WefaxDecoderPrototype:
 
     def _lock_phasing(self, gray_stream: np.ndarray) -> tuple[int, int, int]:
         nominal = int(round(self._nominal_samples_per_line))
+        pywefax_guess = self._find_sync_phase(gray_stream, nominal)
+        if pywefax_guess is not None:
+            start_idx, phase_period, slant = pywefax_guess
+            candidate_spl = int(np.clip(round(phase_period + slant), nominal * 0.97, nominal * 1.03))
+            offsets: list[int] = []
+            for i in range(5):
+                start = start_idx + i * candidate_spl
+                end = start + candidate_spl
+                raw = gray_stream[start:end]
+                if len(raw) < candidate_spl:
+                    break
+                row = self._resample_line(raw)
+                offsets.append(self._estimate_phasing_offset(row))
+            if offsets:
+                return start_idx, candidate_spl, int(round(np.median(offsets)))
+
         best_score = float("-inf")
         best_start = 0
         best_spl = nominal
@@ -435,6 +592,68 @@ class WefaxDecoderPrototype:
                 best_offset = int(round(np.median(offsets)))
 
         return best_start, best_spl, best_offset
+
+    def _find_sync_phase(self, gray_stream: np.ndarray, nominal: int) -> tuple[int, float, float] | None:
+        if len(gray_stream) < nominal * 4:
+            return None
+
+        stream = gray_stream.astype(np.float32, copy=False)
+        threshold = float(np.median(stream))
+        binary = np.where(stream >= threshold, 1.0, 0.0)
+        kernel = np.concatenate(
+            (
+                np.zeros(max(1, round(self._sr * 0.475)), dtype=np.float32),
+                np.ones(max(1, round(self._sr * 0.025)), dtype=np.float32),
+                np.zeros(max(1, round(self._sr * 0.475)), dtype=np.float32),
+            )
+        )
+        try:
+            sync_sig = correlate(medfilt(binary, kernel_size=201), kernel / max(len(kernel), 1), mode="same")
+        except ValueError:
+            return None
+
+        per = max(1, round(self._sr / 2))
+        peaks, props = find_peaks(sync_sig, height=float(np.max(sync_sig) * 0.55), distance=max(1, per - 200))
+        if len(peaks) < 3:
+            return None
+
+        peak_diffs = peaks[1:] - peaks[:-1]
+        if len(peak_diffs) == 0:
+            return None
+
+        bincount = np.bincount(peak_diffs)
+        period_peak = int(np.argmax(bincount))
+        if period_peak <= 0:
+            return None
+
+        period_flt: list[int] = []
+        bucket_total = 0
+        i = period_peak
+        while i < len(bincount) and bincount[i] > 0:
+            period_flt.append(i)
+            bucket_total += int(bincount[i])
+            i += 1
+        i = period_peak - 1
+        while i >= 0 and bincount[i] > 0:
+            period_flt.append(i)
+            bucket_total += int(bincount[i])
+            i -= 1
+
+        if not period_flt or bucket_total <= 0:
+            return None
+
+        slant = float((np.max(period_flt) - np.min(period_flt)) / bucket_total)
+        period = float(np.mean(period_flt))
+        if not nominal * 0.97 <= period <= nominal * 1.03:
+            return None
+
+        target_diff = int(round(period))
+        match_indexes = np.where(np.abs(peak_diffs - target_diff) <= 1)[0]
+        if len(match_indexes) == 0:
+            return None
+        phase = int(peaks[int(match_indexes[-1])])
+        phase_min = int(phase % per)
+        return phase_min, period, slant
 
     def _phasing_row_contrast(self, row: np.ndarray, offset: int) -> float:
         pulse_width = max(8, int(self._width * 0.018))

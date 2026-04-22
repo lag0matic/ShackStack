@@ -134,30 +134,33 @@ internal static class BundledDecoderWorkerLocator
 
     private static DecoderWorkerLaunch ResolveLocalDotnetWorker(string repoRoot, string workerBaseName)
     {
-        if (!string.Equals(workerBaseName, "wsjtx_gpl_sidecar", StringComparison.OrdinalIgnoreCase))
+        string? projectDirectory = null;
+        string? projectFile = null;
+        string? localExe = null;
+
+        if (string.Equals(workerBaseName, "wsjtx_gpl_sidecar", StringComparison.OrdinalIgnoreCase))
+        {
+            projectDirectory = Path.Combine(repoRoot, "src", "ShackStack.DecoderHost.GplWsjtx");
+            projectFile = "ShackStack.DecoderHost.GplWsjtx.csproj";
+            localExe = Path.Combine(projectDirectory, "bin", "Debug", "net9.0", "ShackStack.DecoderHost.GplWsjtx.exe");
+        }
+        else if (string.Equals(workerBaseName, "sstv_native_sidecar", StringComparison.OrdinalIgnoreCase))
+        {
+            projectDirectory = Path.Combine(repoRoot, "src", "ShackStack.DecoderHost.Sstv");
+            projectFile = "ShackStack.DecoderHost.Sstv.csproj";
+            localExe = Path.Combine(projectDirectory, "bin", "Debug", "net9.0", "ShackStack.DecoderHost.Sstv.exe");
+        }
+        else
         {
             return default;
         }
 
-        var projectPath = Path.Combine(
-            repoRoot,
-            "src",
-            "ShackStack.DecoderHost.GplWsjtx",
-            "ShackStack.DecoderHost.GplWsjtx.csproj");
+        var projectPath = Path.Combine(projectDirectory, projectFile);
 
         if (!File.Exists(projectPath))
         {
             return default;
         }
-
-        var localExe = Path.Combine(
-            repoRoot,
-            "src",
-            "ShackStack.DecoderHost.GplWsjtx",
-            "bin",
-            "Debug",
-            "net9.0",
-            "ShackStack.DecoderHost.GplWsjtx.exe");
 
         if (File.Exists(localExe))
         {
@@ -181,6 +184,8 @@ internal static class BundledDecoderWorkerLocator
     {
         var executableName = string.Equals(workerBaseName, "wsjtx_gpl_sidecar", StringComparison.OrdinalIgnoreCase)
             ? "ShackStack.DecoderHost.GplWsjtx.exe"
+            : string.Equals(workerBaseName, "sstv_native_sidecar", StringComparison.OrdinalIgnoreCase)
+                ? "ShackStack.DecoderHost.Sstv.exe"
             : $"{workerBaseName}.exe";
 
         return Path.Combine(

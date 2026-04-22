@@ -190,13 +190,69 @@ class WefaxWorker:
         self._save_preview_image()
 
     def _render_rows(self) -> np.ndarray:
+        auto_offsets = self._estimate_auto_offsets(self._rows)
         rendered: list[np.ndarray] = []
         for index, row in enumerate(self._rows):
             shift = self._manual_offset
+            if index < len(auto_offsets):
+                shift -= auto_offsets[index]
             if self._manual_slant != 0 and index > 0:
                 shift += int(round(index * (self._manual_slant / 1000.0)))
             rendered.append(np.roll(row, shift) if shift else row)
         return np.vstack(rendered)
+
+    def _estimate_auto_offsets(self, rows: list[np.ndarray]) -> list[int]:
+        if len(rows) < 12:
+            return [0] * len(rows)
+
+        width = len(rows[0])
+        band = max(6, int(width * 0.006))
+        kernel = np.ones(band, dtype=np.float32) / float(band)
+
+        offsets: list[int] = []
+        for row in rows:
+            values = np.asarray(row, dtype=np.float32)
+            darkness = 255.0 - values
+            extended = np.concatenate([darkness, darkness[: band - 1]])
+            score = np.convolve(extended, kernel, mode="valid")[:width]
+            idx = int(np.argmax(score))
+            if idx > width // 2:
+                idx -= width
+            offsets.append(idx)
+
+        # Smooth abrupt row-to-row jitter first so atmospheric noise or a nearby
+        # interferer doesn't yank the whole image around.
+        smoothed = np.asarray(offsets, dtype=np.float32)
+        if len(smoothed) >= 5:
+            padded = np.pad(smoothed, (2, 2), mode="edge")
+            windowed = []
+            for i in range(len(smoothed)):
+                windowed.append(float(np.median(padded[i : i + 5])))
+            smoothed = np.asarray(windowed, dtype=np.float32)
+
+        indexes = np.arange(len(smoothed), dtype=np.float32)
+        try:
+            slope, intercept = np.polyfit(indexes, smoothed, 1)
+        except Exception:
+            return [int(round(value)) for value in smoothed]
+
+        trend = (slope * indexes) + intercept
+        corrected = []
+        warmup_rows = min(max(18, len(smoothed) // 10), 48)
+        for index, (measured, fitted) in enumerate(zip(smoothed, trend, strict=False)):
+            if warmup_rows > 0 and index < warmup_rows:
+                # Startup rows are usually the least trustworthy because the
+                # decoder is still settling onto the phasing edge. Lean harder
+                # on the global trend there, then ease into the measured seam.
+                progress = index / float(max(warmup_rows - 1, 1))
+                measured_weight = 0.10 + (0.25 * progress)
+            else:
+                measured_weight = 0.35
+            fitted_weight = 1.0 - measured_weight
+            # Blend line-by-line measured seam with the global slant trend so
+            # we straighten the dark phasing edge without overreacting to noise.
+            corrected.append(int(round((measured * measured_weight) + (fitted * fitted_weight))))
+        return corrected
 
     def _emit_telemetry(self, status: str) -> None:
         emit({

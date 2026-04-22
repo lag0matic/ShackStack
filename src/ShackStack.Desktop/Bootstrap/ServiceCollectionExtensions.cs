@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Extensions.DependencyInjection;
 using ShackStack.Core.Abstractions.Contracts;
 using ShackStack.Infrastructure.Audio;
@@ -27,9 +28,31 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBandConditionsService, HamqslBandConditionsService>();
         services.AddSingleton<ILongwaveService, LongwaveService>();
         services.AddSingleton<IClockDisciplineService, SystemClockDisciplineService>();
-        services.AddSingleton<ICwDecoderHost, PythonCwDecoderHost>();
+        services.AddSingleton<ICwDecoderHost>(provider =>
+        {
+            var audio = provider.GetRequiredService<IAudioService>();
+            var useGgmorse = string.Equals(
+                Environment.GetEnvironmentVariable("SHACKSTACK_CW_GGMORSE"),
+                "1",
+                StringComparison.OrdinalIgnoreCase);
+
+            return useGgmorse
+                ? new GgmorseCwDecoderHost(audio)
+                : new PythonCwDecoderHost(audio);
+        });
         services.AddSingleton<IRttyDecoderHost, PythonRttyDecoderHost>();
-        services.AddSingleton<ISstvDecoderHost, PythonSstvDecoderHost>();
+        services.AddSingleton<ISstvDecoderHost>(provider =>
+        {
+            var audio = provider.GetRequiredService<IAudioService>();
+            var forcePython = string.Equals(
+                Environment.GetEnvironmentVariable("SHACKSTACK_SSTV_PYTHON"),
+                "1",
+                StringComparison.OrdinalIgnoreCase);
+            return forcePython
+                ? new PythonSstvDecoderHost(audio)
+                : new NativeSstvDecoderHost(audio);
+        });
+        services.AddSingleton<ISstvTransmitService, NativeSstvTransmitService>();
         services.AddSingleton<IWefaxDecoderHost, PythonWefaxDecoderHost>();
         services.AddSingleton<IWsjtxModeHost, PythonWsjtxModeHost>();
         services.AddSingleton<DecoderManager>();
@@ -55,6 +78,7 @@ public static class ServiceCollectionExtensions
             var cwDecoderHost = provider.GetRequiredService<ICwDecoderHost>();
             var rttyDecoderHost = provider.GetRequiredService<IRttyDecoderHost>();
             var sstvDecoderHost = provider.GetRequiredService<ISstvDecoderHost>();
+            var sstvTransmitService = provider.GetRequiredService<ISstvTransmitService>();
             var wefaxDecoderHost = provider.GetRequiredService<IWefaxDecoderHost>();
             var wsjtxModeHost = provider.GetRequiredService<IWsjtxModeHost>();
             return new MainWindowViewModel(
@@ -71,6 +95,7 @@ public static class ServiceCollectionExtensions
                 cwDecoderHost,
                 rttyDecoderHost,
                 sstvDecoderHost,
+                sstvTransmitService,
                 wefaxDecoderHost,
                 wsjtxModeHost);
         });

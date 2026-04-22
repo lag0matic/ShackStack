@@ -20,6 +20,9 @@ namespace ShackStack.Desktop;
 public partial class App : Application
 {
     private ServiceProvider? _services;
+    private AppStartup? _startup;
+    private ShackStack.Desktop.Bootstrap.AppContext? _appContext;
+    private int _shutdownStarted;
 
     public override void Initialize()
     {
@@ -28,6 +31,8 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             DisableAvaloniaDataAnnotationValidation();
@@ -36,22 +41,23 @@ public partial class App : Application
             serviceCollection.AddShackStackUi();
             _services = serviceCollection.BuildServiceProvider();
 
-            var startup = _services.GetRequiredService<AppStartup>();
-            var context = startup.LoadContextAsync(CancellationToken.None).GetAwaiter().GetResult();
-            var appContext = _services.GetRequiredService<ShackStack.Desktop.Bootstrap.AppContext>();
-            appContext.Settings = context.Settings;
-            appContext.SettingsFilePath = context.SettingsFilePath;
+            _startup = _services.GetRequiredService<AppStartup>();
+            var context = _startup.LoadContextAsync(CancellationToken.None).GetAwaiter().GetResult();
+            _appContext = _services.GetRequiredService<ShackStack.Desktop.Bootstrap.AppContext>();
+            _appContext.Settings = context.Settings;
+            _appContext.SettingsFilePath = context.SettingsFilePath;
 
             var window = _services.GetRequiredService<MainWindow>();
             window.DataContext = _services.GetRequiredService<MainWindowViewModel>();
             desktop.MainWindow = window;
+            desktop.Exit += OnDesktopExit;
             window.Show();
 
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await startup.StartServicesAsync(appContext, CancellationToken.None).ConfigureAwait(false);
+                    await _startup.StartServicesAsync(_appContext, CancellationToken.None).ConfigureAwait(false);
                     var radioService = _services.GetRequiredService<IRadioService>();
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
@@ -93,6 +99,42 @@ public partial class App : Application
         foreach (var plugin in dataValidationPluginsToRemove)
         {
             BindingPlugins.DataValidators.Remove(plugin);
+        }
+    }
+
+    private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
+    {
+        ShutdownServices();
+    }
+
+    private void OnProcessExit(object? sender, EventArgs e)
+    {
+        ShutdownServices();
+    }
+
+    private void ShutdownServices()
+    {
+        if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _startup?.StopServicesAsync(
+                _appContext ?? new ShackStack.Desktop.Bootstrap.AppContext(),
+                CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // Best-effort shutdown only.
+        }
+        finally
+        {
+            _services?.Dispose();
+            _services = null;
+            _startup = null;
+            _appContext = null;
         }
     }
 }

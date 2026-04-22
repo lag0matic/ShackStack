@@ -6,6 +6,7 @@ public interface ISstvDecoderHost
 {
     Task ConfigureAsync(SstvDecoderConfiguration configuration, CancellationToken ct);
     Task SetManualAlignmentAsync(int manualSlant, int manualOffset, CancellationToken ct);
+    Task ForceStartAsync(CancellationToken ct);
     Task StartAsync(CancellationToken ct);
     Task StopAsync(CancellationToken ct);
     Task ResetAsync(CancellationToken ct);

@@ -82,6 +82,17 @@ public sealed class PythonSstvDecoderHost : ISstvDecoderHost, IDisposable
         }, ct).ConfigureAwait(false);
     }
 
+    public Task ForceStartAsync(CancellationToken ct)
+    {
+        _telemetry.OnNext(new SstvDecoderTelemetry(
+            _isRunning,
+            "Manual force-start is only available on the native SSTV decoder",
+            "Python SSTV sidecar",
+            0,
+            _configuration.Mode));
+        return Task.CompletedTask;
+    }
+
     public async Task StartAsync(CancellationToken ct)
     {
         await EnsureProcessAsync(ct).ConfigureAwait(false);
@@ -267,24 +278,7 @@ public sealed class PythonSstvDecoderHost : ISstvDecoderHost, IDisposable
     {
         _isRunning = false;
         _audioSubscription.Dispose();
-
-        try
-        {
-            if (_process is not null && !_process.HasExited)
-            {
-                _ = SendMessageAsync(new { type = "shutdown" }, CancellationToken.None);
-                if (!_process.WaitForExit(500))
-                {
-                    _process.Kill(true);
-                }
-            }
-        }
-        catch
-        {
-        }
-
-        _stdin?.Dispose();
-        _process?.Dispose();
+        DecoderHostProcessCleanup.Shutdown(_process, _stdin, _stdoutTask, _stderrTask, _writeGate);
         _writeGate.Dispose();
     }
 }

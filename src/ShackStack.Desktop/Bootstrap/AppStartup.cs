@@ -12,7 +12,7 @@ public sealed class AppStartup(
     IRadioService radioService,
     IWaterfallService waterfallService,
     IBandConditionsService bandConditionsService,
-    IInteropService interopService)
+    IInteropService interopService) : IDisposable
 {
     private readonly IDisposable _scopeSubscription = radioService.ScopeRowStream.Subscribe(
         new Observer<WaterfallRow>(row => waterfallService.PushScopeRow(row)));
@@ -70,5 +70,34 @@ public sealed class AppStartup(
         {
             // Fake FLRig should not prevent the main app from starting or the radio from connecting.
         }
+    }
+
+    public async Task StopServicesAsync(AppContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await interopService.StopAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Shutdown should keep moving even if the interop bridge is already gone.
+        }
+
+        try
+        {
+            if (radioService.CurrentState.IsConnected)
+            {
+                await radioService.DisconnectAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            // Same deal: do not block shell shutdown on rig disconnect trouble.
+        }
+    }
+
+    public void Dispose()
+    {
+        _scopeSubscription.Dispose();
     }
 }

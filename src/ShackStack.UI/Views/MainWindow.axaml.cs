@@ -9,6 +9,7 @@ public partial class MainWindow : Window
 {
     private bool _spacePttActive;
     private SstvDeskWindow? _sstvDeskWindow;
+    private VoiceDeskWindow? _voiceDeskWindow;
     private WefaxDeskWindow? _wefaxDeskWindow;
     private WsjtxDeskWindow? _wsjtxDeskWindow;
 
@@ -129,6 +130,22 @@ public partial class MainWindow : Window
         };
         _sstvDeskWindow.Closed += (_, _) => _sstvDeskWindow = null;
         _sstvDeskWindow.Show(this);
+    }
+
+    private void OnOpenVoiceDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_voiceDeskWindow is { IsVisible: true })
+        {
+            _voiceDeskWindow.Activate();
+            return;
+        }
+
+        _voiceDeskWindow = new VoiceDeskWindow
+        {
+            DataContext = DataContext,
+        };
+        _voiceDeskWindow.Closed += (_, _) => _voiceDeskWindow = null;
+        _voiceDeskWindow.Show(this);
     }
 
     private void OnOpenWefaxDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

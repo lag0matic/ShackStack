@@ -1,0 +1,8 @@
+build*/
+.exrc
+.DS_Store
+.ycm_extra_conf.py
+.clangd
+.cache
+.vimspector.json
+compile_commands.json
