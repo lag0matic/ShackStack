@@ -136,19 +136,19 @@ internal static class BundledDecoderWorkerLocator
     {
         string? projectDirectory = null;
         string? projectFile = null;
-        string? localExe = null;
+        string? executableName = null;
 
         if (string.Equals(workerBaseName, "wsjtx_gpl_sidecar", StringComparison.OrdinalIgnoreCase))
         {
             projectDirectory = Path.Combine(repoRoot, "src", "ShackStack.DecoderHost.GplWsjtx");
             projectFile = "ShackStack.DecoderHost.GplWsjtx.csproj";
-            localExe = Path.Combine(projectDirectory, "bin", "Debug", "net9.0", "ShackStack.DecoderHost.GplWsjtx.exe");
+            executableName = "ShackStack.DecoderHost.GplWsjtx.exe";
         }
         else if (string.Equals(workerBaseName, "sstv_native_sidecar", StringComparison.OrdinalIgnoreCase))
         {
             projectDirectory = Path.Combine(repoRoot, "src", "ShackStack.DecoderHost.Sstv");
             projectFile = "ShackStack.DecoderHost.Sstv.csproj";
-            localExe = Path.Combine(projectDirectory, "bin", "Debug", "net9.0", "ShackStack.DecoderHost.Sstv.exe");
+            executableName = "ShackStack.DecoderHost.Sstv.exe";
         }
         else
         {
@@ -162,6 +162,8 @@ internal static class BundledDecoderWorkerLocator
             return default;
         }
 
+        var preferredConfiguration = PreferredLocalWorkerConfiguration();
+        var localExe = Path.Combine(projectDirectory, "bin", preferredConfiguration, "net9.0", executableName);
         if (File.Exists(localExe))
         {
             return new DecoderWorkerLaunch(
@@ -174,10 +176,19 @@ internal static class BundledDecoderWorkerLocator
 
         return new DecoderWorkerLaunch(
             "dotnet",
-            $"run --project \"{projectPath}\" --no-launch-profile",
+            $"run --project \"{projectPath}\" --configuration {preferredConfiguration} --no-launch-profile",
             Path.GetDirectoryName(projectPath)!,
             projectPath,
             true);
+    }
+
+    private static string PreferredLocalWorkerConfiguration()
+    {
+        var baseDirectory = AppContext.BaseDirectory;
+        return baseDirectory.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(part => string.Equals(part, "Release", StringComparison.OrdinalIgnoreCase))
+            ? "Release"
+            : "Debug";
     }
 
     private static string ResolveBundledExecutable(string workerBaseName)

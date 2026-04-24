@@ -35,7 +35,7 @@ internal sealed class MmsstvIntervalParameters
         var modeSamples = new Dictionary<SstvModeId, uint>();
         foreach (var profile in MmsstvModeCatalog.Profiles)
         {
-            modeSamples[profile.Id] = (uint)Math.Round(profile.TimingMs * sampleRate / 1000.0);
+            modeSamples[profile.Id] = (uint)MmsstvPictureGeometry.CalculateLineSamples(profile, sampleRate);
         }
 
         // MMSSTV special-case: AVT does not participate in the normal sync interval match table.

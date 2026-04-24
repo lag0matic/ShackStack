@@ -14,12 +14,13 @@
         Foreground="#C4C8D8">
   <Grid RowDefinitions="Auto,*" Margin="10">
     <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,10">
-      <Grid ColumnDefinitions="*,Auto">
+        <Grid ColumnDefinitions="*,Auto,Auto">
         <StackPanel Spacing="4">
           <TextBlock Text="SSTV Desk" FontSize="19" FontWeight="SemiBold" />
           <TextBlock Text="Received-image archive and reply composition live here. Overlay text stays non-destructive in the preview." Foreground="#AAB1C7" TextWrapping="Wrap" />
         </StackPanel>
-        <Button Grid.Column="1" Content="Refresh Archive" Command="{Binding RefreshSstvArchiveCommand}" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Content="Reply to RX" Command="{Binding ReplyToSelectedSstvReceivedImageCommand}" VerticalAlignment="Center" Margin="0,0,8,0" />
+        <Button Grid.Column="2" Content="Refresh Archive" Command="{Binding RefreshSstvArchiveCommand}" VerticalAlignment="Center" />
       </Grid>
     </Border>
 
@@ -67,6 +68,12 @@
                 <TextBlock Text="{Binding SstvReplyFolderPath, StringFormat=Reply Folder: {0}}" Foreground="#7F879B" TextWrapping="Wrap" />
                 <TextBlock Text="{Binding SstvTemplateFolderPath, StringFormat=Template Folder: {0}}" Foreground="#7F879B" TextWrapping="Wrap" />
                 <TextBlock Text="Base Image" Foreground="#7F879B" />
+                <WrapPanel>
+                  <Button Content="Import" Click="OnImportReplyBaseClicked" Margin="0,0,8,8" />
+                  <Button Content="Duplicate" Command="{Binding DuplicateSelectedSstvReplyBaseImageCommand}" Margin="0,0,8,8" />
+                  <Button Content="Archive" Command="{Binding ArchiveSelectedSstvReplyBaseImageCommand}" Margin="0,0,8,8" />
+                  <Button Content="Reply to RX" Command="{Binding ReplyToSelectedSstvReceivedImageCommand}" Margin="0,0,8,8" />
+                </WrapPanel>
                 <ListBox ItemsSource="{Binding SstvReplyImages}" SelectedItem="{Binding SelectedSstvReplyBaseImage}" MinHeight="170" MaxHeight="220">
                   <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:SstvImageItem">
@@ -77,6 +84,19 @@
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>
+                <TextBlock Text="Quick Layouts" Foreground="#7F879B" />
+                <ItemsControl ItemsSource="{Binding SstvReplyLayoutPresets}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SstvReplyLayoutPreset">
+                      <Button Content="{Binding Label}" Command="{Binding $parent[Window].DataContext.ApplySstvReplyLayoutPresetCommand}" CommandParameter="{Binding}" Margin="0,0,8,8" Padding="8,4" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <TextBlock Text="Layout Templates" Foreground="#7F879B" />
                 <ListBox ItemsSource="{Binding SstvReplyLayoutTemplates}" SelectedItem="{Binding SelectedSstvReplyLayoutTemplate}" MinHeight="84" MaxHeight="120">
                   <ListBox.ItemTemplate>
@@ -88,10 +108,11 @@
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>
-                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
                   <TextBox Grid.Column="0" Text="{Binding SstvReplyTemplateName}" Watermark="Template name" />
                   <Button Grid.Column="1" Content="Load" Command="{Binding LoadSstvReplyLayoutTemplateCommand}" />
                   <Button Grid.Column="2" Content="Save" Command="{Binding SaveSstvReplyLayoutTemplateCommand}" />
+                  <Button Grid.Column="3" Content="Archive" Command="{Binding ArchiveSelectedSstvReplyLayoutTemplateCommand}" />
                 </Grid>
                 <TextBlock Text="{Binding SstvReplyTemplateStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
@@ -109,6 +130,38 @@
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Image Insets" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <Button Grid.Column="1" Content="Add Selected" Command="{Binding AddSstvReceivedThumbnailCommand}" />
+                  <Button Grid.Column="2" Content="Remove" Command="{Binding RemoveSstvReceivedThumbnailCommand}" />
+                </Grid>
+                <TextBlock Text="Received Images" Foreground="#7F879B" />
+                <ListBox ItemsSource="{Binding SstvReceivedImages}" SelectedItem="{Binding SelectedSstvReceivedImage}" MinHeight="96" MaxHeight="150">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SstvImageItem">
+                      <StackPanel Spacing="2" Margin="0,2">
+                        <TextBlock Text="{Binding Label}" />
+                        <TextBlock Text="{Binding Timestamp, StringFormat={}{0:g}}" Foreground="#7F879B" FontSize="11" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <ListBox ItemsSource="{Binding SstvReplyImageOverlayItems}" SelectedItem="{Binding SelectedSstvReplyImageOverlayItem}" MinHeight="70" MaxHeight="110">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:SstvImageOverlayItemViewModel">
+                      <StackPanel Spacing="2" Margin="0,2">
+                        <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Summary}" Foreground="#7F879B" FontSize="11" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <Grid ColumnDefinitions="Auto,72,Auto,72" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="W" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <NumericUpDown Grid.Column="1" Minimum="24" Maximum="640" Increment="4" Value="{Binding SelectedSstvReplyImageOverlayItem.Width}" />
+                  <TextBlock Grid.Column="2" Text="H" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <NumericUpDown Grid.Column="3" Minimum="24" Maximum="496" Increment="4" Value="{Binding SelectedSstvReplyImageOverlayItem.Height}" />
+                </Grid>
                 <TextBlock Text="Overlay Text" Foreground="#7F879B" />
                 <TextBox Text="{Binding SelectedSstvReplyOverlayItem.Text}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="76" />
                 <Grid ColumnDefinitions="Auto,90,Auto,*" ColumnSpacing="8">
@@ -126,6 +179,7 @@
                   <TextBox Grid.Column="5" Text="{Binding SelectedSstvReplyOverlayItem.Blue}" HorizontalContentAlignment="Center" />
                 </Grid>
                 <TextBlock Text="{Binding SelectedSstvReplyOverlayItem.ColorHex, StringFormat=Preview Color: {0}}" Foreground="#AAB1C7" />
+                <TextBlock Text="Macros: %m callsign, %g grid, %f frequency, %r selected RX image, %d date, %t time." Foreground="#7F879B" TextWrapping="Wrap" />
                 <ItemsControl ItemsSource="{Binding SstvReplyTemplates}">
                   <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -146,11 +200,31 @@
                       <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
                       <ComboBox Grid.Column="1" ItemsSource="{Binding SstvTxModeOptions}" SelectedItem="{Binding SstvSelectedTxMode}" />
                     </Grid>
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <ItemsControl ItemsSource="{Binding SstvTxModeHints}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding}" Foreground="#7F879B" FontSize="11" TextWrapping="Wrap" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <CheckBox Content="Append CW ID after image" IsChecked="{Binding SstvTxCwIdEnabled}" />
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                      <TextBlock Grid.Column="0" Text="CW ID" Foreground="#7F879B" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Text="{Binding SstvTxCwIdText}" Watermark="DE %m" />
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,90,Auto,90" ColumnSpacing="8">
+                      <TextBlock Grid.Column="0" Text="Hz" Foreground="#7F879B" VerticalAlignment="Center" />
+                      <NumericUpDown Grid.Column="1" Minimum="300" Maximum="3000" Increment="50" Value="{Binding SstvTxCwIdFrequencyHz}" />
+                      <TextBlock Grid.Column="2" Text="WPM" Foreground="#7F879B" VerticalAlignment="Center" />
+                      <NumericUpDown Grid.Column="3" Minimum="5" Maximum="60" Increment="1" Value="{Binding SstvTxCwIdWpm}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
                       <Button Grid.Column="0" Content="Prepare TX" Command="{Binding PrepareSstvReplyTransmitCommand}" />
-                      <Button Grid.Column="1" Content="Send Now" Command="{Binding SendSstvReplyTransmitCommand}" />
+                      <Button Grid.Column="1" Content="Send Prepared" Command="{Binding SendSstvReplyTransmitCommand}" />
+                      <Button Grid.Column="2" Content="Stop" Command="{Binding StopSstvReplyTransmitCommand}" />
                     </Grid>
                     <TextBlock Text="{Binding SstvTransmitStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding SstvPreparedTransmitSummary}" Foreground="#AAB1C7" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding SstvPreparedTransmitPath}" Foreground="#7F879B" TextWrapping="Wrap" />
                   </StackPanel>
                 </Border>
@@ -159,11 +233,40 @@
           </Border>
 
           <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
-            <Grid>
+            <Grid RowDefinitions="*,Auto" RowSpacing="10">
               <Border Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
                 <Grid>
                   <Image Source="{Binding SstvReplyPreviewBitmap}" Stretch="Uniform" IsVisible="{Binding SstvReplyHasBaseImage}" />
                   <TextBlock Text="Choose a reply image to use as the base." Foreground="#6F778A" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" IsVisible="{Binding SstvReplyShowPlaceholder}" />
+                  <ItemsControl ItemsSource="{Binding SstvReplyImageOverlayItems}" IsVisible="{Binding SstvReplyHasBaseImage}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <Grid />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="models:SstvImageOverlayItemViewModel">
+                        <Border Background="#CC05080E"
+                                BorderBrush="#DDE7FF"
+                                BorderThickness="2"
+                                CornerRadius="4"
+                                Padding="2"
+                                Width="{Binding Width}"
+                                Height="{Binding Height}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                PointerPressed="OnImageOverlayPointerPressed"
+                                PointerMoved="OnImageOverlayPointerMoved"
+                                PointerReleased="OnImageOverlayPointerReleased"
+                                PointerCaptureLost="OnImageOverlayPointerCaptureLost">
+                          <Border.RenderTransform>
+                            <TranslateTransform X="{Binding X}" Y="{Binding Y}" />
+                          </Border.RenderTransform>
+                          <Image Source="{Binding Bitmap}" Stretch="UniformToFill" />
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
                   <ItemsControl ItemsSource="{Binding SstvReplyOverlayItems}" IsVisible="{Binding SstvReplyHasBaseImage}">
                     <ItemsControl.ItemsPanel>
                       <ItemsPanelTemplate>
@@ -196,6 +299,18 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
+                </Grid>
+              </Border>
+              <Border Grid.Row="1" Background="#101521" BorderBrush="#2A3142" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding SstvHasPreparedTransmitPreview}">
+                <Grid ColumnDefinitions="170,*" ColumnSpacing="10">
+                  <Border Grid.Column="0" Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="4" Padding="6" Height="126">
+                    <Image Source="{Binding SstvPreparedTransmitBitmap}" Stretch="Uniform" />
+                  </Border>
+                  <StackPanel Grid.Column="1" Spacing="5" VerticalAlignment="Center">
+                    <TextBlock Text="Prepared TX Preview" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="This rendered PNG is the exact image used to build the SSTV audio." Foreground="#AAB1C7" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding SstvPreparedTransmitImagePath}" Foreground="#7F879B" TextWrapping="Wrap" />
+                  </StackPanel>
                 </Grid>
               </Border>
             </Grid>

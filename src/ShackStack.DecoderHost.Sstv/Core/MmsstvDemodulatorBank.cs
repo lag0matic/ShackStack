@@ -11,9 +11,11 @@ internal sealed class MmsstvDemodulatorBank
     private readonly MmsstvPllDemodulator _pll;
     private readonly MmsstvFrequencyCounter _frequencyCounter;
     private readonly MmsstvHilbertDemodulator _hilbert;
+    private readonly int _sampleRate;
 
     public MmsstvDemodulatorBank(int sampleRate, bool narrow)
     {
+        _sampleRate = sampleRate;
         _pll = new MmsstvPllDemodulator(sampleRate);
         _frequencyCounter = new MmsstvFrequencyCounter(sampleRate);
         _hilbert = new MmsstvHilbertDemodulator(sampleRate, narrow);
@@ -24,7 +26,7 @@ internal sealed class MmsstvDemodulatorBank
     {
         _pll.SetWidth(narrow);
         _frequencyCounter.SetWidth(narrow);
-        _hilbert.SetWidth(SstvWorkingConfig.WorkingSampleRate, narrow);
+        _hilbert.SetWidth(_sampleRate, narrow);
     }
 
     public double ProcessRaw(double sample, MmsstvDemodulatorType type)

@@ -9,14 +9,16 @@ internal static class VisDetector
     private const double FreqVisStart = 1900.0;
     private const double DefaultToneShareThreshold = 0.45;
     private const double DefaultToneLeadThreshold = 1.20;
-    private const double StrictToneShareThreshold = 0.55;
-    private const double StrictToneLeadThreshold = 1.35;
+    private const double StrictToneShareThreshold = 0.50;
+    private const double StrictToneLeadThreshold = 1.15;
     private const double DefaultBitShareThreshold = 0.45;
     private const double DefaultBitLeadThreshold = 1.15;
-    private const double StrictBitShareThreshold = 0.55;
-    private const double StrictBitLeadThreshold = 1.35;
+    private const double StrictBitShareThreshold = 0.20;
+    private const double StrictBitLeadThreshold = 1.00;
     private static readonly int[] LegacyFrameMs = [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10];
     private static readonly int[] MmsstvFrameMs = [300, 10, 300, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30];
+    private static readonly double?[] LegacyFrameTones = [FreqVisStart, FreqSync, null, null, null, null, null, null, null, null, FreqSync, null];
+    private static readonly double?[] MmsstvFrameTones = [FreqVisStart, FreqSync, FreqVisStart, FreqSync, null, null, null, null, null, null, null, null, FreqSync];
     private static readonly int MaxPatternFrames10Ms = Math.Max(
         DurationToFrames10Ms(LegacyFrameMs),
         DurationToFrames10Ms(MmsstvFrameMs));
@@ -26,7 +28,8 @@ internal static class VisDetector
         int startFrameIndex,
         bool allowLegacyPattern,
         out int nextFrameIndex,
-        out SstvModeProfile? profile)
+        out SstvModeProfile? profile,
+        bool resolveAllPlannedModes = false)
     {
         profile = null;
         nextFrameIndex = startFrameIndex;
@@ -35,10 +38,12 @@ internal static class VisDetector
                 samples,
                 startSampleIndex,
                 MmsstvFrameMs,
+                MmsstvFrameTones,
                 dataStartIndex: 4,
                 stopIndex: 12,
                 stripParity: true,
                 strict: !allowLegacyPattern,
+                resolveAllPlannedModes,
                 out nextFrameIndex,
                 out profile))
         {
@@ -50,10 +55,12 @@ internal static class VisDetector
                 samples,
                 startSampleIndex,
                 LegacyFrameMs,
+                LegacyFrameTones,
                 dataStartIndex: 2,
                 stopIndex: 10,
                 stripParity: false,
                 strict: false,
+                resolveAllPlannedModes,
                 out nextFrameIndex,
                 out profile))
         {
@@ -69,15 +76,20 @@ internal static class VisDetector
         List<float> samples,
         int startSampleIndex,
         IReadOnlyList<int> frameDurationsMs,
+        IReadOnlyList<double?> frameTones,
         int dataStartIndex,
         int stopIndex,
         bool stripParity,
         bool strict,
+        bool resolveAllPlannedModes,
         out int nextFrameIndex,
         out SstvModeProfile? profile)
     {
         profile = null;
         nextFrameIndex = 0;
+        var bestScore = double.NegativeInfinity;
+        var bestNextFrameIndex = 0;
+        SstvModeProfile? bestProfile = null;
 
         var strideSamples = WorkingSampleRate * 10 / 1000;
         var maxStart = samples.Count - DurationToSamples(frameDurationsMs);
@@ -94,31 +106,28 @@ internal static class VisDetector
             }
 
             var cursor = sampleIndex + DurationToSamples(frameDurationsMs[0]);
-            if (!IsTone(samples, cursor, frameDurationsMs[1], FreqSync, strict))
+            // MMSSTV's real RX follows this as a continuous state machine. The
+            // 10 ms VIS break is easy to smear by a frame over RF, so do not let
+            // that one edge reject an otherwise parity-valid VIS frame.
+            if (frameDurationsMs[1] > 10 && !IsTone(samples, cursor, frameDurationsMs[1], FreqSync, strict))
             {
                 continue;
             }
 
             var bits = new int[8];
             cursor += DurationToSamples(frameDurationsMs[1]);
+            var valid = true;
             for (var i = 2; i < dataStartIndex; i++)
             {
-                cursor += DurationToSamples(frameDurationsMs[i]);
-            }
-
-            var valid = true;
-            for (var bitIndex = 0; bitIndex < bits.Length; bitIndex++)
-            {
-                if (TryClassifyBit(samples, cursor, frameDurationsMs[dataStartIndex + bitIndex], strict, out var bit))
-                {
-                    bits[bitIndex] = bit;
-                    cursor += DurationToSamples(frameDurationsMs[dataStartIndex + bitIndex]);
-                }
-                else
+                if (frameTones[i] is { } expectedTone
+                    && expectedTone != FreqSync
+                    && !IsTone(samples, cursor, frameDurationsMs[i], expectedTone, strict))
                 {
                     valid = false;
                     break;
                 }
+
+                cursor += DurationToSamples(frameDurationsMs[i]);
             }
 
             if (!valid)
@@ -126,33 +135,80 @@ internal static class VisDetector
                 continue;
             }
 
-            if (!IsTone(samples, cursor, frameDurationsMs[stopIndex], FreqSync, strict))
+            var bitStart = cursor;
+            for (var bitOffset = -strideSamples * 3; bitOffset <= strideSamples * 3 && valid; bitOffset += strideSamples)
+            {
+                cursor = bitStart + bitOffset;
+                if (cursor < 0)
+                {
+                    continue;
+                }
+
+                var score = 0.0;
+                for (var bitIndex = 0; bitIndex < bits.Length; bitIndex++)
+                {
+                    if (TryClassifyBit(samples, cursor, frameDurationsMs[dataStartIndex + bitIndex], strict, out var bit, out var bitScore))
+                    {
+                        bits[bitIndex] = bit;
+                        score += bitScore;
+                        cursor += DurationToSamples(frameDurationsMs[dataStartIndex + bitIndex]);
+                    }
+                    else
+                    {
+                        valid = false;
+                        break;
+                    }
+                }
+
+                if (!valid)
+                {
+                    valid = true;
+                    continue;
+                }
+
+                var visCode = 0;
+                for (var bitIndex = 0; bitIndex < bits.Length; bitIndex++)
+                {
+                    visCode |= bits[bitIndex] << bitIndex;
+                }
+
+                if (!HasValidEvenParity(visCode))
+                {
+                    continue;
+                }
+
+                if (stripParity)
+                {
+                    visCode &= 0x7f;
+                }
+
+                nextFrameIndex = Math.Max(0, (cursor + DurationToSamples(frameDurationsMs[stopIndex])) / strideSamples);
+                SstvModeProfile detected;
+                var resolved = resolveAllPlannedModes
+                    ? MmsstvModeCatalog.TryResolvePlannedVis(visCode, out detected)
+                    : MmsstvModeCatalog.TryResolveVis(visCode, out detected);
+                if (resolved)
+                {
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestProfile = detected;
+                        bestNextFrameIndex = nextFrameIndex;
+                    }
+                }
+            }
+
+            if (!valid)
             {
                 continue;
             }
+        }
 
-            var visCode = 0;
-            for (var bitIndex = 0; bitIndex < bits.Length; bitIndex++)
-            {
-                visCode |= bits[bitIndex] << bitIndex;
-            }
-
-            if (!HasValidEvenParity(visCode))
-            {
-                continue;
-            }
-
-            if (stripParity)
-            {
-                visCode &= 0x7f;
-            }
-
-            nextFrameIndex = Math.Max(0, (cursor + DurationToSamples(frameDurationsMs[stopIndex])) / strideSamples);
-            if (MmsstvModeCatalog.TryResolveVis(visCode, out var detected))
-            {
-                profile = detected;
-                return true;
-            }
+        if (bestProfile is not null)
+        {
+            profile = bestProfile;
+            nextFrameIndex = bestNextFrameIndex;
+            return true;
         }
 
         return false;
@@ -187,9 +243,10 @@ internal static class VisDetector
             && tonePower >= (strongestOther * leadThreshold);
     }
 
-    private static bool TryClassifyBit(List<float> samples, int startSampleIndex, int durationMs, bool strict, out int bit)
+    private static bool TryClassifyBit(List<float> samples, int startSampleIndex, int durationMs, bool strict, out int bit, out double score)
     {
         bit = 0;
+        score = 0.0;
         var block = SliceWindow(samples, startSampleIndex, durationMs);
         if (block.Length == 0)
         {
@@ -206,12 +263,14 @@ internal static class VisDetector
         var weakest = Math.Min(power1, power0);
         var shareThreshold = strict ? StrictBitShareThreshold : DefaultBitShareThreshold;
         var leadThreshold = strict ? StrictBitLeadThreshold : DefaultBitLeadThreshold;
-        if (total <= 0.0 || (strongest / total) < shareThreshold || strongest < (weakest * leadThreshold))
+        var share = total > 0.0 ? strongest / total : 0.0;
+        if (total <= 0.0 || share < shareThreshold || strongest < (weakest * leadThreshold))
         {
             return false;
         }
 
         bit = power1 >= power0 ? 1 : 0;
+        score = Math.Log((strongest + 1.0) / (weakest + 1.0)) + share;
         return true;
     }
 

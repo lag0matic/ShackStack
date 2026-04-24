@@ -5,7 +5,7 @@ namespace ShackStack.Core.Abstractions.Contracts;
 public interface ISstvDecoderHost
 {
     Task ConfigureAsync(SstvDecoderConfiguration configuration, CancellationToken ct);
-    Task SetManualAlignmentAsync(int manualSlant, int manualOffset, CancellationToken ct);
+    Task ApplyPostReceiveSlantCorrectionAsync(CancellationToken ct);
     Task ForceStartAsync(CancellationToken ct);
     Task StartAsync(CancellationToken ct);
     Task StopAsync(CancellationToken ct);

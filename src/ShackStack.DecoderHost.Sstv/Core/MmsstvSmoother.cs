@@ -39,6 +39,8 @@ internal sealed class MmsstvSmoother
         var size = Math.Max(1, (int)Math.Round(count));
         if (_buffer.Length == size)
         {
+            _writeIndex = 0;
+            Count = 0;
             return;
         }
 

@@ -636,26 +636,8 @@
                                         SelectedItem="{Binding SstvSelectedFrequency}"
                                         HorizontalAlignment="Stretch" />
                             </Grid>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Slant" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <Slider Grid.Column="1"
-                                      Minimum="-200"
-                                      Maximum="200"
-                                      Value="{Binding SstvManualSlant}"
-                                      TickFrequency="25"
-                                      HorizontalAlignment="Stretch" />
-                            </Grid>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Offset" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <Slider Grid.Column="1"
-                                      Minimum="-400"
-                                      Maximum="400"
-                                      Value="{Binding SstvManualOffset}"
-                                      TickFrequency="20"
-                                      HorizontalAlignment="Stretch" />
-                            </Grid>
                             <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                              <Button Content="Apply Align" Command="{Binding ApplySstvAlignmentCommand}" Margin="0,0,8,6" />
+                              <Button Content="Fix Slant" Command="{Binding ApplySstvPostReceiveSlantCommand}" Margin="0,0,8,6" />
                             </WrapPanel>
                             <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
                               <Button Content="Start RX" Command="{Binding StartSstvReceiveCommand}" Margin="0,0,8,6" />

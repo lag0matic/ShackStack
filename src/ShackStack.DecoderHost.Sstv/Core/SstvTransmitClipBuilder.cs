@@ -11,7 +11,7 @@ public sealed class SstvTransmitClipBuilder
         _sampleRate = sampleRate;
     }
 
-    public SstvTransmitClip Build(string mode, byte[] rgb24, int width, int height)
+    public SstvTransmitClip Build(string mode, byte[] rgb24, int width, int height, MmsstvTxOptions? options = null)
     {
         if (!MmsstvModeCatalog.TryResolve(mode, out var profile))
         {
@@ -28,7 +28,7 @@ public sealed class SstvTransmitClipBuilder
             : ResizeRgb24(rgb24, width, height, profile.Width, profile.Height);
 
         var tx = MmsstvTxConfiguration.Create(profile, _sampleRate);
-        var tonePlan = MmsstvTxSequenceBuilder.BuildImageTones(preparedRgb, tx);
+        var tonePlan = MmsstvTxSequenceBuilder.BuildImageTones(preparedRgb, tx, options);
         var modulator = new MmsstvTxModulator(_sampleRate);
         var pcm = AddSilencePadding(modulator.RenderQueuedPcm(tonePlan, tx), _sampleRate, LeadSilenceSeconds, TrailSilenceSeconds);
         var pcmBytes = new byte[pcm.Length * 2];

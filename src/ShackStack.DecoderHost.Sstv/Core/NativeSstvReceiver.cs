@@ -10,28 +10,43 @@ internal sealed class NativeSstvReceiver
     private const int SessionIdleSignalThreshold = 6;
     private const double MinChunkActivityForPendingVis = 0.010;
     private const double MinChunkActivityForSession = 0.006;
+    private const bool MmsstvAutoStopDefault = false;
+    private static readonly bool UseMmsstvFullRxForSessionStart =
+        !string.Equals(Environment.GetEnvironmentVariable("SHACKSTACK_SSTV_USE_MMSSTV_FULL_RX"), "0", StringComparison.Ordinal);
     private readonly MmsstvDemodState _demodState = new(WorkingSampleRate);
     private readonly MmsstvLevelTracker _levelTracker = new(WorkingSampleRate) { FastAgc = true };
     private readonly MmsstvSyncFilterBank _syncFilters = new(WorkingSampleRate);
     private readonly MmsstvDemodulatorBank _controlDemodulators = new(WorkingSampleRate, narrow: false);
-    private readonly MmsstvIirFilter _controlLowPass = new();
+    private readonly MmsstvFirFilter _controlBandPass = new();
     private readonly List<float> _samples = [];
     private readonly List<float> _controlSamples = [];
     private double _controlDcEstimate;
+    private double _controlPreviousInput;
+    private bool? _controlBandPassActive;
+    private bool? _controlBandPassSyncRestart;
     private int _signalLevelPercent;
     private int _sessionIdleSamples;
     private int? _pendingVisDetectedSample;
     private int _visSearchFrameIndex;
     private int _lastForceProbeSample;
     private int? _lastAvtStartSample;
+    private int? _lastForcedStartSample;
+    private int? _lastCatalogStartSample;
     private int? _pendingVisSearchOriginSample;
     private bool _configuredSessionStarted;
+    private bool _manualForceStartPending;
+    private bool _mmsstvRemoteSyncStart = true;
+    private bool _mmsstvSyncRestart = true;
+    private bool _mmsstvAutoSync = true;
     private double _lastChunkActivity;
     private double _lastRawChunkActivity;
     private string _detectedMode = "Auto Detect";
     private string? _latestImagePath;
+    private string? _lastMmsstvSlantDebug;
+    private string? _lastMmsstvSyncAdjustDebug;
     private SstvModeProfile? _pendingVisProfile;
     private NativeImageSession? _session;
+    private NativeImageSession? _lastCompletedSession;
     private string? _pendingSessionStatus;
     private string _syncStatus = "Listening for VIS / sync tones";
     private string _sessionOrigin = "idle";
@@ -39,40 +54,100 @@ internal sealed class NativeSstvReceiver
 
     public string ConfiguredMode { get; private set; } = "Auto Detect";
     public string FrequencyLabel { get; private set; } = "14.230 MHz USB";
-    public int ManualSlant { get; private set; }
-    public int ManualOffset { get; private set; }
     public bool IsRunning { get; private set; }
     public int SignalLevelPercent => _signalLevelPercent;
     public string DetectedMode => _detectedMode;
     public string? LatestImagePath => _latestImagePath;
+    public string? LastMmsstvSlantDebug => _lastMmsstvSlantDebug;
+    public string? LastMmsstvSyncAdjustDebug => _lastMmsstvSyncAdjustDebug;
     public string SyncStatus => _syncStatus;
     public string SessionOrigin => _sessionOrigin;
     public double LastSyncProminence => _lastSyncProminence;
+    public bool MmsstvRemoteSyncStart => _mmsstvRemoteSyncStart;
+    public bool MmsstvSyncRestart => _mmsstvSyncRestart;
+    public bool MmsstvAutoSync => _mmsstvAutoSync;
+    public bool MmsstvAutoStop { get; private set; } = MmsstvAutoStopDefault;
 
     public NativeSstvReceiver()
     {
-        _controlLowPass.MakeIir(2600.0, WorkingSampleRate, 2, 0, 0.0);
-        _controlLowPass.Clear();
+        ConfigureControlBandPass(activeReceive: false);
     }
 
-    public void Configure(string? mode, string? frequencyLabel, int? manualSlant, int? manualOffset)
+    public void Configure(string? mode, string? frequencyLabel)
     {
         ConfiguredMode = MmsstvModeResolver.NormalizeName(string.IsNullOrWhiteSpace(mode) ? "Auto Detect" : mode.Trim());
         FrequencyLabel = string.IsNullOrWhiteSpace(frequencyLabel) ? FrequencyLabel : frequencyLabel.Trim();
-        ManualSlant = manualSlant ?? 0;
-        ManualOffset = manualOffset ?? 0;
         _detectedMode = ConfiguredMode;
         _syncStatus = ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase)
             ? "Listening for VIS / sync tones"
             : $"Listening for {ConfiguredMode} sync";
-        _session?.SetManualAlignment(ManualSlant, ManualOffset);
     }
 
-    public void SetManualAlignment(int manualSlant, int manualOffset)
+    public void SetMmsstvRxControls(
+        bool remoteSyncStart,
+        bool syncRestart,
+        bool autoSync,
+        bool autoStop)
     {
-        ManualSlant = manualSlant;
-        ManualOffset = manualOffset;
-        _session?.SetManualAlignment(ManualSlant, ManualOffset);
+        _mmsstvRemoteSyncStart = remoteSyncStart;
+        _mmsstvSyncRestart = syncRestart;
+        _mmsstvAutoSync = autoSync;
+        MmsstvAutoStop = autoStop;
+        ApplyMmsstvRxControlFlags();
+        ConfigureControlBandPass(_session is not null || IsMmsstvAcquisitionActive());
+    }
+
+    public bool ApplyMmsstvPostReceiveSlantCorrection()
+    {
+        var session = _session ?? _lastCompletedSession;
+        if (session is null)
+        {
+            return false;
+        }
+
+        if (!session.ApplyMmsstvPostReceiveSlantCorrection(force: true))
+        {
+            _lastMmsstvSlantDebug = session.MmsstvSlantDebug;
+            return false;
+        }
+
+        _latestImagePath = session.ImagePath;
+        _lastMmsstvSlantDebug = session.MmsstvSlantDebug;
+        _detectedMode = session.Profile.Name;
+        return true;
+    }
+
+    public bool ApplyMmsstvPostReceiveSyncAdjustment()
+    {
+        var session = _session ?? _lastCompletedSession;
+        if (session is null)
+        {
+            return false;
+        }
+
+        var applied = session.ApplyMmsstvPostReceiveSyncAdjustment();
+        _latestImagePath = session.ImagePath;
+        _lastMmsstvSyncAdjustDebug = session.MmsstvSyncAdjustDebug;
+        _detectedMode = session.Profile.Name;
+        return applied;
+    }
+
+    public bool ApplyMmsstvLiveSyncSkip()
+    {
+        var session = _session;
+        if (session is null)
+        {
+            _lastMmsstvSyncAdjustDebug = "live-sync: no active SSTV receive session";
+            return false;
+        }
+
+        var applied = session.ApplyMmsstvLiveSyncSkip(out var debug);
+        _lastMmsstvSyncAdjustDebug = debug;
+        _detectedMode = session.Profile.Name;
+        _syncStatus = applied
+            ? $"Applied MMSSTV live sync skip for {session.Profile.Name}"
+            : $"MMSSTV live sync skip not applied for {session.Profile.Name}";
+        return applied;
     }
 
     public void Start() => IsRunning = true;
@@ -80,6 +155,7 @@ internal sealed class NativeSstvReceiver
     public void Stop()
     {
         IsRunning = false;
+        _manualForceStartPending = false;
         _demodState.ResetForStop();
     }
 
@@ -96,16 +172,26 @@ internal sealed class NativeSstvReceiver
         _controlSamples.Clear();
         _levelTracker.Init();
         _syncFilters.Clear();
-        _controlLowPass.Clear();
+        _controlBandPass.Clear();
         _controlDcEstimate = 0.0;
+        _controlPreviousInput = 0.0;
+        _controlBandPassActive = null;
+        _controlBandPassSyncRestart = null;
+        ConfigureControlBandPass(activeReceive: false);
         _visSearchFrameIndex = 0;
         _lastForceProbeSample = 0;
         _lastAvtStartSample = null;
+        _lastForcedStartSample = null;
+        _lastCatalogStartSample = null;
         _pendingVisSearchOriginSample = null;
         _configuredSessionStarted = false;
         _session = null;
+        _lastCompletedSession = null;
         _latestImagePath = null;
+        _lastMmsstvSlantDebug = null;
+        _lastMmsstvSyncAdjustDebug = null;
         _pendingVisProfile = null;
+        _manualForceStartPending = false;
         _detectedMode = ConfiguredMode;
         _pendingSessionStatus = null;
         _syncStatus = ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase)
@@ -114,6 +200,14 @@ internal sealed class NativeSstvReceiver
         _sessionOrigin = "idle";
         _lastSyncProminence = 0.0;
     }
+
+    private void ApplyMmsstvRxControlFlags()
+    {
+        _demodState.SyncRestart = _mmsstvSyncRestart ? 1 : 0;
+    }
+
+    private bool IsMmsstvRxUnlocked()
+        => MmsstvAutoStop || _mmsstvSyncRestart || _mmsstvAutoSync;
 
     public string ForceStartConfiguredMode()
     {
@@ -139,7 +233,21 @@ internal sealed class NativeSstvReceiver
 
         if (_samples.Count < Math.Max(WorkingSampleRate / 2, MmsstvTimingEngine.CalculateLineSamples(profile, WorkingSampleRate)))
         {
-            return $"Need more buffered audio before force-starting {profile.Name}";
+            _manualForceStartPending = true;
+            _syncStatus = $"Force start queued for {profile.Name}; buffering audio";
+            return $"Force start queued for {profile.Name}; buffering audio";
+        }
+
+        _manualForceStartPending = false;
+        if (UseMmsstvFullRxForSessionStart)
+        {
+            StartSession(
+                _samples.Count,
+                profile,
+                $"Manual force start {profile.Name}",
+                "manual-force-source",
+                0.0);
+            return $"Manual force start armed for {profile.Name} at the current sample";
         }
 
         var result = FindBestSyncStart(profile);
@@ -176,6 +284,7 @@ internal sealed class NativeSstvReceiver
         _signalLevelPercent = SstvAudioMath.EstimateSignalLevelPercent(controlSamples);
         _lastChunkActivity = AverageAbsolute(controlSamples);
         _lastRawChunkActivity = AverageAbsolute(monoWorkingSamples);
+        var chunkBaseSample = _samples.Count;
         if (monoWorkingSamples.Length > 0)
         {
             _samples.AddRange(monoWorkingSamples);
@@ -183,21 +292,40 @@ internal sealed class NativeSstvReceiver
             TrimWorkingSamples();
         }
 
-        if (_session is null)
+        if (_session is null
+            && ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_mmsstvRemoteSyncStart)
+            {
+                DetectVisIfPossible(out imageUpdated);
+                MaybeStartFromPendingVis();
+            }
+        }
+
+        var shouldRunMmsstvSyncScanner =
+            (_mmsstvRemoteSyncStart && _session is null && _pendingVisProfile is null)
+            || (_mmsstvRemoteSyncStart && _session is not null && IsMmsstvRxUnlocked() && _mmsstvSyncRestart);
+        if (shouldRunMmsstvSyncScanner)
         {
             ProcessEarlyDemodSyncModes(controlSamples);
         }
 
         if (_session is null
             && ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase)
+            && !IsMmsstvAcquisitionActive()
             && !ShouldHoldCurrentVisFollowUp())
         {
-            DetectVisIfPossible(out imageUpdated);
-            MaybeStartFromPendingVis();
+            if (_mmsstvRemoteSyncStart)
+            {
+                DetectVisIfPossible(out imageUpdated);
+                MaybeStartFromPendingVis();
+            }
         }
 
         MaybeForceStartAuto();
         MaybeForceStartFromConfig();
+        MaybeApplyPendingManualForceStart();
+        _session?.AppendLiveMmsstvSamples(monoWorkingSamples, chunkBaseSample);
         var decodeStatus = DecodeSessionLines(controlSamples, ref imageUpdated);
         if (!string.IsNullOrWhiteSpace(decodeStatus))
         {
@@ -229,6 +357,7 @@ internal sealed class NativeSstvReceiver
             return;
         }
 
+        ApplyMmsstvRxControlFlags();
         var toneBank = _demodState.SyncToneBank;
         _syncFilters.Retune(toneBank);
         ProcessEarlySyncModesSampleAccurate(controlSamples);
@@ -247,6 +376,7 @@ internal sealed class NativeSstvReceiver
                 tones.Tone1200,
                 tones.Tone1320,
                 tones.Tone1900,
+                tones.ToneFsk,
                 rawPll,
                 WorkingSampleRate,
                 1);
@@ -255,10 +385,21 @@ internal sealed class NativeSstvReceiver
             {
                 lastMeaningful = result;
 
-                if (result.Event is MmsstvDemodState.EarlySyncEvent.AvtEnterForcedStart
+                var eventSample = Math.Max(0, chunkBaseSample + i + 1);
+                if (result.Event == MmsstvDemodState.EarlySyncEvent.StartCatalogMode)
+                {
+                    _lastCatalogStartSample = eventSample;
+                }
+
+                if (result.Event is MmsstvDemodState.EarlySyncEvent.ApplyEnterForcedStart
+                    or MmsstvDemodState.EarlySyncEvent.AvtEnterForcedStart
                     or MmsstvDemodState.EarlySyncEvent.ForcedStartReady)
                 {
-                    _lastAvtStartSample = Math.Max(0, chunkBaseSample + i + 1);
+                    _lastForcedStartSample = eventSample;
+                    if (result.Event == MmsstvDemodState.EarlySyncEvent.AvtEnterForcedStart)
+                    {
+                        _lastAvtStartSample = eventSample;
+                    }
                 }
 
                 if (ShouldStopEarlySyncScan(result.Event))
@@ -292,7 +433,10 @@ internal sealed class NativeSstvReceiver
         switch (result.Event)
         {
             case MmsstvDemodState.EarlySyncEvent.StartCatalogMode:
-                TryStartCatalogMode(result.ModeId, "interval-sync", "Interval sync start");
+                if (_session is null)
+                {
+                    TryStartCatalogMode(result.ModeId, "interval-sync", "Interval sync start");
+                }
                 break;
 
             case MmsstvDemodState.EarlySyncEvent.LeadInTriggered:
@@ -304,7 +448,9 @@ internal sealed class NativeSstvReceiver
                 break;
 
             case MmsstvDemodState.EarlySyncEvent.LeadInLost:
-                _syncStatus = "1200 Hz lead-in lost";
+                _syncStatus = ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase)
+                    ? "Listening for VIS / sync tones"
+                    : $"Listening for {ConfiguredMode} sync";
                 break;
 
             case MmsstvDemodState.EarlySyncEvent.StopWaitComplete:
@@ -316,7 +462,7 @@ internal sealed class NativeSstvReceiver
                 break;
 
             case MmsstvDemodState.EarlySyncEvent.VisLostToneSeparation:
-                _syncStatus = "VIS decode lost tone separation";
+                _syncStatus = GetListeningStatus();
                 break;
 
             case MmsstvDemodState.EarlySyncEvent.VisEnterExtended:
@@ -327,6 +473,15 @@ internal sealed class NativeSstvReceiver
             case MmsstvDemodState.EarlySyncEvent.VisResolvedMode:
                 if (MmsstvModeCatalog.Profiles.FirstOrDefault(p => p.Id == result.ModeId) is { } profile)
                 {
+                    if (ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase)
+                        && TryResolveBufferedDirectVis(out var directProfile)
+                        && directProfile.Id != profile.Id)
+                    {
+                        profile = directProfile;
+                        _demodState.VisData = profile.VisCode;
+                        _demodState.NextMode = (int)profile.Id;
+                    }
+
                     _pendingVisProfile = profile;
                     _detectedMode = profile.Name;
                     _demodState.BeginApplyNextMode(WorkingSampleRate);
@@ -335,7 +490,7 @@ internal sealed class NativeSstvReceiver
                 break;
 
             case MmsstvDemodState.EarlySyncEvent.VisResetToAutoStart:
-                _syncStatus = "VIS decode reset";
+                _syncStatus = GetListeningStatus();
                 break;
 
             case MmsstvDemodState.EarlySyncEvent.ApplyEnterForcedStart:
@@ -377,11 +532,42 @@ internal sealed class NativeSstvReceiver
         }
     }
 
+    private bool TryResolveBufferedDirectVis(out SstvModeProfile profile)
+    {
+        profile = default!;
+        if (!VisDetector.TryDetect(
+                _samples,
+                Math.Max(0, _visSearchFrameIndex),
+                allowLegacyPattern: false,
+                out var nextFrameIndex,
+                out var directProfile)
+            || directProfile is null)
+        {
+            return false;
+        }
+
+        _visSearchFrameIndex = Math.Max(_visSearchFrameIndex, nextFrameIndex);
+        _pendingVisSearchOriginSample = nextFrameIndex * WorkingSampleRate * 10 / 1000;
+        _pendingVisDetectedSample = _samples.Count;
+        profile = directProfile;
+        return true;
+    }
+
     private void TryStartCatalogMode(SstvModeId modeId, string origin, string status)
     {
         var profile = MmsstvModeCatalog.Profiles.FirstOrDefault(p => p.Id == modeId && p.DecodePlanned);
         if (profile is null)
         {
+            return;
+        }
+
+        if (UseMmsstvFullRxForSessionStart)
+        {
+            if (_lastCatalogStartSample is int sourceStart)
+            {
+                StartSession(sourceStart, profile, $"{status} {profile.Name}", origin, 0.0);
+            }
+
             return;
         }
 
@@ -397,9 +583,15 @@ internal sealed class NativeSstvReceiver
     private void DetectVisIfPossible(out bool imageUpdated)
     {
         imageUpdated = false;
+        if (_pendingVisProfile is not null
+            && !ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         var allowLegacyVisPattern = !ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase);
         if (!VisDetector.TryDetect(
-                _controlSamples,
+                _samples,
                 _visSearchFrameIndex,
                 allowLegacyVisPattern,
                 out var nextFrameIndex,
@@ -424,7 +616,8 @@ internal sealed class NativeSstvReceiver
         _demodState.NextMode = (int)profile.Id;
 
         var result = FindBestSyncStart(profile, visSearchOrigin);
-        if (result is not null && result.Value.Prominence >= MinConfiguredSyncProminence)
+        if (result is not null
+            && result.Value.Prominence >= MinConfiguredSyncProminence)
         {
             StartSession(result.Value.StartSample, profile, $"VIS + sync lock {profile.Name}", "vis+sync", result.Value.Prominence);
             imageUpdated = false;
@@ -453,6 +646,19 @@ internal sealed class NativeSstvReceiver
         => _pendingVisProfile is not null
             && _demodState.SyncMode is not MmsstvDemodSyncMode.WaitingForSyncTrigger
             and not MmsstvDemodSyncMode.DecodeVis;
+
+    private bool IsMmsstvAcquisitionActive()
+        => _demodState.SyncMode is
+            MmsstvDemodSyncMode.Confirm1200Continuation or
+            MmsstvDemodSyncMode.DecodeVis or
+            MmsstvDemodSyncMode.DecodeExtendedVis or
+            MmsstvDemodSyncMode.ApplyNextMode or
+            MmsstvDemodSyncMode.ForcedStart or
+            MmsstvDemodSyncMode.AvtWaitFor1900 or
+            MmsstvDemodSyncMode.AvtAttackConfirm or
+            MmsstvDemodSyncMode.AvtExtendedVis or
+            MmsstvDemodSyncMode.AvtPeriodWait or
+            MmsstvDemodSyncMode.AvtRestart;
 
     private void ReplayBufferedAvtFollowUp(int startSample)
     {
@@ -527,6 +733,10 @@ internal sealed class NativeSstvReceiver
     {
         if (_session is not null
             || _pendingVisProfile is not null
+            || IsMmsstvAcquisitionActive()
+            || UseMmsstvFullRxForSessionStart
+            || !_mmsstvRemoteSyncStart
+            || !_mmsstvAutoSync
             || !ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase))
         {
             return;
@@ -588,7 +798,6 @@ internal sealed class NativeSstvReceiver
             }
             else
             {
-                _demodState.SyncMode = MmsstvDemodSyncMode.WaitingForSyncTrigger;
                 _sessionOrigin = "auto-probe";
                 _lastSyncProminence = best.Value.Prominence;
                 _syncStatus = !hasActivity
@@ -602,7 +811,10 @@ internal sealed class NativeSstvReceiver
 
     private void MaybeForceStartFromConfig()
     {
-        if (_session is not null || ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase))
+        if (_session is not null
+            || IsMmsstvAcquisitionActive()
+            || !_mmsstvRemoteSyncStart
+            || ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -637,6 +849,32 @@ internal sealed class NativeSstvReceiver
         }
     }
 
+    private void MaybeApplyPendingManualForceStart()
+    {
+        if (!_manualForceStartPending
+            || _session is not null
+            || ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase)
+            || !MmsstvModeCatalog.TryResolve(ConfiguredMode, out var profile)
+            || !profile.DecodePlanned)
+        {
+            return;
+        }
+
+        if (_samples.Count < Math.Max(WorkingSampleRate / 2, MmsstvTimingEngine.CalculateLineSamples(profile, WorkingSampleRate)))
+        {
+            _syncStatus = $"Force start queued for {profile.Name}; buffering audio";
+            return;
+        }
+
+        _manualForceStartPending = false;
+        StartSession(
+            _samples.Count,
+            profile,
+            $"Manual force start {profile.Name}",
+            "manual-force-source",
+            0.0);
+    }
+
     private string? DecodeSessionLines(float[] controlSamples, ref bool imageUpdated)
     {
         if (_session is null)
@@ -648,6 +886,7 @@ internal sealed class NativeSstvReceiver
         if (ShouldAutoStopSession(controlSamples, session))
         {
             session.PersistSnapshot();
+            _lastCompletedSession = session;
             var profileName = session.Profile.Name;
             EndActiveSession($"Listening for the next {ListeningTargetLabel()}", preserveDetectedMode: true);
             imageUpdated = true;
@@ -658,11 +897,13 @@ internal sealed class NativeSstvReceiver
         if (!string.IsNullOrWhiteSpace(status))
         {
             _latestImagePath = session.ImagePath;
+            _lastMmsstvSlantDebug = session.MmsstvSlantDebug;
             _syncStatus = $"Receiving {session.Profile.Name}";
             _sessionIdleSamples = 0;
             imageUpdated = true;
             if (session.Completed)
             {
+                _lastCompletedSession = session;
                 EndActiveSession($"Listening for the next {ListeningTargetLabel()}", preserveDetectedMode: true);
             }
             return status;
@@ -678,6 +919,7 @@ internal sealed class NativeSstvReceiver
         if (ShouldAutoStopSession(controlSamples, session))
         {
             session.PersistSnapshot();
+            _lastCompletedSession = session;
             var profileName = session.Profile.Name;
             EndActiveSession($"Listening for the next {ListeningTargetLabel()}", preserveDetectedMode: true);
             imageUpdated = true;
@@ -689,7 +931,12 @@ internal sealed class NativeSstvReceiver
 
     private void TryConsumeForcedStart()
     {
-        if (_session is not null || _demodState.SyncMode != MmsstvDemodSyncMode.ForcedStart)
+        if (_demodState.SyncMode != MmsstvDemodSyncMode.ForcedStart)
+        {
+            return;
+        }
+
+        if (_session is not null && !_mmsstvSyncRestart)
         {
             return;
         }
@@ -711,9 +958,18 @@ internal sealed class NativeSstvReceiver
             return;
         }
 
+        if (_session is not null)
+        {
+            _session.PersistSnapshot();
+            _lastCompletedSession = _session;
+            _session = null;
+            _configuredSessionStarted = false;
+        }
+
         if (profile.Id == SstvModeId.Avt90)
         {
             var avtStartSample = _lastAvtStartSample
+                ?? _lastForcedStartSample
                 ?? _pendingVisSearchOriginSample
                 ?? Math.Max(0, _samples.Count - MmsstvTimingEngine.CalculateLineSamples(profile, WorkingSampleRate));
             StartSession(
@@ -722,6 +978,26 @@ internal sealed class NativeSstvReceiver
                 $"Forced start {profile.Name}",
                 _pendingVisProfile is not null ? "vis+forced-start" : "forced-start",
                 _lastSyncProminence);
+            return;
+        }
+
+        if (UseMmsstvFullRxForSessionStart)
+        {
+            if (_lastForcedStartSample is int sourceStart)
+            {
+                StartSession(
+                    sourceStart,
+                    profile,
+                    $"Forced start {profile.Name}",
+                    _pendingVisProfile is not null ? "vis+forced-start" : "forced-start",
+                    _lastSyncProminence);
+            }
+            else
+            {
+                _demodState.ResetToAutoStart();
+                _syncStatus = $"Forced start did not have a source start sample for {profile.Name}";
+            }
+
             return;
         }
 
@@ -743,15 +1019,10 @@ internal sealed class NativeSstvReceiver
 
     private SyncCandidate? FindBestSyncStart(SstvModeProfile profile, int? anchorSample = null)
     {
-        var lineSamples = MmsstvTimingEngine.CalculateLineSamples(profile, WorkingSampleRate);
-        var syncSamples = Math.Max(8, (int)Math.Round(profile.SyncMs * WorkingSampleRate / 1000.0));
-        var syncAnchorOffset = 0;
-        if (profile.Family == "scottie")
-        {
-            var gapSamples = Math.Max(1, (int)Math.Round(profile.GapMs * WorkingSampleRate / 1000.0));
-            var scanSamples = (int)Math.Round(profile.ScanMs * WorkingSampleRate / 1000.0);
-            syncAnchorOffset = (scanSamples * 2) + (gapSamples * 2);
-        }
+        var geometry = MmsstvPictureGeometry.Create(profile, WorkingSampleRate);
+        var lineSamples = geometry.LineSamples;
+        var syncSamples = Math.Max(8, geometry.SyncSamples);
+        var syncAnchorOffset = geometry.SyncStartSamples;
 
         if (_controlSamples.Count < lineSamples * 12)
         {
@@ -782,7 +1053,7 @@ internal sealed class NativeSstvReceiver
             syncSamples * 8,
             (lineSamples / 2) + syncAnchorOffset + (syncSamples * 2));
         var searchLimit = anchorSample.HasValue
-            ? Math.Min(_controlSamples.Count - syncSamples - 1, anchorSample.Value + anchorLookahead)
+            ? _controlSamples.Count - syncSamples - 1
             : Math.Min(_controlSamples.Count - syncSamples - 1, searchOrigin + (lineSamples * 2));
         if (searchLimit <= searchOrigin)
         {
@@ -848,13 +1119,24 @@ internal sealed class NativeSstvReceiver
         _demodState.PrepareForModeStart(true);
         _demodState.NextMode = (int)profile.Id;
         _demodState.VisData = profile.VisCode;
-        _session = new NativeImageSession(profile, startSample, _demodState);
-        _session.SetManualAlignment(ManualSlant, ManualOffset);
+        _session = new NativeImageSession(
+            profile,
+            startSample,
+            _demodState,
+            _mmsstvSyncRestart,
+            _mmsstvAutoSync,
+            MmsstvAutoStop);
+        _lastCompletedSession = null;
+        _session.SeedMmsstvFullRx([.. _samples]);
         _demodState.EnterStartedMode();
         _configuredSessionStarted = true;
+        _manualForceStartPending = false;
         _pendingVisProfile = null;
         _pendingVisSearchOriginSample = null;
+        _lastForcedStartSample = null;
+        _lastCatalogStartSample = null;
         _latestImagePath = _session.ImagePath;
+        _lastMmsstvSlantDebug = _session.MmsstvSlantDebug;
         _detectedMode = profile.Name;
         _pendingSessionStatus = status;
         _syncStatus = $"Receiving {profile.Name}";
@@ -966,6 +1248,8 @@ internal sealed class NativeSstvReceiver
         _configuredSessionStarted = false;
         ClearPendingVis();
         _lastAvtStartSample = null;
+        _lastForcedStartSample = null;
+        _lastCatalogStartSample = null;
         _lastForceProbeSample = 0;
         _sessionIdleSamples = 0;
         _sessionOrigin = "idle";
@@ -973,8 +1257,12 @@ internal sealed class NativeSstvReceiver
         _demodState.Reset();
         _levelTracker.Init();
         _syncFilters.Clear();
-        _controlLowPass.Clear();
+        _controlBandPass.Clear();
         _controlDcEstimate = 0.0;
+        _controlPreviousInput = 0.0;
+        _controlBandPassActive = null;
+        _controlBandPassSyncRestart = null;
+        ConfigureControlBandPass(activeReceive: false);
         _samples.Clear();
         _controlSamples.Clear();
         _visSearchFrameIndex = 0;
@@ -990,6 +1278,9 @@ internal sealed class NativeSstvReceiver
         => ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase)
             ? "VIS / sync tones"
             : $"{ConfiguredMode} sync";
+
+    private string GetListeningStatus()
+        => $"Listening for {ListeningTargetLabel()}";
 
     private void TrimWorkingSamples()
     {
@@ -1023,6 +1314,7 @@ internal sealed class NativeSstvReceiver
             return [];
         }
 
+        ConfigureControlBandPass(_session is not null || IsMmsstvAcquisitionActive());
         var control = new float[monoWorkingSamples.Length];
         for (var i = 0; i < monoWorkingSamples.Length; i++)
         {
@@ -1040,9 +1332,35 @@ internal sealed class NativeSstvReceiver
     private float ApplyControlFrontEnd(float sample)
     {
         _controlDcEstimate = (_controlDcEstimate * 0.995) + (sample * 0.005);
-        var dcBlocked = sample - _controlDcEstimate;
-        var bandLimited = _controlLowPass.Process(dcBlocked * 16384.0) / 16384.0;
+        var scaled = SstvAudioMath.ToMmsstvPcmScale((float)(sample - _controlDcEstimate));
+        var lowPassed = (scaled + _controlPreviousInput) * 0.5;
+        _controlPreviousInput = scaled;
+        var bandLimited = _controlBandPass.Process(lowPassed) / 16384.0;
         return (float)Math.Clamp(bandLimited, -1.0, 1.0);
+    }
+
+    private void ConfigureControlBandPass(bool activeReceive)
+    {
+        if (_controlBandPassActive == activeReceive && _controlBandPassSyncRestart == _mmsstvSyncRestart)
+        {
+            return;
+        }
+
+        var tapCount = Math.Max(1, (int)(24.0 * WorkingSampleRate / 11025.0));
+        var lowCutHz = activeReceive
+            ? (_mmsstvSyncRestart ? 1100.0 : 1200.0)
+            : 400.0;
+        var highCutHz = activeReceive ? 2600.0 : 2500.0;
+        _controlBandPass.Create(
+            tapCount,
+            MmsstvFirFilter.FilterType.BandPass,
+            WorkingSampleRate,
+            lowCutHz,
+            highCutHz,
+            20.0,
+            1.0);
+        _controlBandPassActive = activeReceive;
+        _controlBandPassSyncRestart = _mmsstvSyncRestart;
     }
 
     private static double DominantTone(ReadOnlySpan<float> samples)

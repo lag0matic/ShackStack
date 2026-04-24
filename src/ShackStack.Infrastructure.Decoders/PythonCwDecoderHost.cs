@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 using ShackStack.Core.Abstractions.Contracts;
 using ShackStack.Core.Abstractions.Models;
@@ -12,22 +10,18 @@ public sealed class PythonCwDecoderHost : ICwDecoderHost, IDisposable
     private readonly IAudioService _audioService;
     private readonly SimpleSubject<CwDecoderTelemetry> _telemetry = new();
     private readonly SimpleSubject<CwDecodeChunk> _decode = new();
-    private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly IDisposable _audioSubscription;
-    private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly DecoderWorkerLaunch _workerLaunch;
+    private readonly DecoderWorkerProcess _workerProcess;
+    private readonly DecoderAudioPump _audioPump;
 
-    private Process? _process;
-    private StreamWriter? _stdin;
-    private Task? _stdoutTask;
-    private Task? _stderrTask;
     private CwDecoderConfiguration _configuration = new(700, 20, "Sidecar");
     private bool _isRunning;
 
     public PythonCwDecoderHost(IAudioService audioService)
     {
         _audioService = audioService;
-        _workerLaunch = BundledDecoderWorkerLocator.Resolve("cw_sidecar_worker");
+        _workerProcess = new DecoderWorkerProcess(BundledDecoderWorkerLocator.Resolve("cw_sidecar_worker"));
+        _audioPump = new DecoderAudioPump(SendAudioAsync, () => _isRunning);
 
         _audioSubscription = _audioService.ReceiveStream.Subscribe(new Observer<AudioBuffer>(buffer =>
         {
@@ -36,12 +30,12 @@ public sealed class PythonCwDecoderHost : ICwDecoderHost, IDisposable
                 return;
             }
 
-            _ = SendAudioAsync(buffer);
+            _audioPump.Enqueue(buffer);
         }));
 
         _telemetry.OnNext(new CwDecoderTelemetry(
             false,
-            _workerLaunch.Exists ? "Python CW worker ready to launch" : $"Worker missing: {_workerLaunch.DisplayPath}",
+            _workerProcess.Exists ? "Python CW worker ready to launch" : $"Worker missing: {_workerProcess.DisplayPath}",
             "Python CW sidecar",
             0.0,
             _configuration.PitchHz,
@@ -75,7 +69,7 @@ public sealed class PythonCwDecoderHost : ICwDecoderHost, IDisposable
     public async Task StopAsync(CancellationToken ct)
     {
         _isRunning = false;
-        if (_process is null || _process.HasExited)
+        if (!_workerProcess.IsStarted)
         {
             return;
         }
@@ -85,7 +79,7 @@ public sealed class PythonCwDecoderHost : ICwDecoderHost, IDisposable
 
     public async Task ResetAsync(CancellationToken ct)
     {
-        if (_process is null || _process.HasExited)
+        if (!_workerProcess.IsStarted)
         {
             return;
         }
@@ -95,11 +89,11 @@ public sealed class PythonCwDecoderHost : ICwDecoderHost, IDisposable
 
     private Task EnsureProcessAsync(CancellationToken ct)
     {
-        if (!_workerLaunch.Exists)
+        if (!_workerProcess.Exists)
         {
             _telemetry.OnNext(new CwDecoderTelemetry(
                 false,
-                $"Worker missing: {_workerLaunch.DisplayPath}",
+                $"Worker missing: {_workerProcess.DisplayPath}",
                 "Python CW sidecar",
                 0.0,
                 _configuration.PitchHz,
@@ -107,103 +101,62 @@ public sealed class PythonCwDecoderHost : ICwDecoderHost, IDisposable
             return Task.CompletedTask;
         }
 
-        if (_process is not null && !_process.HasExited && _stdin is not null)
+        return _workerProcess.EnsureStartedAsync(HandleStdoutLineAsync, HandleStderrLineAsync, () => OnWorkerExited(null, EventArgs.Empty), ct);
+    }
+
+    private Task HandleStdoutLineAsync(string line)
+    {
+        try
         {
-            return Task.CompletedTask;
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+            var type = root.TryGetProperty("type", out var typeEl) ? typeEl.GetString() : null;
+            if (string.Equals(type, "telemetry", StringComparison.OrdinalIgnoreCase))
+            {
+                _telemetry.OnNext(new CwDecoderTelemetry(
+                    root.TryGetProperty("isRunning", out var runningEl) && runningEl.GetBoolean(),
+                    root.TryGetProperty("status", out var statusEl) ? statusEl.GetString() ?? string.Empty : string.Empty,
+                    root.TryGetProperty("activeWorker", out var workerEl) ? workerEl.GetString() ?? "Python CW sidecar" : "Python CW sidecar",
+                    root.TryGetProperty("confidence", out var confEl) ? confEl.GetDouble() : 0.0,
+                    root.TryGetProperty("estimatedPitchHz", out var pitchEl) ? pitchEl.GetInt32() : _configuration.PitchHz,
+                    root.TryGetProperty("estimatedWpm", out var wpmEl) ? wpmEl.GetInt32() : _configuration.Wpm));
+            }
+            else if (string.Equals(type, "decode", StringComparison.OrdinalIgnoreCase))
+            {
+                _decode.OnNext(new CwDecodeChunk(
+                    root.TryGetProperty("text", out var textEl) ? textEl.GetString() ?? string.Empty : string.Empty,
+                    root.TryGetProperty("confidence", out var confEl) ? confEl.GetDouble() : 0.0));
+            }
+        }
+        catch (Exception ex)
+        {
+            _telemetry.OnNext(new CwDecoderTelemetry(
+                _isRunning,
+                $"Decoder output parse error: {ex.Message}",
+                "Python CW sidecar",
+                0.0,
+                _configuration.PitchHz,
+                _configuration.Wpm));
         }
 
-        var startInfo = BundledDecoderWorkerLocator.CreateStartInfo(_workerLaunch);
-
-        _process = new Process
-        {
-            StartInfo = startInfo,
-            EnableRaisingEvents = true,
-        };
-        _process.Exited += OnWorkerExited;
-        _process.Start();
-        _stdin = _process.StandardInput;
-        _stdin.AutoFlush = true;
-        _stdoutTask = Task.Run(ReadStdoutLoopAsync, ct);
-        _stderrTask = Task.Run(ReadStderrLoopAsync, ct);
         return Task.CompletedTask;
     }
 
-    private async Task ReadStdoutLoopAsync()
+    private Task HandleStderrLineAsync(string line)
     {
-        if (_process is null)
-        {
-            return;
-        }
-
-        while (await _process.StandardOutput.ReadLineAsync().ConfigureAwait(false) is { } line)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            try
-            {
-                using var doc = JsonDocument.Parse(line);
-                var root = doc.RootElement;
-                var type = root.TryGetProperty("type", out var typeEl) ? typeEl.GetString() : null;
-                if (string.Equals(type, "telemetry", StringComparison.OrdinalIgnoreCase))
-                {
-                    _telemetry.OnNext(new CwDecoderTelemetry(
-                        root.TryGetProperty("isRunning", out var runningEl) && runningEl.GetBoolean(),
-                        root.TryGetProperty("status", out var statusEl) ? statusEl.GetString() ?? string.Empty : string.Empty,
-                        root.TryGetProperty("activeWorker", out var workerEl) ? workerEl.GetString() ?? "Python CW sidecar" : "Python CW sidecar",
-                        root.TryGetProperty("confidence", out var confEl) ? confEl.GetDouble() : 0.0,
-                        root.TryGetProperty("estimatedPitchHz", out var pitchEl) ? pitchEl.GetInt32() : _configuration.PitchHz,
-                        root.TryGetProperty("estimatedWpm", out var wpmEl) ? wpmEl.GetInt32() : _configuration.Wpm));
-                }
-                else if (string.Equals(type, "decode", StringComparison.OrdinalIgnoreCase))
-                {
-                    _decode.OnNext(new CwDecodeChunk(
-                        root.TryGetProperty("text", out var textEl) ? textEl.GetString() ?? string.Empty : string.Empty,
-                        root.TryGetProperty("confidence", out var confEl) ? confEl.GetDouble() : 0.0));
-                }
-            }
-            catch (Exception ex)
-            {
-                _telemetry.OnNext(new CwDecoderTelemetry(
-                    _isRunning,
-                    $"Decoder output parse error: {ex.Message}",
-                    "Python CW sidecar",
-                    0.0,
-                    _configuration.PitchHz,
-                    _configuration.Wpm));
-            }
-        }
+        _telemetry.OnNext(new CwDecoderTelemetry(
+            _isRunning,
+            $"Worker stderr: {line}",
+            "Python CW sidecar",
+            0.0,
+            _configuration.PitchHz,
+            _configuration.Wpm));
+        return Task.CompletedTask;
     }
 
-    private async Task ReadStderrLoopAsync()
+    private async Task SendAudioAsync(AudioBuffer buffer, CancellationToken ct)
     {
-        if (_process is null)
-        {
-            return;
-        }
-
-        while (await _process.StandardError.ReadLineAsync().ConfigureAwait(false) is { } line)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            _telemetry.OnNext(new CwDecoderTelemetry(
-                _isRunning,
-                $"Worker stderr: {line}",
-                "Python CW sidecar",
-                0.0,
-                _configuration.PitchHz,
-                _configuration.Wpm));
-        }
-    }
-
-    private async Task SendAudioAsync(AudioBuffer buffer)
-    {
-        if (_process is null || _process.HasExited || _stdin is null)
+        if (!_workerProcess.IsStarted)
         {
             return;
         }
@@ -216,28 +169,11 @@ public sealed class PythonCwDecoderHost : ICwDecoderHost, IDisposable
             sampleRate = buffer.SampleRate,
             channels = buffer.Channels,
             samples = Convert.ToBase64String(bytes),
-        }, CancellationToken.None).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
     }
 
-    private async Task SendMessageAsync<T>(T payload, CancellationToken ct)
-    {
-        if (_stdin is null)
-        {
-            return;
-        }
-
-        var line = JsonSerializer.Serialize(payload, _jsonOptions);
-        await _writeGate.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            await _stdin.WriteLineAsync(line).ConfigureAwait(false);
-            await _stdin.FlushAsync().ConfigureAwait(false);
-        }
-        finally
-        {
-            _writeGate.Release();
-        }
-    }
+    private Task SendMessageAsync<T>(T payload, CancellationToken ct)
+        => _workerProcess.SendJsonAsync(payload, ct);
 
     private void OnWorkerExited(object? sender, EventArgs e)
     {
@@ -255,7 +191,7 @@ public sealed class PythonCwDecoderHost : ICwDecoderHost, IDisposable
     {
         _isRunning = false;
         _audioSubscription.Dispose();
-        DecoderHostProcessCleanup.Shutdown(_process, _stdin, _stdoutTask, _stderrTask, _writeGate);
-        _writeGate.Dispose();
+        _audioPump.Dispose();
+        _workerProcess.Dispose();
     }
 }

@@ -1,14 +1,14 @@
 namespace ShackStack.DecoderHost.Sstv.Core;
 
 /// <summary>
-/// Harvest scaffold for the AFC behavior embedded in CSSTVDEM::SyncFreq.
-/// This keeps the original concepts visible while we port the real lock math
-/// over from MMSSTV.
+/// Direct port of the AFC lock behavior in CSSTVDEM::InitAFC/SyncFreq.
 /// </summary>
 internal sealed class MmsstvAfcTracker
 {
     private readonly MmsstvSmoother _average = new();
     private readonly MmsstvSmoother _lockAverage = new();
+    private int _afcBegin;
+    private int _afcEnd;
 
     public int AfcCount { get; private set; }
     public double AfcData { get; private set; }
@@ -24,6 +24,7 @@ internal sealed class MmsstvAfcTracker
     public double SyncValue { get; set; }
     public double BandwidthScale { get; set; }
     public double ToneOffsetHz { get; private set; }
+    public int ToneOffsetHzInt => (int)ToneOffsetHz;
 
     public void Reset()
     {
@@ -43,10 +44,12 @@ internal sealed class MmsstvAfcTracker
         HighBound = parameters.HighBound;
         SyncValue = parameters.SyncValue;
         BandwidthScale = parameters.BandwidthScale;
+        _afcBegin = parameters.AfcBeginSamples;
+        _afcEnd = parameters.AfcEndSamples;
         AfcGuard = parameters.Guard;
         AfcInterval = parameters.Interval;
-        _average.SetCount(2);
-        _lockAverage.SetCount(_lockAverage.Capacity);
+        _average.SetCount(parameters.AverageSamples);
+        _lockAverage.SetCount(parameters.LockAverageSamples);
         AfcData = SyncValue;
         AfcLock = SyncValue;
         AfcFlag = 0;
@@ -56,15 +59,15 @@ internal sealed class MmsstvAfcTracker
         ToneOffsetHz = 0.0;
     }
 
-    public void Update(double demodValue, int afcBegin, int afcEnd)
+    public void Update(double demodValue)
     {
         var adjusted = demodValue - 128.0;
         if (adjusted <= LowBound && adjusted >= HighBound)
         {
-            if (AfcDisable == 0 && AfcCount >= afcBegin && AfcCount <= afcEnd)
+            if (AfcDisable == 0 && AfcCount >= _afcBegin && AfcCount <= _afcEnd)
             {
                 AfcData = _average.Average(adjusted);
-                if (AfcCount == afcEnd)
+                if (AfcCount == _afcEnd)
                 {
                     if (AfcGuard != 0)
                     {
@@ -87,7 +90,7 @@ internal sealed class MmsstvAfcTracker
         }
         else
         {
-            if (AfcCount >= afcBegin && AfcGuard > 0)
+            if (AfcCount >= _afcBegin && AfcGuard > 0)
             {
                 AfcGuard--;
                 if (AfcGuard == 0)

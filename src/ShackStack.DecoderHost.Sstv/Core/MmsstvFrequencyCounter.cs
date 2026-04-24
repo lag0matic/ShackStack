@@ -7,6 +7,7 @@ namespace ShackStack.DecoderHost.Sstv.Core;
 /// </summary>
 internal sealed class MmsstvFrequencyCounter
 {
+    private readonly MmsstvIirFilter _outputFilter = new();
     public int Mode { get; set; }
     public int Count { get; private set; }
     public double CrossingCount { get; private set; }
@@ -64,13 +65,18 @@ internal sealed class MmsstvFrequencyCounter
         NormalizedFrequency = -CenterFrequency / HalfBandwidth;
         Output = 0.0;
         Timer = SampleTimer;
+        _outputFilter.Clear();
     }
 
     public void SetSampleFrequency(double sampleFrequency)
     {
         SampleFrequency = sampleFrequency;
         SampleTimer = Math.Max(1, (int)Math.Round(sampleFrequency));
+        CalcOutputFilter();
     }
+
+    public void CalcOutputFilter()
+        => _outputFilter.MakeIir(OutputCutoffHz, SampleFrequency, OutputOrder, 0, 0.0);
 
     public double Process(double sample)
     {
@@ -127,7 +133,11 @@ internal sealed class MmsstvFrequencyCounter
             }
         }
 
-        Output = NormalizedFrequency;
+        Output = Type switch
+        {
+            0 => _outputFilter.Process(NormalizedFrequency),
+            _ => NormalizedFrequency,
+        };
         PreviousSample = sample;
         Count++;
         return -(Output * 16384.0);

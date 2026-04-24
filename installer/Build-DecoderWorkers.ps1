@@ -3,7 +3,7 @@ param()
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$pythonRoot = Join-Path $repoRoot "src\ShackStack.DecoderHost\Python"
+$pythonRoot = Join-Path $repoRoot "src\ShackStack.DecoderWorkers.Python"
 $toolsRoot = Join-Path $pythonRoot "Tools"
 $referencesRoot = Join-Path $pythonRoot "references"
 $distRoot = Join-Path $repoRoot "src\ShackStack.Desktop\DecoderWorkers"
@@ -14,20 +14,33 @@ $specRoot = Join-Path $pyiRoot "spec"
 $workers = @(
     "cw_sidecar_worker",
     "rtty_sidecar_worker",
-    "sstv_sidecar_worker",
     "wefax_sidecar_worker",
     "wsjtx_sidecar_worker"
 )
 
 $gplWsjtxProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplWsjtx\ShackStack.DecoderHost.GplWsjtx.csproj"
-
-if (Test-Path $distRoot) {
-    Remove-Item -Recurse -Force $distRoot
-}
+$nativeSstvProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.Sstv\ShackStack.DecoderHost.Sstv.csproj"
 
 New-Item -ItemType Directory -Force -Path $distRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $workRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $specRoot | Out-Null
+
+$targetsToClean = @(
+    "cw_sidecar_worker",
+    "rtty_sidecar_worker",
+    "wefax_sidecar_worker",
+    "wsjtx_sidecar_worker",
+    "wsjtx_gpl_sidecar",
+    "sstv_native_sidecar",
+    "sstv_sidecar_worker"
+)
+
+foreach ($target in $targetsToClean) {
+    $targetPath = Join-Path $distRoot $target
+    if (Test-Path $targetPath) {
+        Remove-Item -Recurse -Force $targetPath
+    }
+}
 
 foreach ($worker in $workers) {
     $scriptPath = Join-Path $toolsRoot "$worker.py"
@@ -72,6 +85,15 @@ if (Test-Path $gplWsjtxProject) {
         -r win-x64 `
         --self-contained false `
         -o $gplDist
+}
+
+if (Test-Path $nativeSstvProject) {
+    $sstvDist = Join-Path $distRoot "sstv_native_sidecar"
+    & dotnet publish $nativeSstvProject `
+        -c Release `
+        -r win-x64 `
+        --self-contained false `
+        -o $sstvDist
 }
 
 Write-Host "Decoder workers built into $distRoot"

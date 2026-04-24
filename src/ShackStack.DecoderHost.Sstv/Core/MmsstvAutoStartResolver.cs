@@ -17,19 +17,17 @@ internal static class MmsstvAutoStartResolver
 
     public static bool TryResolveSyncIntervalCandidate(int rawSyncStartValue, out SstvModeId modeId)
     {
-        modeId = default;
-        if (rawSyncStartValue <= 0)
+        if (!MmsstvModeMap.TryResolveSyncStartValue(rawSyncStartValue, out modeId))
         {
             return false;
         }
 
-        var candidate = (SstvModeId)(rawSyncStartValue - 1);
-        if (!Enum.IsDefined(candidate) || !CanStartFromSyncInterval(candidate))
+        if (!CanStartFromSyncInterval(modeId))
         {
+            modeId = default;
             return false;
         }
 
-        modeId = candidate;
         return true;
     }
 }

@@ -5,6 +5,11 @@ namespace ShackStack.DecoderHost.Sstv.Core;
 
 internal static class SstvAudioMath
 {
+    // MMSSTV's CSSTVDEM::Do receives signed PCM-scale samples and marks
+    // overflow outside +/-24578. Keep that boundary explicit at the sidecar
+    // decoder seam so the source-shaped demod path is not fed normalized audio.
+    public const double MmsstvPcmPeak = 24578.0;
+
     public static float[] DecodeBase64FloatSamples(string base64)
     {
         var bytes = Convert.FromBase64String(base64);
@@ -42,6 +47,12 @@ internal static class SstvAudioMath
         return mono;
     }
 
+    public static double ToMmsstvPcmScale(float normalizedSample)
+        => Math.Clamp(normalizedSample, -1.0f, 1.0f) * MmsstvPcmPeak;
+
+    public static float FromMmsstvPcmScale(double pcmSample)
+        => (float)Math.Clamp(pcmSample / MmsstvPcmPeak, -1.0, 1.0);
+
     public static float[] Resample(float[] input, int sampleRate, int targetRate)
     {
         if (input.Length == 0 || sampleRate <= 0 || sampleRate == targetRate)
@@ -59,8 +70,8 @@ internal static class SstvAudioMath
 
         for (var i = 0; i < outputLength; i++)
         {
-            var sourcePosition = i * (input.Length - 1) / (double)Math.Max(1, outputLength - 1);
-            var left = (int)Math.Floor(sourcePosition);
+            var sourcePosition = (double)i * (input.Length - 1) / Math.Max(1, outputLength - 1);
+            var left = Math.Clamp((int)Math.Floor(sourcePosition), 0, input.Length - 1);
             var right = Math.Min(input.Length - 1, left + 1);
             var fraction = (float)(sourcePosition - left);
             output[i] = input[left] + ((input[right] - input[left]) * fraction);

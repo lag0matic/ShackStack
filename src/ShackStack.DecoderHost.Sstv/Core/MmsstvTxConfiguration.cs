@@ -18,7 +18,9 @@ internal sealed record MmsstvTxConfiguration(
     {
         var pictureHeight = profile.Family switch
         {
+            _ when profile.Id == SstvModeId.Robot24 => 120,
             "robot36" => 240,
+            "robot" => 240,
             "avt" => 240,
             _ => profile.Height,
         };

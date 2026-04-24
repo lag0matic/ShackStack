@@ -147,17 +147,17 @@
                          BorderThickness="1">
                   <ListBox.Styles>
                     <Style Selector="ListBoxItem">
-                      <Setter Property="Padding" Value="0" />
+                      <Setter Property="Padding" Value="2" />
                       <Setter Property="Margin" Value="0" />
                       <Setter Property="MinHeight" Value="0" />
                       <Setter Property="Background" Value="Transparent" />
                       <Setter Property="BorderThickness" Value="0" />
                     </Style>
                     <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                      <Setter Property="Background" Value="Transparent" />
+                      <Setter Property="Background" Value="#18263A" />
                     </Style>
                     <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                      <Setter Property="Background" Value="Transparent" />
+                      <Setter Property="Background" Value="#28507A" />
                     </Style>
                   </ListBox.Styles>
                   <ListBox.ItemTemplate>

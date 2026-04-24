@@ -7,7 +7,7 @@ namespace ShackStack.DecoderHost.Sstv.Core;
 /// </summary>
 internal sealed class MmsstvSyncToneBank
 {
-    private const double FskSpaceHz = 1900.0;
+    private const double FskSpaceHz = 2100.0;
 
     public double Tone1080Hz { get; private set; }
     public double Tone1200Hz { get; private set; }
@@ -15,19 +15,21 @@ internal sealed class MmsstvSyncToneBank
     public double Tone1900Hz { get; private set; }
     public double ToneFskHz { get; private set; }
     public int AfcFrequencyOffsetHz { get; private set; } = int.MinValue;
+    public double ToneOffsetHz { get; private set; } = double.NaN;
 
-    public void InitTone(int deltaFrequencyHz)
+    public void InitTone(int deltaFrequencyHz, double toneOffsetHz = 0.0)
     {
-        if (AfcFrequencyOffsetHz == deltaFrequencyHz)
+        if (AfcFrequencyOffsetHz == deltaFrequencyHz && ToneOffsetHz.Equals(toneOffsetHz))
         {
             return;
         }
 
-        Tone1080Hz = 1080.0 + deltaFrequencyHz;
-        Tone1200Hz = 1200.0 + deltaFrequencyHz;
-        Tone1320Hz = 1320.0 + deltaFrequencyHz;
-        Tone1900Hz = 1900.0 + deltaFrequencyHz;
-        ToneFskHz = FskSpaceHz + deltaFrequencyHz;
+        Tone1080Hz = 1080.0 + deltaFrequencyHz + toneOffsetHz;
+        Tone1200Hz = 1200.0 + deltaFrequencyHz + toneOffsetHz;
+        Tone1320Hz = 1320.0 + deltaFrequencyHz + toneOffsetHz;
+        Tone1900Hz = 1900.0 + deltaFrequencyHz + toneOffsetHz;
+        ToneFskHz = FskSpaceHz + deltaFrequencyHz + toneOffsetHz;
         AfcFrequencyOffsetHz = deltaFrequencyHz;
+        ToneOffsetHz = toneOffsetHz;
     }
 }

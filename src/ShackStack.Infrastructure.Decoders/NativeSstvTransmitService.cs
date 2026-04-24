@@ -8,10 +8,23 @@ public sealed class NativeSstvTransmitService : ISstvTransmitService
 {
     private readonly SstvTransmitClipBuilder _builder = new();
 
-    public Task<Pcm16AudioClip> BuildTransmitClipAsync(string mode, byte[] rgb24, int width, int height, CancellationToken ct)
+    public Task<Pcm16AudioClip> BuildTransmitClipAsync(
+        string mode,
+        byte[] rgb24,
+        int width,
+        int height,
+        SstvTransmitOptions? options,
+        CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var clip = _builder.Build(mode, rgb24, width, height);
+        var nativeOptions = options is null
+            ? null
+            : new MmsstvTxOptions(
+                options.CwIdEnabled,
+                options.CwIdText,
+                options.CwIdFrequencyHz,
+                options.CwIdWpm);
+        var clip = _builder.Build(mode, rgb24, width, height, nativeOptions);
         return Task.FromResult(new Pcm16AudioClip(clip.PcmBytes, clip.SampleRate, clip.Channels));
     }
 }

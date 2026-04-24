@@ -44,13 +44,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISstvDecoderHost>(provider =>
         {
             var audio = provider.GetRequiredService<IAudioService>();
-            var forcePython = string.Equals(
-                Environment.GetEnvironmentVariable("SHACKSTACK_SSTV_PYTHON"),
-                "1",
-                StringComparison.OrdinalIgnoreCase);
-            return forcePython
-                ? new PythonSstvDecoderHost(audio)
-                : new NativeSstvDecoderHost(audio);
+            return new NativeSstvDecoderHost(audio);
         });
         services.AddSingleton<ISstvTransmitService, NativeSstvTransmitService>();
         services.AddSingleton<IWefaxDecoderHost, PythonWefaxDecoderHost>();

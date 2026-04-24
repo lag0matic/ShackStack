@@ -122,6 +122,7 @@ internal sealed class MmsstvDemodState
         SyncInterval1 = new MmsstvSyncInterval(sampleRate);
         SyncInterval2 = new MmsstvSyncInterval(sampleRate);
         SyncInterval3 = new MmsstvSyncInterval(sampleRate);
+        SyncInterval3.Narrow = true;
         Reset();
     }
 
@@ -399,7 +400,7 @@ internal sealed class MmsstvDemodState
     public bool TryResolveWideIntervalStart(out SstvModeId modeId)
     {
         var rawSyncStartValue = SyncInterval1.SyncStart();
-        if (rawSyncStartValue > 0 && TryResolveSyncIntervalAutoStart(rawSyncStartValue - 1, out modeId))
+        if (rawSyncStartValue > 0 && TryResolveSyncIntervalAutoStart(rawSyncStartValue, out modeId))
         {
             return true;
         }
@@ -411,7 +412,7 @@ internal sealed class MmsstvDemodState
     public bool TryResolveLimitedIntervalStart(out SstvModeId modeId)
     {
         var rawSyncStartValue = SyncInterval2.SyncStart();
-        if (rawSyncStartValue > 0 && TryResolveSyncIntervalAutoStart(rawSyncStartValue - 1, out modeId))
+        if (rawSyncStartValue > 0 && TryResolveSyncIntervalAutoStart(rawSyncStartValue, out modeId))
         {
             return true;
         }
@@ -423,7 +424,7 @@ internal sealed class MmsstvDemodState
     public bool TryResolveNarrowIntervalStart(out SstvModeId modeId)
     {
         var rawSyncStartValue = SyncInterval3.SyncStart();
-        if (rawSyncStartValue > 0 && TryResolveSyncIntervalAutoStart(rawSyncStartValue - 1, out modeId))
+        if (rawSyncStartValue > 0 && TryResolveSyncIntervalAutoStart(rawSyncStartValue, out modeId))
         {
             return true;
         }
@@ -434,16 +435,17 @@ internal sealed class MmsstvDemodState
 
     public bool AdvanceNarrow1900PhaseChain(
         double tone1200,
-        double tone1300,
+        double toneFsk,
         double tone1900,
         out SstvModeId narrowMode)
     {
         narrowMode = default;
         var tone1900Dominant =
             tone1900 > tone1200 &&
-            tone1900 > tone1300 &&
+            tone1900 > toneFsk &&
             tone1900 > SyncSenseThresholdNarrow &&
-            (tone1900 - tone1200) >= SyncSenseThresholdNarrow;
+            (tone1900 - tone1200) >= SyncSenseThresholdNarrow &&
+            (tone1900 - toneFsk) >= SyncSenseThreshold;
 
         if (tone1900Dominant)
         {
@@ -844,6 +846,7 @@ internal sealed class MmsstvDemodState
         double tone1200,
         double tone1300,
         double tone1900,
+        double toneFsk,
         double rawPllValue,
         int sampleRate,
         int consumedSamples)
@@ -858,7 +861,7 @@ internal sealed class MmsstvDemodState
         switch (SyncMode)
         {
             case MmsstvDemodSyncMode.WaitingForSyncTrigger:
-                if (AdvanceNarrow1900PhaseChain(tone1200, tone1300, tone1900, out var narrowMode))
+                if (AdvanceNarrow1900PhaseChain(tone1200, toneFsk, tone1900, out var narrowMode))
                 {
                     return new(EarlySyncEvent.StartCatalogMode, narrowMode);
                 }

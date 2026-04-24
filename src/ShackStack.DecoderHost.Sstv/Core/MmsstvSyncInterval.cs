@@ -1,9 +1,7 @@
 namespace ShackStack.DecoderHost.Sstv.Core;
 
 /// <summary>
-/// Harvest scaffold for MMSSTV's CSYNCINT.
-/// Keeps the original responsibilities visible while we port behavior over
-/// piece by piece instead of re-inventing a different sync model.
+/// Source-faithful port of MMSSTV's CSYNCINT interval tracking.
 /// </summary>
 internal sealed class MmsstvSyncInterval
 {
@@ -48,7 +46,11 @@ internal sealed class MmsstvSyncInterval
 
     public int SyncCheckSub(int averageMatch)
     {
-        var modeId = (SstvModeId)averageMatch;
+        if (!MmsstvModeMap.TryToModeId((MmsstvModeCode)averageMatch, out var modeId))
+        {
+            return 0;
+        }
+
         var endIndex = modeId switch
         {
             SstvModeId.Sc2_60 or SstvModeId.Sc2_120 => -1,
@@ -111,9 +113,10 @@ internal sealed class MmsstvSyncInterval
                     var center = _parameters.GetModeSamples(profile.Id);
                     if (center != 0 && probe > center - tolerance && probe < center + tolerance)
                     {
-                        if (SyncCheckSub((int)profile.Id) != 0)
+                        var sourceCode = MmsstvModeMap.ToMmsstvCode(profile.Id);
+                        if (SyncCheckSub((int)sourceCode) != 0)
                         {
-                            return (int)profile.Id + 1;
+                            return (int)sourceCode + 1;
                         }
                     }
                 }
@@ -150,7 +153,6 @@ internal sealed class MmsstvSyncInterval
 
     public void SyncMax(int level)
     {
-        // TODO: port CSYNCINT::SyncMax.
         if (level > SyncIntervalMax)
         {
             SyncIntervalMax = level;

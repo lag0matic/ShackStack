@@ -23,6 +23,20 @@ internal static class SstvHarnessGenerator
             throw new InvalidOperationException("Harness currently generates common MMSSTV color families only.");
         }
 
+        if (!string.Equals(Environment.GetEnvironmentVariable("SHACKSTACK_HARNESS_USE_NATIVE_TX"), "0", StringComparison.Ordinal))
+        {
+            var tx = MmsstvTxConfiguration.Create(profile, sampleRate);
+            var tonePlan = MmsstvTxSequenceBuilder.BuildImageTones(rgb24, tx);
+            var modulator = new MmsstvTxModulator(sampleRate);
+            var payload = modulator.RenderQueuedPcm(tonePlan, tx);
+
+            var nativeSamples = new List<float>(sampleRate * 120);
+            AppendSilence(nativeSamples, sampleRate, 0.15);
+            nativeSamples.AddRange(payload);
+            AppendSilence(nativeSamples, sampleRate, 0.25);
+            return [.. nativeSamples];
+        }
+
         _phase = 0.0;
         var samples = new List<float>(sampleRate * 120);
         AppendSilence(samples, sampleRate, 0.15);

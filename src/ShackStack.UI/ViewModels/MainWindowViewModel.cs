@@ -8,227 +8,15 @@ using Avalonia.Threading;
 using ShackStack.Core.Abstractions.Contracts;
 using ShackStack.Core.Abstractions.Models;
 using ShackStack.Core.Abstractions.Utilities;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
-using DrawingBitmap = System.Drawing.Bitmap;
-using DrawingBrush = System.Drawing.SolidBrush;
-using DrawingColor = System.Drawing.Color;
-using DrawingFont = System.Drawing.Font;
-using DrawingFontStyle = System.Drawing.FontStyle;
-using DrawingGraphics = System.Drawing.Graphics;
-using DrawingImageFormat = System.Drawing.Imaging.ImageFormat;
-using DrawingImageLockMode = System.Drawing.Imaging.ImageLockMode;
-using DrawingPixelFormat = System.Drawing.Imaging.PixelFormat;
-using DrawingRectangle = System.Drawing.Rectangle;
-using DrawingRectangleF = System.Drawing.RectangleF;
-using DrawingStringAlignment = System.Drawing.StringAlignment;
-using DrawingStringFormat = System.Drawing.StringFormat;
-using DrawingTextRenderingHint = System.Drawing.Text.TextRenderingHint;
 
 namespace ShackStack.UI.ViewModels;
-
-public sealed record ModePreset(string Label, RadioMode Mode, IBrush Brush);
-public sealed record BandPreset(string Label, long FrequencyHz, IBrush Brush);
-public sealed record FrequencyMarker(string Label);
-public sealed record FilterPreset(string Label, int Slot, IBrush Brush);
-public sealed record BandConditionCellViewModel(string BandLabel, string DayCondition, IBrush DayBrush, string NightCondition, IBrush NightBrush);
-public sealed record SstvImageItem(string Label, string Path, DateTime Timestamp, Bitmap Bitmap);
-public sealed record SstvOverlayTemplateFile(string Name, IReadOnlyList<SstvOverlayTemplateItemFile> Items);
-public sealed record SstvOverlayTemplateItemFile(string Text, double X, double Y, double FontSize, string FontFamily, string Color);
-public sealed record SstvTemplateItem(string Name, string Path, DateTime Timestamp);
-    public sealed record WefaxImageItem(string Label, string Path, DateTime Timestamp, Bitmap Bitmap);
-public sealed record WsjtxMessageItem(
-        DateTime TimestampUtc,
-        string TimeText,
-        string ModeText,
-        string SnrText,
-        string DtText,
-        string HzText,
-        string MessageText,
-        int FrequencyOffsetHz,
-        int SnrDb,
-        double DtSeconds,
-        bool IsDirectedToMe,
-        bool IsCq,
-        bool IsOwnTransmit,
-        string RowBackground,
-        string AccentBrush,
-        string MessageBrush,
-        string MetaBrush,
-        string BadgeText,
-        bool ShowBadge,
-        string BadgeBackground,
-        string BadgeForeground);
-public sealed record WsjtxSuggestedMessageItem(string Label, string MessageText, string Intent);
-public sealed record WsjtxActiveSession(string OtherCall, int FrequencyOffsetHz, string ModeLabel);
-public sealed record WsjtxReplyAutomationModeItem(string Key, string Label, string Summary);
-public sealed record LongwaveSpotSummaryItem(
-    string Id,
-    string ActivatorCallsign,
-    string ParkReference,
-    double FrequencyKhz,
-    string Mode,
-    string Band,
-    string? Comments,
-    string? SpotterCallsign,
-    DateTime SpottedAtUtc,
-    bool IsLogged)
-{
-    public string FrequencyText => $"{FrequencyKhz / 1000d:0.000} MHz";
-    public string AgeText => $"{Math.Max(0, (int)(DateTime.UtcNow - SpottedAtUtc).TotalMinutes)}m ago";
-    public string SummaryText => string.IsNullOrWhiteSpace(Comments)
-        ? $"{ActivatorCallsign} @ {ParkReference}"
-        : $"{ActivatorCallsign} @ {ParkReference}  |  {Comments}";
-    public string BadgeText => IsLogged ? "LOGGED" : Mode;
-    public string BadgeBackground => IsLogged ? "#3B4A68" : "#1E6F5C";
-    public string BadgeForeground => IsLogged ? "#DDE7FF" : "#F4FFF8";
-    public string RowBackground => IsLogged ? "#111723" : "#0C1017";
-    public string MessageForeground => IsLogged ? "#8F9BB4" : "#E5ECFF";
-}
-public sealed record LongwaveLogbookItem(string Id, string Name, string OperatorCallsign, string? Notes)
-{
-    public string DisplayText => Name;
-}
-
-public sealed record LongwaveRecentContactItem(
-    string Id,
-    string StationCallsign,
-    string Mode,
-    string Band,
-    string TimeText,
-    string? ParkReference,
-    double FrequencyKhz)
-{
-    public string FrequencyText => $"{FrequencyKhz / 1000d:0.000} MHz";
-    public string SummaryText => string.IsNullOrWhiteSpace(ParkReference)
-        ? $"{StationCallsign}  |  {Band} {Mode}"
-        : $"{StationCallsign}  |  {Band} {Mode}  |  {ParkReference}";
-}
-
-public sealed class SstvOverlayItemViewModel : ObservableObject
-{
-    private string _text = "W8STR DE KE9CRR - 599!";
-    private double _x = 160;
-    private double _y = 210;
-    private double _fontSize = 18;
-    private string _fontFamilyName = "Segoe UI";
-    private int _red = 245;
-    private int _green = 247;
-    private int _blue = 255;
-
-    public string Text
-    {
-        get => _text;
-        set => SetProperty(ref _text, value);
-    }
-
-    public double X
-    {
-        get => _x;
-        set => SetProperty(ref _x, value);
-    }
-
-    public double Y
-    {
-        get => _y;
-        set => SetProperty(ref _y, value);
-    }
-
-    public double FontSize
-    {
-        get => _fontSize;
-        set => SetProperty(ref _fontSize, value);
-    }
-
-    public string FontFamilyName
-    {
-        get => _fontFamilyName;
-        set
-        {
-            if (SetProperty(ref _fontFamilyName, value))
-            {
-                OnPropertyChanged(nameof(PreviewFontFamily));
-            }
-        }
-    }
-
-    public int Red
-    {
-        get => _red;
-        set
-        {
-            var clamped = Math.Clamp(value, 0, 255);
-            if (SetProperty(ref _red, clamped))
-            {
-                OnColorChanged();
-            }
-        }
-    }
-
-    public int Green
-    {
-        get => _green;
-        set
-        {
-            var clamped = Math.Clamp(value, 0, 255);
-            if (SetProperty(ref _green, clamped))
-            {
-                OnColorChanged();
-            }
-        }
-    }
-
-    public int Blue
-    {
-        get => _blue;
-        set
-        {
-            var clamped = Math.Clamp(value, 0, 255);
-            if (SetProperty(ref _blue, clamped))
-            {
-                OnColorChanged();
-            }
-        }
-    }
-
-    public string ColorHex => $"#{Red:X2}{Green:X2}{Blue:X2}";
-
-    public IBrush PreviewBrush => new SolidColorBrush(Color.FromRgb((byte)Red, (byte)Green, (byte)Blue));
-
-    public FontFamily PreviewFontFamily => new(FontFamilyName);
-
-    public void SetColorFromHex(string? hex)
-    {
-        if (string.IsNullOrWhiteSpace(hex))
-        {
-            return;
-        }
-
-        try
-        {
-            var parsed = Color.Parse(hex);
-            _red = parsed.R;
-            _green = parsed.G;
-            _blue = parsed.B;
-            OnPropertyChanged(nameof(Red));
-            OnPropertyChanged(nameof(Green));
-            OnPropertyChanged(nameof(Blue));
-            OnColorChanged();
-        }
-        catch
-        {
-        }
-    }
-
-    private void OnColorChanged()
-    {
-        OnPropertyChanged(nameof(ColorHex));
-        OnPropertyChanged(nameof(PreviewBrush));
-    }
-}
 
 public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
@@ -275,6 +63,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IDisposable? _wsjtxDecodeSubscription;
     private Pcm16AudioClip? _wsjtxPreparedTransmitClip;
     private Pcm16AudioClip? _sstvPreparedTransmitClip;
+    private string? _sstvPreparedTransmitFingerprint;
+    private string? _sstvPreparedTransmitMode;
+    private string? _sstvPreparedTransmitCwIdSummary;
+    private double _sstvPreparedTransmitDurationSeconds;
+    private CancellationTokenSource? _sstvTxCts;
     private bool _wsjtxSlotSendInFlight;
     private bool _sstvTxSendInFlight;
     private WsjtxModeTelemetry? _lastWsjtxTelemetry;
@@ -338,6 +131,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         Directory.CreateDirectory(_sstvTemplateDirectory);
         Directory.CreateDirectory(_sstvTxDirectory);
         Directory.CreateDirectory(_wefaxReceivedDirectory);
+        AttachSstvReplyLayoutChangeTracking(SstvReplyOverlayItems);
+        AttachSstvReplyLayoutChangeTracking(SstvReplyImageOverlayItems);
         Theme = settings.Ui.Theme;
         WindowWidth = settings.Ui.WindowWidth;
         WindowHeight = settings.Ui.WindowHeight;
@@ -594,7 +389,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 Dispatcher.UIThread.Post(() =>
                 {
                     SstvRxStatus = telemetry.Status;
-                    SstvSessionNotes = $"{telemetry.ActiveWorker}  |  Signal {telemetry.SignalLevelPercent}%  |  Mode {telemetry.DetectedMode}  |  Slant {SstvManualSlant}  |  Offset {SstvManualOffset}";
+                    SstvSessionNotes = $"{telemetry.ActiveWorker}  |  Signal {telemetry.SignalLevelPercent}%  |  Mode {telemetry.DetectedMode}";
                 });
             }));
 
@@ -1082,10 +877,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string rttySelectedFrequency = "14.080 MHz USB";
 
     [ObservableProperty]
-    private string rttyRxStatus = "RTTY receiver scaffold ready";
+    private string rttyRxStatus = "RTTY receiver ready";
 
     [ObservableProperty]
-    private string rttySessionNotes = "Select a common shift/baud profile, then start receive. This is the live worker scaffold for the real RTTY demod path.";
+    private string rttySessionNotes = "Select a common shift/baud profile, then start receive.";
 
     [ObservableProperty]
     private string rttyDecodedText = string.Empty;
@@ -1117,7 +912,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private WsjtxReplyAutomationModeItem selectedWsjtxReplyAutomationMode = new("stage", "Auto Stage Only", "Auto-select and stage the next reply for the active FT8/FT4 conversation lane.");
 
     [ObservableProperty]
-    private string wsjtxRxStatus = "WSJT-style digital scaffold ready";
+    private string wsjtxRxStatus = "WSJT-style digital receiver ready";
 
     [ObservableProperty]
     private string wsjtxClockStatus = "Checking system clock discipline...";
@@ -1445,12 +1240,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string sstvSelectedMode = "Auto Detect";
 
     [ObservableProperty]
-    private int sstvManualSlant;
-
-    [ObservableProperty]
-    private int sstvManualOffset;
-
-    [ObservableProperty]
     private IReadOnlyList<string> sstvFrequencyOptions =
     [
         "14.230 MHz USB-D",
@@ -1463,13 +1252,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string sstvSelectedFrequency = "14.230 MHz USB-D";
 
     [ObservableProperty]
-    private string sstvRxStatus = "Receiver scaffold ready";
+    private string sstvRxStatus = "SSTV receiver ready";
 
     [ObservableProperty]
     private string sstvImageStatus = "No image captured yet";
 
     [ObservableProperty]
-    private string sstvSessionNotes = "Auto Detect is the recommended default. Lock a mode only when you know the signal family. Correction tools are preview-side for now.";
+    private string sstvSessionNotes = "Auto Detect is the recommended default. Lock a mode only when you know it; Force Start is for late joins or missing VIS.";
 
     [ObservableProperty]
     private Bitmap? sstvPreviewBitmap;
@@ -1498,6 +1287,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private SstvOverlayItemViewModel? selectedSstvReplyOverlayItem;
 
     [ObservableProperty]
+    private ObservableCollection<SstvImageOverlayItemViewModel> sstvReplyImageOverlayItems = [];
+
+    [ObservableProperty]
+    private SstvImageOverlayItemViewModel? selectedSstvReplyImageOverlayItem;
+
+    [ObservableProperty]
     private ObservableCollection<SstvTemplateItem> sstvReplyLayoutTemplates = [];
 
     [ObservableProperty]
@@ -1510,11 +1305,34 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string sstvReplyTemplateStatus = "Save a layout template to reuse overlay positioning later.";
 
     [ObservableProperty]
+    private string? sstvReplyPresetKind;
+
+    [ObservableProperty]
+    private IReadOnlyList<SstvReplyLayoutPreset> sstvReplyLayoutPresets =
+    [
+        new("CQ Card", "cq"),
+        new("QSL + RX", "qsl-rx"),
+        new("Signal Report", "report"),
+        new("TNX / 73", "73"),
+        new("Station ID", "id"),
+    ];
+
+    [ObservableProperty]
     private IReadOnlyList<string> sstvReplyTemplates =
     [
-        "W8STR DE KE9CRR - 599!",
-        "TNX SSTV - 73 DE KE9CRR",
-        "QSL W8STR DE KE9CRR",
+        "CQ SSTV DE %m",
+        "QSL SSTV - TNX DE %m",
+        "SSTV REPORT: RSV 595",
+        "TNX QSO - 73 DE %m",
+        "%m %g",
+    ];
+
+    [ObservableProperty]
+    private IReadOnlyList<string> sstvTxModeHints =
+    [
+        "Martin/Scottie: common live QSOs and repeaters.",
+        "Robot: short, robust exchanges when time matters.",
+        "PD: higher-detail picture modes; slower but clean.",
     ];
 
     [ObservableProperty]
@@ -1525,18 +1343,54 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         "Scottie 1",
         "Scottie 2",
         "Scottie DX",
+        "Robot 24",
         "Robot 36",
+        "Robot 72",
+        "PD 50",
+        "PD 90",
         "PD 120",
+        "PD 160",
+        "PD 180",
+        "PD 240",
+        "PD 290",
     ];
 
     [ObservableProperty]
     private string sstvSelectedTxMode = "Martin 1";
 
     [ObservableProperty]
+    private bool sstvTxCwIdEnabled;
+
+    [ObservableProperty]
+    private string sstvTxCwIdText = "DE %m";
+
+    [ObservableProperty]
+    private int sstvTxCwIdFrequencyHz = 1000;
+
+    [ObservableProperty]
+    private int sstvTxCwIdWpm = 28;
+
+    [ObservableProperty]
     private string sstvTransmitStatus = "Prepare a reply image to stage SSTV TX.";
 
     [ObservableProperty]
     private string sstvPreparedTransmitPath = "No prepared SSTV TX artifact.";
+
+    [ObservableProperty]
+    private Bitmap? sstvPreparedTransmitBitmap;
+
+    [ObservableProperty]
+    private string sstvPreparedTransmitImagePath = "No prepared TX image.";
+
+    [ObservableProperty]
+    private string sstvPreparedTransmitSummary = "No prepared SSTV TX image/audio.";
+
+    [ObservableProperty]
+    private bool sstvTxIsSending;
+
+    public bool SstvHasPreparedTransmitPreview => SstvPreparedTransmitBitmap is not null;
+
+    public bool SstvHasPreparedTransmitClip => _sstvPreparedTransmitClip is not null;
 
     public Bitmap? SstvSelectedReceivedBitmap => SelectedSstvReceivedImage?.Bitmap;
 
@@ -2232,8 +2086,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _ = _rttyDecoderHost.ResetAsync(CancellationToken.None);
         }
 
-        RttyRxStatus = "RTTY receiver scaffold ready";
-        RttySessionNotes = "Select a common shift/baud profile, then start receive. This is the live worker scaffold for the real RTTY demod path.";
+        RttyRxStatus = "RTTY receiver ready";
+        RttySessionNotes = "Select a common shift/baud profile, then start receive.";
         RttyDecodedText = string.Empty;
     }
 
@@ -2291,7 +2145,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WsjtxTransmitArmedLocal = false;
         WsjtxAwaitingReply = false;
         WsjtxTransmitArmStatus = "Nothing armed.";
-        WsjtxRxStatus = "WSJT-style digital scaffold ready";
+        WsjtxRxStatus = "WSJT-style digital receiver ready";
         WsjtxClockStatus = "Checking system clock discipline...";
         WsjtxCycleDisplay = $"{WsjtxSelectedMode}  |  {GetWsjtxCycleLengthSeconds(WsjtxSelectedMode):0.#}s cycle  |  Next --.-s";
         WsjtxSessionNotes = DescribeWsjtxMode(WsjtxSelectedMode);
@@ -2659,7 +2513,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WsjtxTransmitArmStatus = WsjtxPreparedTransmit is null
             ? "Nothing armed."
             : "Prepared TX retained; not armed.";
-        WsjtxRxStatus = "TX scaffold disarmed";
+        WsjtxRxStatus = "TX disarmed";
     }
 
     private void UpsertWsjtxMessage(WsjtxDecodeMessage message)
@@ -3318,9 +3172,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _ = _sstvDecoderHost.ResetAsync(CancellationToken.None);
         }
 
-        SstvRxStatus = "Receiver scaffold ready";
+        SstvRxStatus = "SSTV receiver ready";
         SstvImageStatus = "No image captured yet";
-        SstvSessionNotes = "Auto Detect is the recommended default. Lock a mode only when you know the signal family. Correction tools are preview-side for now.";
+        SstvSessionNotes = "Auto Detect is the recommended default. Lock a mode only when you know it; Force Start is for late joins or missing VIS.";
         UpdateSstvPreview(null);
     }
 
@@ -3390,7 +3244,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (!string.IsNullOrWhiteSpace(template) && SelectedSstvReplyOverlayItem is not null)
         {
-            SelectedSstvReplyOverlayItem.Text = template;
+            SstvReplyPresetKind = null;
+            SelectedSstvReplyOverlayItem.Text = ExpandSstvReplyMacro(template);
             SstvTransmitStatus = "Reply text changed; prepare TX when ready.";
         }
     }
@@ -3418,34 +3273,178 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var stem = $"{timestamp:yyyyMMdd_HHmmss}_{SstvSelectedTxMode.ToLowerInvariant().Replace(' ', '_')}";
             var pngPath = Path.Combine(_sstvTxDirectory, $"{stem}.png");
             var wavPath = Path.Combine(_sstvTxDirectory, $"{stem}.wav");
-            var rgb24 = RenderCurrentSstvReplyRgb24(
+            var preparedFingerprint = BuildSstvTransmitFingerprint();
+            var preparedMode = SstvSelectedTxMode;
+            var transmitOptions = BuildSstvTransmitOptions();
+            var rgb24 = SstvReplyRenderer.RenderRgb24(
                 SelectedSstvReplyBaseImage.Path,
                 SstvReplyOverlayItems,
+                SstvReplyImageOverlayItems,
                 pngPath,
                 out var width,
                 out var height);
 
             _sstvPreparedTransmitClip = await _sstvTransmitService
-                .BuildTransmitClipAsync(SstvSelectedTxMode, rgb24, width, height, CancellationToken.None)
+                .BuildTransmitClipAsync(
+                    preparedMode,
+                    rgb24,
+                    width,
+                    height,
+                    transmitOptions,
+                    CancellationToken.None)
                 .ConfigureAwait(false);
 
-            WriteWaveFile(wavPath, _sstvPreparedTransmitClip);
+            SstvReplyRenderer.WriteWaveFile(wavPath, _sstvPreparedTransmitClip);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                _sstvPreparedTransmitFingerprint = preparedFingerprint;
+                _sstvPreparedTransmitMode = preparedMode;
+                _sstvPreparedTransmitCwIdSummary = transmitOptions.CwIdEnabled
+                    ? $"CW ID {transmitOptions.CwIdText} @ {transmitOptions.CwIdFrequencyHz} Hz/{transmitOptions.CwIdWpm} WPM"
+                    : null;
                 SstvPreparedTransmitPath = $"{pngPath}  |  {wavPath}";
-                var durationSeconds = _sstvPreparedTransmitClip.PcmBytes.Length / (double)(_sstvPreparedTransmitClip.SampleRate * _sstvPreparedTransmitClip.Channels * 2);
-                SstvTransmitStatus = $"Prepared {SstvSelectedTxMode} TX ({durationSeconds:0.0}s)";
+                SstvPreparedTransmitImagePath = pngPath;
+                SstvPreparedTransmitBitmap = new Bitmap(pngPath);
+                OnPropertyChanged(nameof(SstvHasPreparedTransmitPreview));
+                OnPropertyChanged(nameof(SstvHasPreparedTransmitClip));
+                _sstvPreparedTransmitDurationSeconds = _sstvPreparedTransmitClip.PcmBytes.Length / (double)(_sstvPreparedTransmitClip.SampleRate * _sstvPreparedTransmitClip.Channels * 2);
+                var cwid = transmitOptions.CwIdEnabled ? " + CWID" : string.Empty;
+                SstvTransmitStatus = $"Prepared {preparedMode}{cwid} TX ({_sstvPreparedTransmitDurationSeconds:0.0}s)";
+                RefreshPreparedSstvTransmitSummary();
             });
         }
         catch (Exception ex)
         {
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                _sstvPreparedTransmitClip = null;
-                SstvPreparedTransmitPath = "No prepared SSTV TX artifact.";
-                SstvTransmitStatus = $"SSTV TX prepare failed: {ex.Message}";
+                ClearPreparedSstvTransmit($"SSTV TX prepare failed: {ex.Message}");
             });
+        }
+    }
+
+    private SstvTransmitOptions BuildSstvTransmitOptions()
+    {
+        var stationCallsign = string.IsNullOrWhiteSpace(SettingsCallsign)
+            ? "CALL"
+            : SettingsCallsign.Trim().ToUpperInvariant();
+        var cwidText = (SstvTxCwIdText ?? string.Empty)
+            .Replace("%m", stationCallsign, StringComparison.OrdinalIgnoreCase)
+            .Trim();
+
+        return new SstvTransmitOptions(
+            SstvTxCwIdEnabled,
+            cwidText,
+            SstvTxCwIdFrequencyHz,
+            SstvTxCwIdWpm);
+    }
+
+    private string BuildSstvTransmitFingerprint()
+    {
+        var overlays = string.Join(
+            "|",
+            SstvReplyOverlayItems.Select(static item =>
+                $"{item.Text}\u001f{item.X:0.###}\u001f{item.Y:0.###}\u001f{item.FontSize:0.###}\u001f{item.FontFamilyName}\u001f{item.ColorHex}"));
+        var imageOverlays = string.Join(
+            "|",
+            SstvReplyImageOverlayItems.Select(static item =>
+                $"{item.Path}\u001f{item.X:0.###}\u001f{item.Y:0.###}\u001f{item.Width:0.###}\u001f{item.Height:0.###}"));
+
+        return string.Join(
+            "\u001e",
+            SelectedSstvReplyBaseImage?.Path ?? string.Empty,
+            SstvSelectedTxMode,
+            SstvTxCwIdEnabled,
+            SstvTxCwIdText ?? string.Empty,
+            SstvTxCwIdFrequencyHz,
+            SstvTxCwIdWpm,
+            overlays,
+            imageOverlays);
+    }
+
+    private void ClearPreparedSstvTransmit(string status)
+    {
+        _sstvPreparedTransmitClip = null;
+        _sstvPreparedTransmitFingerprint = null;
+        _sstvPreparedTransmitMode = null;
+        _sstvPreparedTransmitCwIdSummary = null;
+        _sstvPreparedTransmitDurationSeconds = 0;
+        SstvPreparedTransmitPath = "No prepared SSTV TX artifact.";
+        SstvPreparedTransmitImagePath = "No prepared TX image.";
+        SstvPreparedTransmitSummary = "No prepared SSTV TX image/audio.";
+        SstvPreparedTransmitBitmap = null;
+        OnPropertyChanged(nameof(SstvHasPreparedTransmitPreview));
+        OnPropertyChanged(nameof(SstvHasPreparedTransmitClip));
+        SstvTransmitStatus = status;
+    }
+
+    private void RefreshPreparedSstvTransmitSummary()
+    {
+        if (_sstvPreparedTransmitClip is null)
+        {
+            SstvPreparedTransmitSummary = "No prepared SSTV TX image/audio.";
+            return;
+        }
+
+        var stale = string.Equals(_sstvPreparedTransmitFingerprint, BuildSstvTransmitFingerprint(), StringComparison.Ordinal)
+            ? "ready"
+            : "stale - prepare again before sending";
+        var cwid = string.IsNullOrWhiteSpace(_sstvPreparedTransmitCwIdSummary)
+            ? "CW ID off"
+            : _sstvPreparedTransmitCwIdSummary;
+        var route = SelectedTxDevice is null ? "No TX audio device selected" : $"TX route: {SelectedTxDevice.FriendlyName}";
+        SstvPreparedTransmitSummary = $"{stale}: {_sstvPreparedTransmitMode ?? SstvSelectedTxMode}  |  {_sstvPreparedTransmitDurationSeconds:0.0}s  |  {cwid}  |  {route}";
+    }
+
+    private void AttachSstvReplyLayoutChangeTracking(ObservableCollection<SstvOverlayItemViewModel> items)
+    {
+        items.CollectionChanged += OnSstvReplyLayoutCollectionChanged;
+        foreach (var item in items)
+        {
+            item.PropertyChanged += OnSstvReplyLayoutItemChanged;
+        }
+    }
+
+    private void AttachSstvReplyLayoutChangeTracking(ObservableCollection<SstvImageOverlayItemViewModel> items)
+    {
+        items.CollectionChanged += OnSstvReplyLayoutCollectionChanged;
+        foreach (var item in items)
+        {
+            item.PropertyChanged += OnSstvReplyLayoutItemChanged;
+        }
+    }
+
+    private void OnSstvReplyLayoutCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems is not null)
+        {
+            foreach (var item in e.NewItems)
+            {
+                if (item is SstvOverlayItemViewModel textItem)
+                {
+                    textItem.PropertyChanged += OnSstvReplyLayoutItemChanged;
+                }
+                else if (item is SstvImageOverlayItemViewModel imageItem)
+                {
+                    imageItem.PropertyChanged += OnSstvReplyLayoutItemChanged;
+                }
+            }
+        }
+
+        MarkSstvReplyLayoutDirty();
+    }
+
+    private void OnSstvReplyLayoutItemChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        MarkSstvReplyLayoutDirty();
+    }
+
+    private void MarkSstvReplyLayoutDirty()
+    {
+        RefreshPreparedSstvTransmitSummary();
+        if (!SstvTxIsSending)
+        {
+            SstvTransmitStatus = "Reply layout changed; prepare TX when ready.";
         }
     }
 
@@ -3461,21 +3460,34 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _sstvTxSendInFlight = true;
         var txAudioStarted = false;
         var pttRaised = false;
+        _sstvTxCts?.Cancel();
+        _sstvTxCts?.Dispose();
+        _sstvTxCts = new CancellationTokenSource();
+        var token = _sstvTxCts.Token;
 
         try
         {
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                SstvTransmitStatus = $"Preparing {SstvSelectedTxMode} for live TX...";
+                SstvTxIsSending = true;
+                SstvTransmitStatus = $"Checking prepared {SstvSelectedTxMode} TX...";
             });
-
-            await PrepareSstvReplyTransmitAsync().ConfigureAwait(false);
 
             if (_sstvPreparedTransmitClip is null)
             {
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    SstvTransmitStatus = "SSTV TX blocked: prepare step did not produce audio.";
+                    SstvTransmitStatus = "SSTV TX blocked: prepare TX first.";
+                });
+                return;
+            }
+
+            if (!string.Equals(_sstvPreparedTransmitFingerprint, BuildSstvTransmitFingerprint(), StringComparison.Ordinal))
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    RefreshPreparedSstvTransmitSummary();
+                    SstvTransmitStatus = "SSTV TX blocked: prepared image/audio is stale. Press Prepare TX again.";
                 });
                 return;
             }
@@ -3494,34 +3506,46 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                SstvTransmitStatus = $"Keying radio for {SstvSelectedTxMode}...";
+                RefreshPreparedSstvTransmitSummary();
+                SstvTransmitStatus = $"Keying radio for {_sstvPreparedTransmitMode ?? SstvSelectedTxMode}...";
             });
 
-            await TuneRadioForSstvAsync(SstvSelectedFrequency).ConfigureAwait(false);
+            await TuneRadioForSstvAsync(SstvSelectedFrequency, strict: true).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
 
             var route = BuildCurrentAudioRoute();
             var clip = _sstvPreparedTransmitClip;
             var clipDurationMs = Math.Max(500, (int)Math.Ceiling(
                 clip.PcmBytes.Length / (double)(clip.SampleRate * clip.Channels * 2) * 1000.0));
 
-            await _radioService!.SetPttAsync(true, CancellationToken.None).ConfigureAwait(false);
+            await _radioService!.SetPttAsync(true, token).ConfigureAwait(false);
             pttRaised = true;
-            await Task.Delay(60, CancellationToken.None).ConfigureAwait(false);
-            await _audioService!.StartTransmitPcmAsync(route, clip, CancellationToken.None).ConfigureAwait(false);
+            await Task.Delay(120, token).ConfigureAwait(false);
+            await VerifySstvPttRaisedAsync(token).ConfigureAwait(false);
+            await _audioService!.StartTransmitPcmAsync(route, clip, token).ConfigureAwait(false);
             txAudioStarted = true;
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 VoiceTxStatus = "SSTV TX audio live";
-                SstvTransmitStatus = $"Sending {SstvSelectedTxMode} on-air";
-                RadioStatusSummary = $"SSTV TX live  |  {SstvSelectedTxMode}  |  {SstvSelectedFrequency}";
+                SstvTransmitStatus = $"Sending {_sstvPreparedTransmitMode ?? SstvSelectedTxMode} on-air";
+                RadioStatusSummary = $"SSTV TX live  |  {_sstvPreparedTransmitMode ?? SstvSelectedTxMode}  |  {SstvSelectedFrequency}";
             });
 
-            await Task.Delay(clipDurationMs + 150, CancellationToken.None).ConfigureAwait(false);
+            await Task.Delay(clipDurationMs + 150, token).ConfigureAwait(false);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                SstvTransmitStatus = $"SSTV TX sent: {SstvSelectedTxMode}";
+                SstvTransmitStatus = $"SSTV TX sent: {_sstvPreparedTransmitMode ?? SstvSelectedTxMode}";
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SstvTransmitStatus = "SSTV TX stopped.";
+                VoiceTxStatus = "TX audio idle";
+                RadioStatusSummary = "SSTV TX stopped.";
             });
         }
         catch (Exception ex)
@@ -3559,11 +3583,43 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                SstvTxIsSending = false;
                 VoiceTxStatus = "TX audio idle";
+                RefreshPreparedSstvTransmitSummary();
             });
 
             _sstvTxSendInFlight = false;
         }
+    }
+
+    [RelayCommand]
+    private async Task StopSstvReplyTransmitAsync()
+    {
+        _sstvTxCts?.Cancel();
+
+        try
+        {
+            if (_audioService is not null)
+            {
+                await _audioService.StopTransmitAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
+            if (_radioService is not null)
+            {
+                await _radioService.SetPttAsync(false, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            SstvTxIsSending = false;
+            VoiceTxStatus = "TX audio idle";
+            SstvTransmitStatus = "SSTV TX stop requested.";
+            RadioStatusSummary = "SSTV TX stop requested.";
+        });
     }
 
     [RelayCommand]
@@ -3585,7 +3641,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 item.Y,
                 item.FontSize,
                 item.FontFamilyName,
-                item.ColorHex)).ToArray());
+                item.ColorHex)).ToArray(),
+            SstvReplyImageOverlayItems.Select(static item => new SstvImageOverlayTemplateItemFile(
+                item.Label,
+                item.Path,
+                item.X,
+                item.Y,
+                item.Width,
+                item.Height)).ToArray(),
+            SstvReplyPresetKind);
 
         try
         {
@@ -3593,7 +3657,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 WriteIndented = true
             }));
-            SstvReplyTemplateStatus = $"Saved template '{normalizedName}'";
+            var presetText = string.IsNullOrWhiteSpace(SstvReplyPresetKind) ? string.Empty : $" ({SstvReplyPresetKind})";
+            SstvReplyTemplateStatus = $"Saved template '{normalizedName}'{presetText}";
             LoadSstvArchiveImages();
             SelectedSstvReplyLayoutTemplate = SstvReplyLayoutTemplates.FirstOrDefault(t =>
                 string.Equals(t.Path, fullPath, StringComparison.OrdinalIgnoreCase));
@@ -3617,7 +3682,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             var json = File.ReadAllText(SelectedSstvReplyLayoutTemplate.Path);
             var payload = JsonSerializer.Deserialize<SstvOverlayTemplateFile>(json);
-            if (payload is null || payload.Items.Count == 0)
+            if (payload is null || (payload.Items.Count == 0 && (payload.ImageItems?.Count ?? 0) == 0))
             {
                 SstvReplyTemplateStatus = "Template was empty";
                 return;
@@ -3639,8 +3704,44 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             SstvReplyOverlayItems = new ObservableCollection<SstvOverlayItemViewModel>(items);
             SelectedSstvReplyOverlayItem = SstvReplyOverlayItems.FirstOrDefault();
+            var missingImages = new List<string>();
+            var imageItems = new List<SstvImageOverlayItemViewModel>();
+            foreach (var item in payload.ImageItems ?? [])
+            {
+                if (!File.Exists(item.Path))
+                {
+                    missingImages.Add(item.Label);
+                    continue;
+                }
+
+                try
+                {
+                    imageItems.Add(new SstvImageOverlayItemViewModel
+                    {
+                        Label = item.Label,
+                        Path = item.Path,
+                        Bitmap = new Bitmap(item.Path),
+                        X = item.X,
+                        Y = item.Y,
+                        Width = item.Width,
+                        Height = item.Height,
+                    });
+                }
+                catch
+                {
+                    missingImages.Add(item.Label);
+                }
+            }
+
+            SstvReplyImageOverlayItems = new ObservableCollection<SstvImageOverlayItemViewModel>(imageItems);
+            SelectedSstvReplyImageOverlayItem = SstvReplyImageOverlayItems.FirstOrDefault();
             SstvReplyTemplateName = payload.Name;
-            SstvReplyTemplateStatus = $"Loaded template '{payload.Name}'";
+            SstvReplyPresetKind = payload.PresetKind;
+            var presetText = string.IsNullOrWhiteSpace(payload.PresetKind) ? string.Empty : $" ({payload.PresetKind})";
+            var missingText = missingImages.Count == 0
+                ? string.Empty
+                : $" Missing image overlays: {string.Join(", ", missingImages)}.";
+            SstvReplyTemplateStatus = $"Loaded template '{payload.Name}'{presetText}.{missingText}";
             SstvTransmitStatus = "Reply layout changed; prepare TX when ready.";
         }
         catch (Exception ex)
@@ -3649,12 +3750,117 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    public void ImportSstvReplyBaseImage(string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+        {
+            SstvReplyTemplateStatus = "Choose an existing image to import";
+            return;
+        }
+
+        var extension = Path.GetExtension(sourcePath);
+        var supportedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".bmp",
+            ".png",
+            ".jpg",
+            ".jpeg",
+        };
+        if (!supportedExtensions.Contains(extension))
+        {
+            SstvReplyTemplateStatus = "Import supports BMP, PNG, JPG, and JPEG images";
+            return;
+        }
+
+        try
+        {
+            var destination = SstvReplyArchiveStore.ImportReplyBaseImage(sourcePath, _sstvReplyDirectory);
+            LoadSstvArchiveImages();
+            SelectedSstvReplyBaseImage = SstvReplyImages.FirstOrDefault(item =>
+                string.Equals(item.Path, destination, StringComparison.OrdinalIgnoreCase));
+            SstvReplyTemplateStatus = $"Imported reply base '{Path.GetFileName(destination)}'";
+            SstvTransmitStatus = "Reply base imported; choose a quick layout or prepare TX.";
+        }
+        catch (Exception ex)
+        {
+            SstvReplyTemplateStatus = $"Import failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void DuplicateSelectedSstvReplyBaseImage()
+    {
+        if (SelectedSstvReplyBaseImage is null || !File.Exists(SelectedSstvReplyBaseImage.Path))
+        {
+            SstvReplyTemplateStatus = "Choose a reply base image to duplicate";
+            return;
+        }
+
+        try
+        {
+            var destination = SstvReplyArchiveStore.DuplicateReplyBaseImage(SelectedSstvReplyBaseImage.Path, _sstvReplyDirectory);
+            LoadSstvArchiveImages();
+            SelectedSstvReplyBaseImage = SstvReplyImages.FirstOrDefault(item =>
+                string.Equals(item.Path, destination, StringComparison.OrdinalIgnoreCase));
+            SstvReplyTemplateStatus = $"Duplicated reply base '{Path.GetFileName(destination)}'";
+            SstvTransmitStatus = "Reply base duplicated; prepare TX when ready.";
+        }
+        catch (Exception ex)
+        {
+            SstvReplyTemplateStatus = $"Duplicate failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void ArchiveSelectedSstvReplyBaseImage()
+    {
+        if (SelectedSstvReplyBaseImage is null || !File.Exists(SelectedSstvReplyBaseImage.Path))
+        {
+            SstvReplyTemplateStatus = "Choose a reply base image to archive";
+            return;
+        }
+
+        try
+        {
+            var archived = SstvReplyArchiveStore.ArchiveFile(SelectedSstvReplyBaseImage.Path, Path.Combine(_sstvReplyDirectory, "archived"));
+            LoadSstvArchiveImages();
+            SstvReplyTemplateStatus = $"Archived reply base '{Path.GetFileName(archived)}'";
+            ClearPreparedSstvTransmit("Reply base archived; prepare TX when ready.");
+        }
+        catch (Exception ex)
+        {
+            SstvReplyTemplateStatus = $"Archive failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void ArchiveSelectedSstvReplyLayoutTemplate()
+    {
+        if (SelectedSstvReplyLayoutTemplate is null || !File.Exists(SelectedSstvReplyLayoutTemplate.Path))
+        {
+            SstvReplyTemplateStatus = "Choose a template to archive";
+            return;
+        }
+
+        try
+        {
+            var archived = SstvReplyArchiveStore.ArchiveFile(SelectedSstvReplyLayoutTemplate.Path, Path.Combine(_sstvTemplateDirectory, "archived"));
+            LoadSstvArchiveImages();
+            SstvReplyTemplateStatus = $"Archived template '{Path.GetFileNameWithoutExtension(archived)}'";
+        }
+        catch (Exception ex)
+        {
+            SstvReplyTemplateStatus = $"Template archive failed: {ex.Message}";
+        }
+    }
+
     [RelayCommand]
     private void AddSstvReplyOverlay()
     {
+        SstvReplyPresetKind = null;
         var item = new SstvOverlayItemViewModel
         {
-            Text = "W8STR DE KE9CRR - 599!",
+            Text = ExpandSstvReplyMacro("QSL SSTV - TNX DE %m"),
             X = 160 + (SstvReplyOverlayItems.Count * 12),
             Y = 210 + (SstvReplyOverlayItems.Count * 12),
             FontSize = 18,
@@ -3666,8 +3872,166 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private void ReplyToSelectedSstvReceivedImage()
+    {
+        if (SelectedSstvReceivedImage is null)
+        {
+            SstvReplyTemplateStatus = "Choose a received image first";
+            return;
+        }
+
+        if (SelectedSstvReplyBaseImage is null)
+        {
+            SelectedSstvReplyBaseImage = SstvReplyImages.FirstOrDefault();
+        }
+
+        if (SelectedSstvReplyBaseImage is null)
+        {
+            SstvReplyTemplateStatus = "Choose or import a reply base image first";
+            return;
+        }
+
+        ApplySstvReplyLayoutPreset(new SstvReplyLayoutPreset("QSL + RX", "qsl-rx"));
+        SstvReplyTemplateStatus = $"Reply layout staged for '{SelectedSstvReceivedImage.Label}'";
+    }
+
+    [RelayCommand]
+    private void ApplySstvReplyLayoutPreset(SstvReplyLayoutPreset preset)
+    {
+        SstvReplyPresetKind = preset.Kind;
+        SstvReplyOverlayItems.Clear();
+        SstvReplyImageOverlayItems.Clear();
+
+        switch (preset.Kind)
+        {
+            case "cq":
+                SstvReplyTemplateName = "CQ SSTV";
+                AddSstvReplyTextOverlay("CQ SSTV", 86, 48, 34, "#FFFFD166");
+                AddSstvReplyTextOverlay("DE %m", 98, 104, 30, "#FFFFFFFF");
+                AddSstvReplyTextOverlay("%g  |  %f", 66, 164, 18, "#FF9BE7FF");
+                AddSstvReplyTextOverlay("PSE K", 130, 210, 18, "#FFC4C8D8");
+                break;
+            case "qsl-rx":
+                SstvReplyTemplateName = "QSL With RX Thumbnail";
+                AddSelectedSstvReceivedImageOverlay(24, 24, 118, 92);
+                AddSstvReplyTextOverlay("QSL - TNX SSTV", 154, 38, 24, "#FFFFD166");
+                AddSstvReplyTextOverlay("DE %m", 166, 88, 24, "#FFFFFFFF");
+                AddSstvReplyTextOverlay("%g", 206, 128, 18, "#FF9BE7FF");
+                AddSstvReplyTextOverlay("73!", 218, 186, 28, "#FFFFFFFF");
+                break;
+            case "report":
+                SstvReplyTemplateName = "SSTV Signal Report";
+                AddSstvReplyTextOverlay("SSTV REPORT", 78, 40, 28, "#FFFFD166");
+                AddSstvReplyTextOverlay("RSV 595", 104, 100, 34, "#FFFFFFFF");
+                AddSstvReplyTextOverlay("Good copy - 73", 78, 166, 20, "#FF9BE7FF");
+                AddSstvReplyTextOverlay("DE %m", 110, 210, 20, "#FFC4C8D8");
+                break;
+            case "73":
+                SstvReplyTemplateName = "TNX QSO 73";
+                AddSstvReplyTextOverlay("TNX QSO", 92, 58, 34, "#FFFFD166");
+                AddSstvReplyTextOverlay("73 DE %m", 78, 124, 28, "#FFFFFFFF");
+                AddSstvReplyTextOverlay("%g", 132, 184, 20, "#FF9BE7FF");
+                break;
+            case "id":
+            default:
+                SstvReplyTemplateName = "Station ID";
+                AddSstvReplyTextOverlay("%m", 92, 74, 42, "#FFFFFFFF");
+                AddSstvReplyTextOverlay("%g", 128, 140, 24, "#FFFFD166");
+                AddSstvReplyTextOverlay("%d %t", 94, 192, 18, "#FFC4C8D8");
+                break;
+        }
+
+        SelectedSstvReplyOverlayItem = SstvReplyOverlayItems.FirstOrDefault();
+        SelectedSstvReplyImageOverlayItem = SstvReplyImageOverlayItems.FirstOrDefault();
+        SstvReplyTemplateStatus = $"Applied preset '{preset.Label}'";
+        SstvTransmitStatus = "Reply layout changed; prepare TX when ready.";
+    }
+
+    private void AddSstvReplyTextOverlay(string text, double x, double y, double fontSize, string colorHex)
+    {
+        var item = new SstvOverlayItemViewModel
+        {
+            Text = ExpandSstvReplyMacro(text),
+            X = x,
+            Y = y,
+            FontSize = fontSize,
+            FontFamilyName = "Segoe UI",
+        };
+        item.SetColorFromHex(colorHex);
+        SstvReplyOverlayItems.Add(item);
+    }
+
+    private bool AddSelectedSstvReceivedImageOverlay(double x, double y, double width, double height)
+    {
+        var image = SelectedSstvReceivedImage ?? SstvReceivedImages.FirstOrDefault();
+        if (image is null)
+        {
+            return false;
+        }
+
+        var item = SstvImageOverlayItemViewModel.FromImage(image, SstvReplyImageOverlayItems.Count);
+        item.X = x;
+        item.Y = y;
+        item.Width = width;
+        item.Height = height;
+        SstvReplyImageOverlayItems.Add(item);
+        return true;
+    }
+
+    private string ExpandSstvReplyMacro(string value)
+    {
+        var stationCallsign = string.IsNullOrWhiteSpace(SettingsCallsign)
+            ? "CALL"
+            : SettingsCallsign.Trim().ToUpperInvariant();
+        var grid = string.IsNullOrWhiteSpace(SettingsGridSquare)
+            ? "GRID"
+            : SettingsGridSquare.Trim().ToUpperInvariant();
+        var now = DateTime.Now;
+        return (value ?? string.Empty)
+            .Replace("%m", stationCallsign, StringComparison.OrdinalIgnoreCase)
+            .Replace("%g", grid, StringComparison.OrdinalIgnoreCase)
+            .Replace("%f", SstvSelectedFrequency, StringComparison.OrdinalIgnoreCase)
+            .Replace("%r", SelectedSstvReceivedImage?.Label ?? "RX IMAGE", StringComparison.OrdinalIgnoreCase)
+            .Replace("%d", now.ToString("yyyy-MM-dd"), StringComparison.OrdinalIgnoreCase)
+            .Replace("%t", now.ToString("HH:mm"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [RelayCommand]
+    private void AddSstvReceivedThumbnail()
+    {
+        SstvReplyPresetKind = null;
+        if (SelectedSstvReceivedImage is null)
+        {
+            SstvReplyTemplateStatus = "Choose a received image first";
+            return;
+        }
+
+        AddSelectedSstvReceivedImageOverlay(24 + (SstvReplyImageOverlayItems.Count * 14), 24 + (SstvReplyImageOverlayItems.Count * 14), 112, 86);
+        var item = SstvReplyImageOverlayItems.Last();
+        SelectedSstvReplyImageOverlayItem = item;
+        SstvReplyTemplateStatus = $"Added received thumbnail '{item.Label}'";
+        SstvTransmitStatus = "Reply layout changed; prepare TX when ready.";
+    }
+
+    [RelayCommand]
+    private void RemoveSstvReceivedThumbnail()
+    {
+        SstvReplyPresetKind = null;
+        if (SelectedSstvReplyImageOverlayItem is null)
+        {
+            return;
+        }
+
+        var item = SelectedSstvReplyImageOverlayItem;
+        SstvReplyImageOverlayItems.Remove(item);
+        SelectedSstvReplyImageOverlayItem = SstvReplyImageOverlayItems.FirstOrDefault();
+        SstvTransmitStatus = "Reply layout changed; prepare TX when ready.";
+    }
+
+    [RelayCommand]
     private void RemoveSstvReplyOverlay()
     {
+        SstvReplyPresetKind = null;
         if (SelectedSstvReplyOverlayItem is null)
         {
             return;
@@ -3687,7 +4051,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         await TuneRadioForSstvAsync(SstvSelectedFrequency);
-        var config = new SstvDecoderConfiguration(NormalizeSstvModeSelection(SstvSelectedMode), SstvSelectedFrequency, SstvManualSlant, SstvManualOffset);
+        var config = new SstvDecoderConfiguration(NormalizeSstvModeSelection(SstvSelectedMode), SstvSelectedFrequency);
         await _sstvDecoderHost.ConfigureAsync(config, CancellationToken.None);
         await _sstvDecoderHost.StartAsync(CancellationToken.None);
     }
@@ -3700,7 +4064,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         await TuneRadioForSstvAsync(SstvSelectedFrequency);
-        var config = new SstvDecoderConfiguration(NormalizeSstvModeSelection(SstvSelectedMode), SstvSelectedFrequency, SstvManualSlant, SstvManualOffset);
+        var config = new SstvDecoderConfiguration(NormalizeSstvModeSelection(SstvSelectedMode), SstvSelectedFrequency);
         await _sstvDecoderHost.ConfigureAsync(config, CancellationToken.None);
         await _sstvDecoderHost.StartAsync(CancellationToken.None);
         await _sstvDecoderHost.ForceStartAsync(CancellationToken.None);
@@ -3810,15 +4174,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private async Task TuneRadioForSstvAsync(string frequencyLabel)
+    private async Task TuneRadioForSstvAsync(string frequencyLabel, bool strict = false)
     {
         if (_radioService is null || CanConnect)
         {
+            if (strict)
+            {
+                throw new InvalidOperationException("Radio is not connected.");
+            }
+
             return;
         }
 
         if (!TryParseUiFrequencyHz(frequencyLabel, out var hz))
         {
+            if (strict)
+            {
+                throw new InvalidOperationException($"Could not parse SSTV frequency '{frequencyLabel}'.");
+            }
+
             return;
         }
 
@@ -3834,6 +4208,33 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             RadioStatusSummary = $"SSTV tune failed: {ex.Message}";
+            if (strict)
+            {
+                throw;
+            }
+        }
+    }
+
+    private async Task VerifySstvPttRaisedAsync(CancellationToken ct)
+    {
+        if (_radioService is null)
+        {
+            throw new InvalidOperationException("Radio service unavailable.");
+        }
+
+        try
+        {
+            await _radioService.RefreshStateAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // If the rig cannot be polled while PTT is being changed, fall back to the local state update
+            // from SetPttAsync rather than dropping transmit on a transient readback failure.
+        }
+
+        if (!_radioService.CurrentState.IsPttActive)
+        {
+            throw new InvalidOperationException("Radio did not report PTT active after keying request.");
         }
     }
 
@@ -3842,6 +4243,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_radioService is null || CanConnect)
         {
             return "SSTV TX blocked: radio not connected.";
+        }
+
+        if (!_radioService.CurrentState.IsConnected)
+        {
+            return "SSTV TX blocked: radio control is not connected.";
         }
 
         if (_audioService is null)
@@ -3854,9 +4260,29 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return "SSTV TX blocked: TX audio device not configured.";
         }
 
+        if (string.IsNullOrWhiteSpace(SelectedTxDevice.DeviceId))
+        {
+            return "SSTV TX blocked: selected TX audio device has no device id.";
+        }
+
+        if (SelectedSstvReplyBaseImage is null)
+        {
+            return "SSTV TX blocked: no reply base image selected.";
+        }
+
         if (_sstvPreparedTransmitClip is null)
         {
             return "SSTV TX blocked: prepare TX audio first.";
+        }
+
+        if (_sstvPreparedTransmitClip.PcmBytes.Length == 0)
+        {
+            return "SSTV TX blocked: prepared TX audio is empty.";
+        }
+
+        if (!string.Equals(_sstvPreparedTransmitFingerprint, BuildSstvTransmitFingerprint(), StringComparison.Ordinal))
+        {
+            return "SSTV TX blocked: prepared image/audio is stale. Press Prepare TX again.";
         }
 
         return null;
@@ -4374,31 +4800,33 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private static string NormalizeSstvModeSelection(string selection) => selection switch
     {
-        "Lock Martin M1" => "Martin M1",
-        "Lock Martin M2" => "Martin M2",
-        "Lock Scottie 1" => "Scottie 1",
-        "Lock Scottie 2" => "Scottie 2",
-        "Lock Robot 36" => "Robot 36",
-        "Lock PD 120" => "PD 120",
+        "Lock Martin M1" or "Martin M1" or "Martin 1" => "Martin 1",
+        "Lock Martin M2" or "Martin M2" or "Martin 2" => "Martin 2",
+        "Lock Scottie 1" or "Scottie 1" => "Scottie 1",
+        "Lock Scottie 2" or "Scottie 2" => "Scottie 2",
+        "Lock Robot 36" or "Robot 36" => "Robot 36",
+        "Lock PD 120" or "PD 120" => "PD 120",
+        "Auto Detect" => "Auto Detect",
         _ => "Auto Detect",
     };
 
     [RelayCommand]
-    private async Task ApplySstvAlignmentAsync()
+    private async Task ApplySstvPostReceiveSlantAsync()
     {
         if (_sstvDecoderHost is null)
         {
+            SstvRxStatus = "SSTV decoder host unavailable";
             return;
         }
 
         try
         {
-            await _sstvDecoderHost.SetManualAlignmentAsync(SstvManualSlant, SstvManualOffset, CancellationToken.None);
-            SstvRxStatus = $"SSTV alignment set: slant {SstvManualSlant}, offset {SstvManualOffset}";
+            await _sstvDecoderHost.ApplyPostReceiveSlantCorrectionAsync(CancellationToken.None);
+            SstvRxStatus = "MMSSTV post-receive slant correction requested";
         }
         catch (Exception ex)
         {
-            SstvRxStatus = $"SSTV alignment apply failed: {ex.Message}";
+            SstvRxStatus = $"MMSSTV slant correction failed: {ex.Message}";
         }
     }
 
@@ -4454,66 +4882,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void LoadSstvArchiveImages()
     {
-        Directory.CreateDirectory(_sstvReceivedDirectory);
-        Directory.CreateDirectory(_sstvReplyDirectory);
-        Directory.CreateDirectory(_sstvTemplateDirectory);
+        var selectedReceivedPath = SelectedSstvReceivedImage?.Path;
+        var selectedReplyPath = SelectedSstvReplyBaseImage?.Path;
+        var selectedTemplatePath = SelectedSstvReplyLayoutTemplate?.Path;
+        var archive = SstvReplyArchiveStore.Load(_sstvReceivedDirectory, _sstvReplyDirectory, _sstvTemplateDirectory);
 
-        var receivedItems = new List<SstvImageItem>();
-        foreach (var file in new DirectoryInfo(_sstvReceivedDirectory)
-                     .EnumerateFiles("*.png", SearchOption.TopDirectoryOnly)
-                     .OrderByDescending(f => f.LastWriteTimeUtc)
-                     .Take(40))
-        {
-            try
-            {
-                receivedItems.Add(new SstvImageItem(
-                    Path.GetFileNameWithoutExtension(file.Name),
-                    file.FullName,
-                    file.LastWriteTime,
-                    new Bitmap(file.FullName)));
-            }
-            catch
-            {
-            }
-        }
-
-        var replyItems = new List<SstvImageItem>();
-        foreach (var file in new DirectoryInfo(_sstvReplyDirectory)
-                     .EnumerateFiles("*.png", SearchOption.TopDirectoryOnly)
-                     .OrderByDescending(f => f.LastWriteTimeUtc)
-                     .Take(40))
-        {
-            try
-            {
-                replyItems.Add(new SstvImageItem(
-                    Path.GetFileNameWithoutExtension(file.Name),
-                    file.FullName,
-                    file.LastWriteTime,
-                    new Bitmap(file.FullName)));
-            }
-            catch
-            {
-            }
-        }
-
-        var templateItems = new List<SstvTemplateItem>();
-        foreach (var file in new DirectoryInfo(_sstvTemplateDirectory)
-                     .EnumerateFiles("*.json", SearchOption.TopDirectoryOnly)
-                     .OrderByDescending(f => f.LastWriteTimeUtc)
-                     .Take(50))
-        {
-            templateItems.Add(new SstvTemplateItem(
-                Path.GetFileNameWithoutExtension(file.Name),
-                file.FullName,
-                file.LastWriteTime));
-        }
-
-        SstvReceivedImages = new ObservableCollection<SstvImageItem>(receivedItems);
-        SstvReplyImages = new ObservableCollection<SstvImageItem>(replyItems);
-        SstvReplyLayoutTemplates = new ObservableCollection<SstvTemplateItem>(templateItems);
-        SelectedSstvReceivedImage ??= SstvReceivedImages.FirstOrDefault();
-        SelectedSstvReplyBaseImage ??= SstvReplyImages.FirstOrDefault();
-        SelectedSstvReplyLayoutTemplate ??= SstvReplyLayoutTemplates.FirstOrDefault();
+        SstvReceivedImages = new ObservableCollection<SstvImageItem>(archive.ReceivedImages);
+        SstvReplyImages = new ObservableCollection<SstvImageItem>(archive.ReplyImages);
+        SstvReplyLayoutTemplates = new ObservableCollection<SstvTemplateItem>(archive.LayoutTemplates);
+        SelectedSstvReceivedImage = SstvReplyArchiveStore.SelectByPathOrFirst(SstvReceivedImages, selectedReceivedPath);
+        SelectedSstvReplyBaseImage = SstvReplyArchiveStore.SelectByPathOrFirst(SstvReplyImages, selectedReplyPath);
+        SelectedSstvReplyLayoutTemplate = SstvReplyArchiveStore.SelectByPathOrFirst(SstvReplyLayoutTemplates, selectedTemplatePath);
         if (SstvReplyOverlayItems.Count == 0)
         {
             var defaultOverlay = new SstvOverlayItemViewModel();
@@ -4568,12 +4947,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             try
             {
-                var file = new FileInfo(imagePath);
-                existing = new SstvImageItem(
-                    Path.GetFileNameWithoutExtension(file.Name),
-                    file.FullName,
-                    file.LastWriteTime,
-                    new Bitmap(file.FullName));
+                existing = SstvReplyArchiveStore.TryCreateImageItem(imagePath);
+                if (existing is null)
+                {
+                    return;
+                }
+
                 SstvReceivedImages.Insert(0, existing);
             }
             catch
@@ -4696,6 +5075,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     partial void OnSelectedTxDeviceChanged(AudioDeviceInfo? value)
     {
+        RefreshPreparedSstvTransmitSummary();
     }
 
     partial void OnWsjtxPreparedTransmitChanged(WsjtxPreparedTransmit? value)
@@ -5000,6 +5380,37 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SstvTransmitStatus = value is null
             ? "Choose a reply image to prepare TX."
             : "Reply image changed; prepare TX when ready.";
+        RefreshPreparedSstvTransmitSummary();
+    }
+
+    partial void OnSstvSelectedTxModeChanged(string value)
+    {
+        SstvTransmitStatus = "TX mode changed; prepare TX when ready.";
+        RefreshPreparedSstvTransmitSummary();
+    }
+
+    partial void OnSstvTxCwIdEnabledChanged(bool value)
+    {
+        SstvTransmitStatus = "CW ID setting changed; prepare TX when ready.";
+        RefreshPreparedSstvTransmitSummary();
+    }
+
+    partial void OnSstvTxCwIdTextChanged(string value)
+    {
+        SstvTransmitStatus = "CW ID text changed; prepare TX when ready.";
+        RefreshPreparedSstvTransmitSummary();
+    }
+
+    partial void OnSstvTxCwIdFrequencyHzChanged(int value)
+    {
+        SstvTransmitStatus = "CW ID frequency changed; prepare TX when ready.";
+        RefreshPreparedSstvTransmitSummary();
+    }
+
+    partial void OnSstvTxCwIdWpmChanged(int value)
+    {
+        SstvTransmitStatus = "CW ID speed changed; prepare TX when ready.";
+        RefreshPreparedSstvTransmitSummary();
     }
 
     partial void OnSelectedSstvReplyLayoutTemplateChanged(SstvTemplateItem? value)
@@ -5010,109 +5421,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    [SupportedOSPlatform("windows")]
-    private static byte[] RenderCurrentSstvReplyRgb24(
-        string baseImagePath,
-        IReadOnlyList<SstvOverlayItemViewModel> overlays,
-        string outputImagePath,
-        out int width,
-        out int height)
+    partial void OnSstvReplyOverlayItemsChanged(ObservableCollection<SstvOverlayItemViewModel> value)
     {
-        using var source = new DrawingBitmap(baseImagePath);
-        width = source.Width;
-        height = source.Height;
-        using var composed = new DrawingBitmap(width, height, DrawingPixelFormat.Format24bppRgb);
-        using (var graphics = DrawingGraphics.FromImage(composed))
-        {
-            graphics.Clear(DrawingColor.Black);
-            graphics.TextRenderingHint = DrawingTextRenderingHint.AntiAliasGridFit;
-            graphics.DrawImage(source, 0, 0, width, height);
-
-            foreach (var overlay in overlays)
-            {
-                if (string.IsNullOrWhiteSpace(overlay.Text))
-                {
-                    continue;
-                }
-
-                using var brush = new DrawingBrush(DrawingColor.FromArgb(overlay.Red, overlay.Green, overlay.Blue));
-                using var font = CreateSstvDrawingFont(overlay.FontFamilyName, (float)overlay.FontSize);
-                using var format = new DrawingStringFormat
-                {
-                    Alignment = DrawingStringAlignment.Center,
-                };
-                var x = (float)Math.Max(0.0, overlay.X);
-                var y = (float)Math.Max(0.0, overlay.Y);
-                var rect = new DrawingRectangleF(x, y, Math.Max(80f, width - x), Math.Max(40f, height - y));
-                graphics.DrawString(overlay.Text, font, brush, rect, format);
-            }
-        }
-
-        Directory.CreateDirectory(Path.GetDirectoryName(outputImagePath)!);
-        composed.Save(outputImagePath, DrawingImageFormat.Png);
-
-        var rgb24 = new byte[width * height * 3];
-        var rectLock = new DrawingRectangle(0, 0, width, height);
-        var data = composed.LockBits(rectLock, DrawingImageLockMode.ReadOnly, DrawingPixelFormat.Format24bppRgb);
-        try
-        {
-            for (var y = 0; y < height; y++)
-            {
-                var row = data.Scan0 + (y * data.Stride);
-                var bgr = new byte[width * 3];
-                Marshal.Copy(row, bgr, 0, bgr.Length);
-                for (var x = 0; x < width; x++)
-                {
-                    var src = x * 3;
-                    var dst = ((y * width) + x) * 3;
-                    rgb24[dst] = bgr[src + 2];
-                    rgb24[dst + 1] = bgr[src + 1];
-                    rgb24[dst + 2] = bgr[src];
-                }
-            }
-        }
-        finally
-        {
-            composed.UnlockBits(data);
-        }
-
-        return rgb24;
+        AttachSstvReplyLayoutChangeTracking(value);
+        MarkSstvReplyLayoutDirty();
     }
 
-    [SupportedOSPlatform("windows")]
-    private static DrawingFont CreateSstvDrawingFont(string fontFamilyName, float fontSize)
+    partial void OnSstvReplyImageOverlayItemsChanged(ObservableCollection<SstvImageOverlayItemViewModel> value)
     {
-        try
-        {
-            return new DrawingFont(fontFamilyName, fontSize, DrawingFontStyle.Bold, System.Drawing.GraphicsUnit.Pixel);
-        }
-        catch
-        {
-            return new DrawingFont("Segoe UI", fontSize, DrawingFontStyle.Bold, System.Drawing.GraphicsUnit.Pixel);
-        }
-    }
-
-    private static void WriteWaveFile(string path, Pcm16AudioClip clip)
-    {
-        using var stream = File.Create(path);
-        using var writer = new BinaryWriter(stream);
-        var dataLength = clip.PcmBytes.Length;
-        var byteRate = clip.SampleRate * clip.Channels * 2;
-        var blockAlign = (short)(clip.Channels * 2);
-        writer.Write("RIFF"u8.ToArray());
-        writer.Write(36 + dataLength);
-        writer.Write("WAVE"u8.ToArray());
-        writer.Write("fmt "u8.ToArray());
-        writer.Write(16);
-        writer.Write((short)1);
-        writer.Write((short)clip.Channels);
-        writer.Write(clip.SampleRate);
-        writer.Write(byteRate);
-        writer.Write(blockAlign);
-        writer.Write((short)16);
-        writer.Write("data"u8.ToArray());
-        writer.Write(dataLength);
-        writer.Write(clip.PcmBytes);
+        AttachSstvReplyLayoutChangeTracking(value);
+        MarkSstvReplyLayoutDirty();
     }
 
     [RelayCommand]

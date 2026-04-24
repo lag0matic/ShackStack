@@ -7,6 +7,19 @@ namespace ShackStack.DecoderHost.Sstv.Core;
 /// </summary>
 internal sealed class MmsstvAfcParameters
 {
+    private const double WideCenterHz = 1900.0;
+    private const double WideSyncHz = 1200.0;
+    private const double WideAfcLowHz = 1000.0;
+    private const double WideAfcHighHz = 1325.0;
+    private const double WideBandwidthHalfHz = 400.0;
+    private const double NarrowLowHz = 2044.0;
+    private const double NarrowHighHz = 2300.0;
+    private const double NarrowCenterHz = (NarrowHighHz + NarrowLowHz) / 2.0;
+    private const double NarrowSyncHz = 1900.0;
+    private const double NarrowAfcLowHz = 1800.0;
+    private const double NarrowAfcHighHz = 1950.0;
+    private const double NarrowBandwidthHalfHz = (NarrowHighHz - NarrowLowHz) / 2.0;
+
     private MmsstvAfcParameters(
         int afcWidthSamples,
         int afcBeginSamples,
@@ -15,6 +28,8 @@ internal sealed class MmsstvAfcParameters
         double highBound,
         double syncValue,
         double bandwidthScale,
+        int averageSamples,
+        int lockAverageSamples,
         int guard,
         int interval)
     {
@@ -25,6 +40,8 @@ internal sealed class MmsstvAfcParameters
         HighBound = highBound;
         SyncValue = syncValue;
         BandwidthScale = bandwidthScale;
+        AverageSamples = averageSamples;
+        LockAverageSamples = lockAverageSamples;
         Guard = guard;
         Interval = interval;
     }
@@ -36,6 +53,8 @@ internal sealed class MmsstvAfcParameters
     public double HighBound { get; }
     public double SyncValue { get; }
     public double BandwidthScale { get; }
+    public int AverageSamples { get; }
+    public int LockAverageSamples { get; }
     public int Guard { get; }
     public int Interval { get; }
 
@@ -49,13 +68,16 @@ internal sealed class MmsstvAfcParameters
             : (int)Math.Round(1.5 * sampleRate / 1000.0);
         var afcEndSamples = afcBeginSamples + afcWidthSamples;
 
-        const double center = 1900.0;
-        const double sync = 1200.0;
-        const double bandwidth = 400.0;
-        var lowBound = (center - 1000.0) * 16384.0 / bandwidth;
-        var highBound = (center - 1325.0) * 16384.0 / bandwidth;
-        var syncValue = (center - sync) * 16384.0 / bandwidth;
-        var bandwidthScale = bandwidth / 16384.0;
+        var center = profile.Narrow ? NarrowCenterHz : WideCenterHz;
+        var sync = profile.Narrow ? NarrowSyncHz : WideSyncHz;
+        var afcLow = profile.Narrow ? NarrowAfcLowHz : WideAfcLowHz;
+        var afcHigh = profile.Narrow ? NarrowAfcHighHz : WideAfcHighHz;
+        var bandwidthHalf = profile.Narrow ? NarrowBandwidthHalfHz : WideBandwidthHalfHz;
+        var lowBound = (center - afcLow) * 16384.0 / bandwidthHalf;
+        var highBound = (center - afcHigh) * 16384.0 / bandwidthHalf;
+        var syncValue = (center - sync) * 16384.0 / bandwidthHalf;
+        var bandwidthScale = bandwidthHalf / 16384.0;
+        var averageSamples = Math.Max(1, (int)Math.Round(2.5 * sampleRate / 1000.0));
 
         return new MmsstvAfcParameters(
             afcWidthSamples,
@@ -65,6 +87,8 @@ internal sealed class MmsstvAfcParameters
             highBound,
             syncValue,
             bandwidthScale,
+            averageSamples,
+            lockAverageSamples: 15,
             guard: 10,
             interval: (int)Math.Round(100.0 * sampleRate / 1000.0));
     }

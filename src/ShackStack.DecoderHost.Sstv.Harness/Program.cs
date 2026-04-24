@@ -8,6 +8,21 @@ var outputRoot = Path.Combine(
     @"C:\Users\lag0m\Documents\ShackStack.Avalonia",
     ".tmp-sstv-harness");
 Directory.CreateDirectory(outputRoot);
+Environment.SetEnvironmentVariable("SHACKSTACK_SSTV_ARCHIVE_DIR", outputRoot);
+
+var inputWav = Environment.GetEnvironmentVariable("SHACKSTACK_HARNESS_INPUT_WAV");
+if (!string.IsNullOrWhiteSpace(inputWav))
+{
+    RunInputWavProbe(inputWav, outputRoot, sampleRate, chunkSize);
+    return 0;
+}
+
+var inputRawF32 = Environment.GetEnvironmentVariable("SHACKSTACK_HARNESS_INPUT_RAWF32");
+if (!string.IsNullOrWhiteSpace(inputRawF32))
+{
+    RunInputRawF32Probe(inputRawF32, outputRoot, sampleRate, chunkSize);
+    return 0;
+}
 
 var toneCheck = new float[sampleRate / 20];
 double tonePhase = 0.0;
@@ -58,6 +73,12 @@ foreach (var modeName in modeNames)
     Console.WriteLine();
 }
 
+if (string.Equals(Environment.GetEnvironmentVariable("SHACKSTACK_HARNESS_STRESS"), "1", StringComparison.Ordinal))
+{
+    RunMmsstvStressScenarios(outputRoot, sampleRate, chunkSize);
+    Console.WriteLine();
+}
+
 RunNativeTxPrepProbe(outputRoot, sampleRate);
 Console.WriteLine();
 
@@ -88,7 +109,7 @@ static void RunMode(SstvModeProfile profile, string outputRoot, int sampleRate, 
     var wavPath = Path.Combine(outputRoot, $"{stem}_loopback.wav");
     WaveFileWriter.WriteMono16(wavPath, audio, sampleRate);
 
-    var visDetected = VisDetector.TryDetect(audio.ToList(), 0, allowLegacyPattern: false, out var nextVisFrame, out var visProfile);
+    var visDetected = VisDetector.TryDetect(audio.ToList(), 0, allowLegacyPattern: false, out var nextVisFrame, out var visProfile, resolveAllPlannedModes: true);
     var visProbe = SstvHarnessGenerator.ProbeMmsstvVis(audio, sampleRate);
 
     var receiver = new NativeSstvReceiver();
@@ -113,11 +134,23 @@ static void RunMode(SstvModeProfile profile, string outputRoot, int sampleRate, 
 
     string? copiedDecodePath = null;
     ImageComparisonResult? comparison = null;
+    string? comparisonSkippedReason = null;
     if (!string.IsNullOrWhiteSpace(receiver.LatestImagePath) && File.Exists(receiver.LatestImagePath))
     {
         copiedDecodePath = Path.Combine(outputRoot, $"{stem}_decoded.bmp");
         File.Copy(receiver.LatestImagePath, copiedDecodePath, true);
-        comparison = ImageComparison.Measure(sourceImage, BitmapReader.LoadRgb24(copiedDecodePath, profile.Width, profile.Height));
+        try
+        {
+            comparison = ImageComparison.Measure(sourceImage, BitmapReader.LoadRgb24(copiedDecodePath, profile.Width, profile.Height));
+        }
+        catch (InvalidDataException ex)
+        {
+            comparisonSkippedReason = ex.Message;
+        }
+        catch (IOException ex)
+        {
+            comparisonSkippedReason = ex.Message;
+        }
     }
 
     Console.WriteLine($"=== {profile.Name} ===");
@@ -129,8 +162,14 @@ static void RunMode(SstvModeProfile profile, string outputRoot, int sampleRate, 
     Console.WriteLine($"VIS probe: {visProbe}");
     if (comparison is not null)
     {
+        Console.WriteLine(
+            $"Result: {profile.Name} MAE {comparison.MeanAbsoluteError:0.00}, corr R {comparison.RedCorrelation:0.000} | G {comparison.GreenCorrelation:0.000} | B {comparison.BlueCorrelation:0.000}");
         Console.WriteLine($"Mean abs error: {comparison.MeanAbsoluteError:0.00}");
         Console.WriteLine($"Channel corr: R {comparison.RedCorrelation:0.000} | G {comparison.GreenCorrelation:0.000} | B {comparison.BlueCorrelation:0.000}");
+    }
+    else if (!string.IsNullOrWhiteSpace(comparisonSkippedReason))
+    {
+        Console.WriteLine($"Comparison skipped: {comparisonSkippedReason}");
     }
 
     var sessionField = typeof(NativeSstvReceiver).GetField("_session", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -169,6 +208,187 @@ static void RunMode(SstvModeProfile profile, string outputRoot, int sampleRate, 
         : "Decoded image: none");
 }
 
+static void RunInputWavProbe(string wavPath, string outputRoot, int sampleRate, int chunkSize)
+{
+    if (!File.Exists(wavPath))
+    {
+        Console.Error.WriteLine($"Input WAV not found: {wavPath}");
+        return;
+    }
+
+    var clip = WaveFileReader.ReadMonoFloat(wavPath);
+    var working = SstvAudioMath.Resample(clip.Samples, clip.SampleRate, sampleRate);
+    Console.WriteLine("=== Input WAV probe ===");
+    Console.WriteLine($"Input: {wavPath}");
+    Console.WriteLine($"Format: {clip.SampleRate} Hz, {clip.Channels} ch, {clip.Samples.Length} mono samples, {clip.Samples.Length / (double)clip.SampleRate:0.00}s");
+    Console.WriteLine($"Working: {sampleRate} Hz, {working.Length} samples, {working.Length / (double)sampleRate:0.00}s");
+    Console.WriteLine($"Level: rms {Rms(working):0.0000}, peak {PeakAbs(working):0.0000}");
+    Console.WriteLine($"Tone summary: {SummarizeTones(working, sampleRate)}");
+    var directVisDetected = VisDetector.TryDetect(working.ToList(), 0, allowLegacyPattern: false, out var directVisNextFrame, out var directVisProfile, resolveAllPlannedModes: true);
+    Console.WriteLine($"Direct VIS: {(directVisDetected ? directVisProfile?.Name : "none")} @ frame {directVisNextFrame}");
+
+    RunInputWavReceiverPass("Auto Detect", working, outputRoot, sampleRate, chunkSize);
+    RunInputWavReceiverPass("Martin 1", working, outputRoot, sampleRate, chunkSize);
+    RunInputWavReceiverPass("Martin 1", working, outputRoot, sampleRate, chunkSize, forceStartAtSample: 0);
+    RunInputWavReceiverPass("Martin 1", working, outputRoot, sampleRate, chunkSize, forceStartAtSample: sampleRate * 5);
+}
+
+static void RunInputRawF32Probe(string rawPath, string outputRoot, int sampleRate, int chunkSize)
+{
+    if (!File.Exists(rawPath))
+    {
+        Console.Error.WriteLine($"Input rawf32 not found: {rawPath}");
+        return;
+    }
+
+    var bytes = File.ReadAllBytes(rawPath);
+    if ((bytes.Length % sizeof(float)) != 0)
+    {
+        Console.Error.WriteLine($"Input rawf32 byte length is not float-aligned: {bytes.Length}");
+        return;
+    }
+
+    var working = new float[bytes.Length / sizeof(float)];
+    Buffer.BlockCopy(bytes, 0, working, 0, bytes.Length);
+    Console.WriteLine("=== Input rawf32 probe ===");
+    Console.WriteLine($"Input: {rawPath}");
+    Console.WriteLine($"Format: {sampleRate} Hz mono float32, {working.Length} samples, {working.Length / (double)sampleRate:0.00}s");
+    Console.WriteLine($"Level: rms {Rms(working):0.0000}, peak {PeakAbs(working):0.0000}");
+    Console.WriteLine($"Tone summary: {SummarizeTones(working, sampleRate)}");
+    var directVisDetected = VisDetector.TryDetect(working.ToList(), 0, allowLegacyPattern: false, out var directVisNextFrame, out var directVisProfile, resolveAllPlannedModes: true);
+    Console.WriteLine($"Direct VIS: {(directVisDetected ? directVisProfile?.Name : "none")} @ frame {directVisNextFrame}");
+
+    RunInputWavReceiverPass("Auto Detect", working, outputRoot, sampleRate, chunkSize);
+    RunInputWavReceiverPass("Scottie 1", working, outputRoot, sampleRate, chunkSize);
+    RunInputWavReceiverPass("Scottie 1", working, outputRoot, sampleRate, chunkSize, applySlant: true);
+    RunInputWavReceiverPass("Scottie 1", working, outputRoot, sampleRate, chunkSize, applySyncAdjust: true);
+    RunInputWavReceiverPass("Scottie 1", working, outputRoot, sampleRate, chunkSize, forceStartAtSample: 0);
+}
+
+static string? RunInputWavReceiverPass(
+    string mode,
+    float[] working,
+    string outputRoot,
+    int sampleRate,
+    int chunkSize,
+    int? forceStartAtSample = null,
+    bool applySlant = false,
+    bool applySyncAdjust = false)
+{
+    var receiver = new NativeSstvReceiver();
+    receiver.Configure(mode, "input wav", 0, 0);
+    receiver.Start();
+    var statuses = new List<string>();
+    var imageUpdates = 0;
+    var forceStarted = false;
+
+    for (var offset = 0; offset < working.Length; offset += chunkSize)
+    {
+        if (!forceStarted && forceStartAtSample is int forceAt && offset >= forceAt)
+        {
+            statuses.Add($"{offset,8}: {receiver.ForceStartConfiguredMode()}");
+            forceStarted = true;
+        }
+
+        var count = Math.Min(chunkSize, working.Length - offset);
+        var chunk = new float[count];
+        Array.Copy(working, offset, chunk, 0, count);
+        var status = receiver.HandleAudio(chunk, out var imageUpdated);
+        if (imageUpdated)
+        {
+            imageUpdates++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            statuses.Add($"{offset,8}: {status}");
+        }
+    }
+
+    var slantApplied = applySlant && receiver.ApplyMmsstvPostReceiveSlantCorrection();
+    var syncAdjustApplied = applySyncAdjust && receiver.ApplyMmsstvPostReceiveSyncAdjustment();
+
+    var safeMode = mode.ToLowerInvariant().Replace(' ', '_');
+    var forceSuffix = forceStartAtSample is int forceAtSample ? $"_force_{forceAtSample}" : string.Empty;
+    var slantSuffix = applySlant ? "_slant" : string.Empty;
+    var syncAdjustSuffix = applySyncAdjust ? "_sync_adjust" : string.Empty;
+    var logPath = Path.Combine(outputRoot, $"input_wav_{safeMode}{forceSuffix}{slantSuffix}{syncAdjustSuffix}_status.log");
+    File.WriteAllLines(logPath, statuses.Distinct());
+    Console.WriteLine();
+    Console.WriteLine(forceStartAtSample is int forceAtDisplay
+        ? $"--- {mode} force @ {forceAtDisplay / (double)sampleRate:0.00}s ---"
+        : $"--- {mode} ---");
+    Console.WriteLine($"Detected: {receiver.DetectedMode}");
+    Console.WriteLine($"Origin: {receiver.SessionOrigin}");
+    Console.WriteLine($"Sync: {receiver.SyncStatus}");
+    Console.WriteLine($"Signal: {receiver.SignalLevelPercent}%");
+    Console.WriteLine($"Prominence: {receiver.LastSyncProminence:0.00}");
+    Console.WriteLine($"Image updates: {imageUpdates}");
+    if (applySlant || !string.IsNullOrWhiteSpace(receiver.LastMmsstvSlantDebug))
+    {
+        Console.WriteLine($"Slant applied: {slantApplied}");
+        Console.WriteLine($"Slant debug: {receiver.LastMmsstvSlantDebug ?? "none"}");
+    }
+
+    if (applySyncAdjust || !string.IsNullOrWhiteSpace(receiver.LastMmsstvSyncAdjustDebug))
+    {
+        Console.WriteLine($"Sync adjust applied: {syncAdjustApplied}");
+        Console.WriteLine($"Sync adjust debug: {receiver.LastMmsstvSyncAdjustDebug ?? "none"}");
+    }
+
+    Console.WriteLine($"Status log: {logPath}");
+    Console.WriteLine($"Latest image: {(string.IsNullOrWhiteSpace(receiver.LatestImagePath) ? "none" : receiver.LatestImagePath)}");
+    return receiver.LatestImagePath;
+}
+
+static string SummarizeTones(float[] samples, int sampleRate)
+{
+    var window = Math.Min(samples.Length, sampleRate * 10);
+    if (window <= 0)
+    {
+        return "empty";
+    }
+
+    var start = Math.Max(0, samples.Length - window);
+    var span = samples.AsSpan(start, window);
+    return string.Join(
+        " / ",
+        new[]
+        {
+            $"1200 {SstvAudioMath.TonePower(span, sampleRate, 1200.0):0.0}",
+            $"1500 {SstvAudioMath.TonePower(span, sampleRate, 1500.0):0.0}",
+            $"1900 {SstvAudioMath.TonePower(span, sampleRate, 1900.0):0.0}",
+            $"2300 {SstvAudioMath.TonePower(span, sampleRate, 2300.0):0.0}",
+        });
+}
+
+static double Rms(ReadOnlySpan<float> samples)
+{
+    if (samples.Length == 0)
+    {
+        return 0.0;
+    }
+
+    var sum = 0.0;
+    for (var i = 0; i < samples.Length; i++)
+    {
+        sum += samples[i] * samples[i];
+    }
+
+    return Math.Sqrt(sum / samples.Length);
+}
+
+static double PeakAbs(ReadOnlySpan<float> samples)
+{
+    var peak = 0.0;
+    for (var i = 0; i < samples.Length; i++)
+    {
+        peak = Math.Max(peak, Math.Abs(samples[i]));
+    }
+
+    return peak;
+}
+
 static double ProbeCounterTone(double toneHz, int sampleRate)
 {
     var counter = new MmsstvFrequencyCounter(sampleRate);
@@ -193,6 +413,132 @@ static double ProbeCounterTone(double toneHz, int sampleRate)
     return outputs.Skip(samples.Length / 4).Average();
 }
 
+static void RunMmsstvStressScenarios(string outputRoot, int sampleRate, int chunkSize)
+{
+    Console.WriteLine("=== MMSSTV stressed RX probes ===");
+    foreach (var modeName in new[] { "Martin 1", "Scottie 1", "Robot 36", "PD 120" })
+    {
+        if (!MmsstvModeCatalog.TryResolve(modeName, out var profile))
+        {
+            Console.WriteLine($"Stress: {modeName} unavailable");
+            continue;
+        }
+
+        var sourceImage = TestCardFactory.Create(profile.Width, profile.Height);
+        var cleanAudio = SstvHarnessGenerator.GenerateAudio(sourceImage, profile, sampleRate);
+        foreach (var scenario in BuildStressScenarios(cleanAudio, sampleRate))
+        {
+            var result = DecodeStressAudio(profile, sourceImage, scenario.Audio, chunkSize);
+            var label = $"{profile.Name} {scenario.Name}";
+            if (result.Comparison is null)
+            {
+                Console.WriteLine($"Stress: {label} decode none");
+                if (!string.IsNullOrWhiteSpace(result.SlantDebug))
+                {
+                    Console.WriteLine($"Stress slant: {label} {result.SlantDebug}");
+                }
+
+                continue;
+            }
+
+            Console.WriteLine(
+                $"Stress: {label} MAE {result.Comparison.MeanAbsoluteError:0.00}, corr R {result.Comparison.RedCorrelation:0.000} | G {result.Comparison.GreenCorrelation:0.000} | B {result.Comparison.BlueCorrelation:0.000}");
+            if (!string.IsNullOrWhiteSpace(result.SlantDebug))
+            {
+                Console.WriteLine($"Stress slant: {label} {result.SlantDebug}");
+            }
+            if (!string.IsNullOrWhiteSpace(result.SyncAdjustDebug))
+            {
+                Console.WriteLine($"Stress sync-adjust: {label} {result.SyncAdjustDebug}");
+            }
+        }
+    }
+}
+
+static IEnumerable<(string Name, float[] Audio)> BuildStressScenarios(float[] cleanAudio, int sampleRate)
+{
+    yield return ("clock+75ppm_noise-36dB", AddWhiteNoise(ApplySampleClockPpm(cleanAudio, 75.0), -36.0, seed: 3175));
+    yield return ("clock-75ppm_noise-36dB", AddWhiteNoise(ApplySampleClockPpm(cleanAudio, -75.0), -36.0, seed: 3176));
+    yield return ("clock+150ppm", ApplySampleClockPpm(cleanAudio, 150.0));
+}
+
+static (ImageComparisonResult? Comparison, string? SlantDebug, string? SyncAdjustDebug) DecodeStressAudio(SstvModeProfile profile, byte[] sourceImage, float[] audio, int chunkSize)
+{
+    var receiver = new NativeSstvReceiver();
+    receiver.Configure("Auto Detect", "14.230 MHz USB", 0, 0);
+    receiver.Start();
+
+    for (var offset = 0; offset < audio.Length; offset += chunkSize)
+    {
+        var count = Math.Min(chunkSize, audio.Length - offset);
+        var chunk = new float[count];
+        Array.Copy(audio, offset, chunk, 0, count);
+        receiver.HandleAudio(chunk, out _);
+    }
+
+    if (string.Equals(Environment.GetEnvironmentVariable("SHACKSTACK_HARNESS_POST_RECEIVE_SLANT"), "1", StringComparison.Ordinal))
+    {
+        receiver.ApplyMmsstvPostReceiveSlantCorrection();
+    }
+
+    if (string.Equals(Environment.GetEnvironmentVariable("SHACKSTACK_HARNESS_POST_RECEIVE_SYNC_ADJUST"), "1", StringComparison.Ordinal))
+    {
+        receiver.ApplyMmsstvPostReceiveSyncAdjustment();
+    }
+
+    var slantDebug = receiver.LastMmsstvSlantDebug;
+    var syncAdjustDebug = receiver.LastMmsstvSyncAdjustDebug;
+
+    if (string.IsNullOrWhiteSpace(receiver.LatestImagePath) || !File.Exists(receiver.LatestImagePath))
+    {
+        return (null, slantDebug, syncAdjustDebug);
+    }
+
+    var decoded = BitmapReader.LoadRgb24(receiver.LatestImagePath, profile.Width, profile.Height);
+    return (ImageComparison.Measure(sourceImage, decoded), slantDebug, syncAdjustDebug);
+}
+
+static float[] ApplySampleClockPpm(float[] audio, double ppm)
+{
+    if (audio.Length == 0)
+    {
+        return [];
+    }
+
+    var scale = 1.0 + (ppm / 1_000_000.0);
+    var resultLength = Math.Max(1, (int)Math.Round(audio.Length / scale));
+    var result = new float[resultLength];
+    for (var i = 0; i < result.Length; i++)
+    {
+        var source = i * scale;
+        var left = Math.Clamp((int)Math.Floor(source), 0, audio.Length - 1);
+        var right = Math.Min(audio.Length - 1, left + 1);
+        var fraction = source - left;
+        result[i] = (float)(audio[left] + ((audio[right] - audio[left]) * fraction));
+    }
+
+    return result;
+}
+
+static float[] AddWhiteNoise(float[] audio, double noiseDb, int seed)
+{
+    if (audio.Length == 0)
+    {
+        return [];
+    }
+
+    var rng = new Random(seed);
+    var result = new float[audio.Length];
+    var noiseGain = Math.Pow(10.0, noiseDb / 20.0);
+    for (var i = 0; i < audio.Length; i++)
+    {
+        var noise = ((rng.NextDouble() * 2.0) - 1.0) * noiseGain;
+        result[i] = (float)Math.Clamp(audio[i] + noise, -1.0, 1.0);
+    }
+
+    return result;
+}
+
 static void RunAvtStateProbe(int sampleRate)
 {
     var state = new MmsstvDemodState(sampleRate)
@@ -214,6 +560,7 @@ static void RunAvtStateProbe(int sampleRate)
         tone1200: 0.0,
         tone1300: 0.0,
         tone1900: 0.0,
+        toneFsk: 0.0,
         rawPllValue: 0.0,
         sampleRate,
         consumedSamples: (int)Math.Round(10.0 * sampleRate / 1000.0));
@@ -224,6 +571,7 @@ static void RunAvtStateProbe(int sampleRate)
         tone1200: 0.0,
         tone1300: 0.0,
         tone1900: 0.0,
+        toneFsk: 0.0,
         rawPllValue: 0.0,
         sampleRate,
         consumedSamples: (int)Math.Round(5.0 * sampleRate / 1000.0));
@@ -423,7 +771,9 @@ static void RunNativeTxPrepProbe(string outputRoot, int sampleRate)
     {
         "Martin 1",
         "Scottie 1",
+        "Robot 24",
         "Robot 36",
+        "Robot 72",
         "PD 120",
         "AVT 90",
     };
@@ -444,7 +794,7 @@ static void RunNativeTxPrepProbe(string outputRoot, int sampleRate)
         var wavPath = Path.Combine(outputRoot, $"tx_probe_{profile.Name.ToLowerInvariant().Replace(' ', '_')}.wav");
         WaveFileWriter.WriteMono16(wavPath, pcm, sampleRate);
 
-        var visDetected = VisDetector.TryDetect(pcm.ToList(), 0, allowLegacyPattern: false, out _, out var visProfile);
+        var visDetected = VisDetector.TryDetect(pcm.ToList(), 0, allowLegacyPattern: false, out _, out var visProfile, resolveAllPlannedModes: true);
         Console.WriteLine($"{profile.Name}: tones {tonePlan.Count}, samples {pcm.Length}, VIS {(visDetected ? visProfile?.Name : "none")}, wav {wavPath}");
     }
 }
@@ -455,7 +805,9 @@ static void RunNativeTxRoundTripProbe(string outputRoot, int sampleRate, int chu
     {
         "Martin 1",
         "Scottie 1",
+        "Robot 24",
         "Robot 36",
+        "Robot 72",
         "PD 120",
     };
 
@@ -479,7 +831,7 @@ static void RunNativeTxRoundTripProbe(string outputRoot, int sampleRate, int chu
         var txAudio = Pcm16ToFloatMono(clip.PcmBytes);
         var wavPath = Path.Combine(outputRoot, $"{stem}.wav");
         WaveFileWriter.WriteMono16(wavPath, txAudio, sampleRate);
-        var visDetected = VisDetector.TryDetect(txAudio.ToList(), 0, allowLegacyPattern: false, out _, out var visProfile);
+        var visDetected = VisDetector.TryDetect(txAudio.ToList(), 0, allowLegacyPattern: false, out _, out var visProfile, resolveAllPlannedModes: true);
 
         var receiver = new NativeSstvReceiver();
         receiver.Configure("Auto Detect", "14.230 MHz USB", 0, 0);
@@ -523,6 +875,8 @@ static void RunNativeTxRoundTripProbe(string outputRoot, int sampleRate, int chu
         Console.WriteLine($"{profile.Name}: direct VIS {(visDetected ? visProfile?.Name : "none")}, mode {receiver.DetectedMode}, origin {receiver.SessionOrigin}, sync {receiver.SyncStatus}");
         if (comparison is not null)
         {
+            Console.WriteLine(
+                $"  round-trip result: {profile.Name} MAE {comparison.MeanAbsoluteError:0.00}, corr R {comparison.RedCorrelation:0.000} | G {comparison.GreenCorrelation:0.000} | B {comparison.BlueCorrelation:0.000}");
             Console.WriteLine(
                 $"  round-trip MAE {comparison.MeanAbsoluteError:0.00}, corr R {comparison.RedCorrelation:0.000} | G {comparison.GreenCorrelation:0.000} | B {comparison.BlueCorrelation:0.000}");
         }
@@ -753,6 +1107,7 @@ static MmsstvDemodState.EarlySyncResult FeedAvtToneWindow(
         tone1200: 0.0,
         tone1300: 0.0,
         tone1900: 0.0,
+        toneFsk: 0.0,
         rawPllValue: rawPll,
         sampleRate,
         consumedSamples: count);
@@ -790,6 +1145,7 @@ static MmsstvDemodState.EarlySyncResult FeedAvtToneWindowSampleAccurate(
             tone1200: 0.0,
             tone1300: 0.0,
             tone1900: 0.0,
+            toneFsk: 0.0,
             rawPllValue: lastRawPll,
             sampleRate,
             consumedSamples: 1);

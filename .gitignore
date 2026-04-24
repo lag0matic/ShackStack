@@ -6,7 +6,7 @@ publish/
 tests/
 docs/
 src/ShackStack.Desktop/DecoderWorkers/
-src/ShackStack.DecoderHost/Python/.pyinstaller/
+src/ShackStack.DecoderWorkers.Python/.pyinstaller/
 
 *.user
 *.suo
@@ -18,5 +18,5 @@ src/ShackStack.DecoderHost/Python/.pyinstaller/
 *.log
 Thumbs.db
 Desktop.ini
-src/ShackStack.DecoderHost/Python/**/__pycache__/
-src/ShackStack.DecoderHost/Python/**/*.pyc
+src/ShackStack.DecoderWorkers.Python/**/__pycache__/
+src/ShackStack.DecoderWorkers.Python/**/*.pyc
