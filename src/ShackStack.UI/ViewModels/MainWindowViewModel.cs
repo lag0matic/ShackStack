@@ -7258,8 +7258,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return false;
         }
 
-        var match = System.Text.RegularExpressions.Regex.Match(text, @"(\d+(?:\.\d+)?)\s*(MHz|kHz|Hz)?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (!match.Success)
+        var matches = System.Text.RegularExpressions.Regex.Matches(text, @"(\d+(?:\.\d+)?)\s*(MHz|kHz|Hz)?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var match = matches
+            .Cast<System.Text.RegularExpressions.Match>()
+            .FirstOrDefault(candidate => candidate.Groups[2].Success)
+            ?? matches.Cast<System.Text.RegularExpressions.Match>().FirstOrDefault();
+        if (match is null || !match.Success)
         {
             return false;
         }
