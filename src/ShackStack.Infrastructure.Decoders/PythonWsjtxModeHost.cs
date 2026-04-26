@@ -30,7 +30,7 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
     private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
     private readonly WsjtxExternalWaveformPort _waveformPort = WsjtxExternalWaveformPort.CreateDefault();
     private readonly object _sync = new();
-    private readonly Channel<AudioBuffer> _audioQueue = Channel.CreateBounded<AudioBuffer>(new BoundedChannelOptions(1)
+    private readonly Channel<WsjtxQueuedAudio> _audioQueue = Channel.CreateBounded<WsjtxQueuedAudio>(new BoundedChannelOptions(512)
     {
         SingleReader = true,
         SingleWriter = false,
@@ -87,7 +87,9 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
 
             var copiedSamples = new float[buffer.Samples.Length];
             Array.Copy(buffer.Samples, copiedSamples, copiedSamples.Length);
-            _audioQueue.Writer.TryWrite(new AudioBuffer(copiedSamples, buffer.SampleRate, buffer.Channels));
+            _audioQueue.Writer.TryWrite(new WsjtxQueuedAudio(
+                new AudioBuffer(copiedSamples, buffer.SampleRate, buffer.Channels),
+                GetDisciplinedUtcNow(_clockDisciplineService.Current)));
         }));
 
         _activeWorker = _workerLaunch.DisplayPath;
@@ -234,7 +236,9 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
     {
         _isRunning = false;
         StopLoop();
-        _audioQueue.Writer.TryWrite(new AudioBuffer([], WsjtxInputSampleRate, 1));
+        _audioQueue.Writer.TryWrite(new WsjtxQueuedAudio(
+            new AudioBuffer([], WsjtxInputSampleRate, 1),
+            GetDisciplinedUtcNow(_clockDisciplineService.Current)));
         lock (_sync)
         {
             _recentDecodeKeys.Clear();
@@ -467,14 +471,14 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
         return false;
     }
 
-    private async Task SendAudioAsync(AudioBuffer buffer)
+    private async Task SendAudioAsync(WsjtxQueuedAudio queued)
     {
         if (_process is null || _process.HasExited || _stdin is null)
         {
             return;
         }
 
-        var adapted = AdaptForWsjtx(buffer);
+        var adapted = AdaptForWsjtx(queued.Buffer);
         if (adapted.Samples.Length == 0)
         {
             return;
@@ -487,6 +491,7 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
             type = "audio",
             sampleRate = adapted.SampleRate,
             channels = adapted.Channels,
+            utcNowUnixMs = queued.CapturedUtc.ToUnixTimeMilliseconds(),
             samples = Convert.ToBase64String(bytes),
         }, CancellationToken.None).ConfigureAwait(false);
     }
@@ -618,14 +623,14 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
         {
             while (await _audioQueue.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
             {
-                while (_audioQueue.Reader.TryRead(out var buffer))
+                while (_audioQueue.Reader.TryRead(out var queued))
                 {
                     if (!_isRunning)
                     {
                         continue;
                     }
 
-                    await SendAudioAsync(buffer).ConfigureAwait(false);
+                    await SendAudioAsync(queued).ConfigureAwait(false);
                 }
             }
         }
@@ -837,4 +842,6 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
         _audioPumpCts.Dispose();
         _writeGate.Dispose();
     }
+
+    private sealed record WsjtxQueuedAudio(AudioBuffer Buffer, DateTimeOffset CapturedUtc);
 }

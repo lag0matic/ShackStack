@@ -184,7 +184,10 @@ internal static class Program
                 return;
             }
 
-            var cycles = GetCycles(decoded, DateTimeOffset.UtcNow);
+            var capturedUtc = payload.UtcNowUnixMs is { } unixMs
+                ? DateTimeOffset.FromUnixTimeMilliseconds(unixMs)
+                : DateTimeOffset.UtcNow;
+            var cycles = GetCycles(decoded, capturedUtc);
             if (cycles.Count == 0)
             {
                 EmitBoundaryWaitTelemetryIfNeeded();
@@ -859,6 +862,7 @@ internal static class Program
         public string? StationGridSquare { get; set; }
         public int? SampleRate { get; set; }
         public int? Channels { get; set; }
+        public long? UtcNowUnixMs { get; set; }
         public string? Samples { get; set; }
     }
 }
