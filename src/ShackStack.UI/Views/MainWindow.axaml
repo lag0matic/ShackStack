@@ -408,13 +408,15 @@
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
                       <TextBlock Grid.Row="0" Text="RTTY Receive" FontSize="18" FontWeight="SemiBold" />
                       <TextBlock Grid.Row="1"
-                                 Text="Pick a common shift/baud profile, tune a calling frequency, and start receive."
+                                 Text="Use USB-D/LSB-D for IC-7300 audio RTTY, pick a shift/baud profile, and start receive."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
                       <Grid Grid.Row="2" RowDefinitions="Auto,*" RowSpacing="8">
                         <Border Grid.Row="0" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
                           <StackPanel Spacing="8">
+                            <CheckBox Content="Use tuned frequency"
+                                      IsChecked="{Binding RttyDecodeCurrentRadioFrequency}" />
                             <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
                               <TextBlock Grid.Column="0" Text="Profile" Foreground="#7F879B" VerticalAlignment="Center" />
                               <ComboBox Grid.Column="1"
@@ -423,12 +425,37 @@
                                         HorizontalAlignment="Stretch" />
                             </Grid>
                             <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Freq" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <ComboBox Grid.Column="1"
-                                        ItemsSource="{Binding RttyFrequencyOptions}"
-                                        SelectedItem="{Binding RttySelectedFrequency}"
-                                        HorizontalAlignment="Stretch" />
+                              <TextBlock Grid.Column="0" Text="Tune" Foreground="#7F879B" VerticalAlignment="Center" />
+                              <AutoCompleteBox Grid.Column="1"
+                                               ItemsSource="{Binding RttyFrequencyOptions}"
+                                               Text="{Binding RttySelectedFrequency}"
+                                               FilterMode="Contains"
+                                               MinimumPrefixLength="0"
+                                               HorizontalAlignment="Stretch" />
                             </Grid>
+                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
+                              <TextBlock Grid.Column="0" Text="Audio Hz" Foreground="#7F879B" VerticalAlignment="Center" />
+                              <TextBox Grid.Column="1"
+                                       Text="{Binding RttyAudioCenterHz}"
+                                       HorizontalAlignment="Stretch" />
+                            </Grid>
+                            <Border Background="#101827" BorderBrush="#263248" BorderThickness="1" CornerRadius="6" Padding="8">
+                              <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
+                                <TextBlock Grid.Row="0"
+                                           Text="{Binding RttyTuneHelperSuggestion}"
+                                           Foreground="#C4C8D8"
+                                           TextWrapping="Wrap" />
+                                <Button Grid.Row="1"
+                                        Content="Apply Tune Helper"
+                                        Command="{Binding ApplyRttyTuneHelperCommand}"
+                                        HorizontalAlignment="Left" />
+                              </Grid>
+                            </Border>
+                            <CheckBox Content="Reverse mark/space polarity"
+                                      IsChecked="{Binding RttyReversePolarity}" />
+                            <TextBlock Text="Leave Use tuned frequency checked for manual rig tuning. ShackStack will prefer USB-D/LSB-D for audio RTTY; native RTTY is for the rig's FSK/RTTY path. Audio Hz is the center between the tones; 1700 and 2210 are common starting points."
+                                      Foreground="#7F879B"
+                                      TextWrapping="Wrap" />
                             <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
                               <Button Content="Start RX" Command="{Binding StartRttyReceiveCommand}" Margin="0,0,8,6" />
                               <Button Content="Stop RX" Command="{Binding StopRttyReceiveCommand}" Margin="0,0,8,6" />

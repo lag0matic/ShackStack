@@ -40,7 +40,7 @@ public static class ServiceCollectionExtensions
                 ? new GgmorseCwDecoderHost(audio)
                 : new PythonCwDecoderHost(audio);
         });
-        services.AddSingleton<IRttyDecoderHost, PythonRttyDecoderHost>();
+        services.AddSingleton<IRttyDecoderHost, FldigiRttyDecoderHost>();
         services.AddSingleton<ISstvDecoderHost>(provider =>
         {
             var audio = provider.GetRequiredService<IAudioService>();

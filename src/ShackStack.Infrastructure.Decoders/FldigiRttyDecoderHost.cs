@@ -5,7 +5,7 @@ using ShackStack.Core.Abstractions.Utilities;
 
 namespace ShackStack.Infrastructure.Decoders;
 
-public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
+public sealed class FldigiRttyDecoderHost : IRttyDecoderHost, IDisposable
 {
     private readonly IAudioService _audioService;
     private readonly SimpleSubject<RttyDecoderTelemetry> _telemetry = new();
@@ -14,10 +14,10 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
     private readonly DecoderWorkerProcess _workerProcess;
     private readonly DecoderAudioPump _audioPump;
 
-    private RttyDecoderConfiguration _configuration = new("170 Hz / 45.45 baud", 170, 45.45, "14.080 MHz USB");
+    private RttyDecoderConfiguration _configuration = new("170 Hz / 45.45 baud", 170, 45.45, "14.080 MHz USB", 1700.0, false);
     private bool _isRunning;
 
-    public PythonRttyDecoderHost(IAudioService audioService)
+    public FldigiRttyDecoderHost(IAudioService audioService)
     {
         _audioService = audioService;
         _workerProcess = new DecoderWorkerProcess(BundledDecoderWorkerLocator.Resolve("rtty_sidecar_worker"));
@@ -35,8 +35,8 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
 
         _telemetry.OnNext(new RttyDecoderTelemetry(
             false,
-            _workerProcess.Exists ? "Python RTTY worker ready to launch" : $"Worker missing: {_workerProcess.DisplayPath}",
-            "Python RTTY sidecar",
+            _workerProcess.Exists ? "fldigi GPL RTTY worker ready to launch" : $"Worker missing: {_workerProcess.DisplayPath}",
+            "fldigi GPL RTTY sidecar",
             0,
             _configuration.ShiftHz,
             _configuration.BaudRate,
@@ -58,6 +58,8 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
             shiftHz = configuration.ShiftHz,
             baudRate = configuration.BaudRate,
             frequencyLabel = configuration.FrequencyLabel,
+            audioCenterHz = configuration.AudioCenterHz,
+            reversePolarity = configuration.ReversePolarity,
         }, ct).ConfigureAwait(false);
     }
 
@@ -96,7 +98,7 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
             _telemetry.OnNext(new RttyDecoderTelemetry(
                 false,
                 $"Worker missing: {_workerProcess.DisplayPath}",
-                "Python RTTY sidecar",
+                "fldigi GPL RTTY sidecar",
                 0,
                 _configuration.ShiftHz,
                 _configuration.BaudRate,
@@ -119,11 +121,14 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
                 _telemetry.OnNext(new RttyDecoderTelemetry(
                     root.TryGetProperty("isRunning", out var runningEl) && runningEl.GetBoolean(),
                     root.TryGetProperty("status", out var statusEl) ? statusEl.GetString() ?? string.Empty : string.Empty,
-                    root.TryGetProperty("activeWorker", out var workerEl) ? workerEl.GetString() ?? "Python RTTY sidecar" : "Python RTTY sidecar",
+                    root.TryGetProperty("activeWorker", out var workerEl) ? workerEl.GetString() ?? "fldigi GPL RTTY sidecar" : "fldigi GPL RTTY sidecar",
                     root.TryGetProperty("signalLevelPercent", out var levelEl) ? levelEl.GetInt32() : 0,
                     root.TryGetProperty("estimatedShiftHz", out var shiftEl) ? shiftEl.GetInt32() : _configuration.ShiftHz,
                     root.TryGetProperty("estimatedBaud", out var baudEl) ? baudEl.GetDouble() : _configuration.BaudRate,
-                    root.TryGetProperty("profileLabel", out var profileEl) ? profileEl.GetString() ?? _configuration.ProfileLabel : _configuration.ProfileLabel));
+                    root.TryGetProperty("profileLabel", out var profileEl) ? profileEl.GetString() ?? _configuration.ProfileLabel : _configuration.ProfileLabel,
+                    root.TryGetProperty("suggestedAudioCenterHz", out var centerEl) ? centerEl.GetDouble() : _configuration.AudioCenterHz,
+                    root.TryGetProperty("tuneConfidence", out var confidenceEl) ? confidenceEl.GetDouble() : 0.0,
+                    root.TryGetProperty("isCarrierLocked", out var lockedEl) && lockedEl.GetBoolean()));
             }
             else if (string.Equals(type, "decode", StringComparison.OrdinalIgnoreCase))
             {
@@ -137,7 +142,7 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
             _telemetry.OnNext(new RttyDecoderTelemetry(
                 _isRunning,
                 $"Decoder output parse error: {ex.Message}",
-                "Python RTTY sidecar",
+                "fldigi GPL RTTY sidecar",
                 0,
                 _configuration.ShiftHz,
                 _configuration.BaudRate,
@@ -152,7 +157,7 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
         _telemetry.OnNext(new RttyDecoderTelemetry(
             _isRunning,
             $"Worker stderr: {line}",
-            "Python RTTY sidecar",
+            "fldigi GPL RTTY sidecar",
             0,
             _configuration.ShiftHz,
             _configuration.BaudRate,
@@ -186,8 +191,8 @@ public sealed class PythonRttyDecoderHost : IRttyDecoderHost, IDisposable
         _isRunning = false;
         _telemetry.OnNext(new RttyDecoderTelemetry(
             false,
-            "Python RTTY worker exited",
-            "Python RTTY sidecar",
+            "fldigi GPL RTTY worker exited",
+            "fldigi GPL RTTY sidecar",
             0,
             _configuration.ShiftHz,
             _configuration.BaudRate,

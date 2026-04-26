@@ -13,12 +13,12 @@ $specRoot = Join-Path $pyiRoot "spec"
 
 $workers = @(
     "cw_sidecar_worker",
-    "rtty_sidecar_worker",
     "wefax_sidecar_worker",
     "wsjtx_sidecar_worker"
 )
 
 $gplWsjtxProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplWsjtx\ShackStack.DecoderHost.GplWsjtx.csproj"
+$gplRttyProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplFldigiRtty\ShackStack.DecoderHost.GplFldigiRtty.csproj"
 $nativeSstvProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.Sstv\ShackStack.DecoderHost.Sstv.csproj"
 
 New-Item -ItemType Directory -Force -Path $distRoot | Out-Null
@@ -85,6 +85,15 @@ if (Test-Path $gplWsjtxProject) {
         -r win-x64 `
         --self-contained false `
         -o $gplDist
+}
+
+if (Test-Path $gplRttyProject) {
+    $rttyDist = Join-Path $distRoot "rtty_sidecar_worker"
+    & dotnet publish $gplRttyProject `
+        -c Release `
+        -r win-x64 `
+        --self-contained false `
+        -o $rttyDist
 }
 
 if (Test-Path $nativeSstvProject) {

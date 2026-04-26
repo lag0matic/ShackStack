@@ -85,6 +85,9 @@ Console.WriteLine();
 RunNativeTxRoundTripProbe(outputRoot, sampleRate, chunkSize);
 Console.WriteLine();
 
+RunFskIdLoopbackProbe(outputRoot, sampleRate, chunkSize);
+Console.WriteLine();
+
 RunTxModulatorFeatureProbe(outputRoot, sampleRate);
 Console.WriteLine();
 
@@ -897,6 +900,45 @@ static void RunNativeTxRoundTripProbe(string outputRoot, int sampleRate, int chu
             Console.WriteLine($"  decoded {copiedDecodePath}");
         }
     }
+}
+
+static void RunFskIdLoopbackProbe(string outputRoot, int sampleRate, int chunkSize)
+{
+    const string expectedCallsign = "KE9CRR";
+    if (!MmsstvModeCatalog.TryResolve("Martin 1", out var profile))
+    {
+        Console.WriteLine("=== FSKID loopback probe ===");
+        Console.WriteLine("Martin 1: missing profile");
+        return;
+    }
+
+    var stem = "tx_fskid_loopback_martin_1";
+    var sourceImage = TestCardFactory.Create(profile.Width, profile.Height);
+    var clipBuilder = new SstvTransmitClipBuilder(sampleRate);
+    var clip = clipBuilder.Build(
+        profile.Name,
+        sourceImage,
+        profile.Width,
+        profile.Height,
+        new MmsstvTxOptions(FskIdEnabled: true, FskIdCallsign: expectedCallsign));
+    var txAudio = Pcm16ToFloatMono(clip.PcmBytes);
+    var wavPath = Path.Combine(outputRoot, $"{stem}.wav");
+    WaveFileWriter.WriteMono16(wavPath, txAudio, sampleRate);
+
+    var receiver = new NativeSstvReceiver();
+    receiver.Configure("Auto Detect", "14.230 MHz USB", 0, 0);
+    receiver.Start();
+
+    for (var offset = 0; offset < txAudio.Length; offset += chunkSize)
+    {
+        var count = Math.Min(chunkSize, txAudio.Length - offset);
+        var chunk = new float[count];
+        Array.Copy(txAudio, offset, chunk, 0, count);
+        receiver.HandleAudio(chunk, out _);
+    }
+
+    Console.WriteLine("=== FSKID loopback probe ===");
+    Console.WriteLine($"Expected {expectedCallsign}, decoded {receiver.LastFskIdCallsign ?? "none"}, wav {wavPath}");
 }
 
 static void RunTxModulatorFeatureProbe(string outputRoot, int sampleRate)

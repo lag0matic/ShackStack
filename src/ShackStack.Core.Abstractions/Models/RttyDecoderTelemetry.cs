@@ -7,4 +7,7 @@ public sealed record RttyDecoderTelemetry(
     int SignalLevelPercent,
     int EstimatedShiftHz,
     double EstimatedBaud,
-    string ProfileLabel);
+    string ProfileLabel,
+    double SuggestedAudioCenterHz = 0.0,
+    double TuneConfidence = 0.0,
+    bool IsCarrierLocked = false);

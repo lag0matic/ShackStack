@@ -8,6 +8,7 @@ namespace ShackStack.Infrastructure.Radio;
 
 public sealed class RadioService : IRadioService, IDisposable
 {
+    private static readonly TimeSpan InitialConnectCommandTimeout = TimeSpan.FromSeconds(8);
     private const int MaxCwChunkLength = 30;
     private const int CwRetryLimit = 20;
     private readonly CivDispatcher _dispatcher = new();
@@ -40,20 +41,44 @@ public sealed class RadioService : IRadioService, IDisposable
     public async Task ConnectAsync(RadioConnectionOptions options, CancellationToken ct)
     {
         _lastOptions = options;
-        await _session.ConnectAsync(options, ct).ConfigureAwait(false);
-
         try
         {
-            await _icomCommands.EnableScopeOutputAsync((byte)options.RadioAddress, ct).ConfigureAwait(false);
-            await SyncScopeStateAsync(ct).ConfigureAwait(false);
+            using var initialConnectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            initialConnectCts.CancelAfter(InitialConnectCommandTimeout);
+
+            await _session.ConnectAsync(options, initialConnectCts.Token).ConfigureAwait(false);
+
+            try
+            {
+                await _icomCommands.EnableScopeOutputAsync((byte)options.RadioAddress, initialConnectCts.Token).ConfigureAwait(false);
+                await SyncScopeStateAsync(initialConnectCts.Token).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Scope output is optional during the first pass. Do not block core CI-V control
+                // if the radio rejects or delays the scope-enable commands.
+            }
+
+            try
+            {
+                await SyncStateAsync(initialConnectCts.Token).ConfigureAwait(false);
+            }
+            catch
+            {
+                await SyncMinimalStateAsync(initialConnectCts.Token).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            await DisconnectAfterFailedConnectAsync().ConfigureAwait(false);
+            throw new TimeoutException("Radio did not answer the initial CI-V handshake.");
         }
         catch
         {
-            // Scope output is optional during the first pass. Do not block core CI-V control
-            // if the radio rejects or delays the scope-enable commands.
+            await DisconnectAfterFailedConnectAsync().ConfigureAwait(false);
+            throw;
         }
 
-        await SyncStateAsync(ct).ConfigureAwait(false);
         _session.StartReconciliationLoop(SyncCurrentStateAsync, ct, TimeSpan.FromSeconds(2));
         StartSmeterLoop(ct);
         StartControlStateLoop(ct);
@@ -681,6 +706,30 @@ public sealed class RadioService : IRadioService, IDisposable
         });
     }
 
+    private async Task SyncMinimalStateAsync(CancellationToken ct)
+    {
+        var options = _lastOptions;
+        if (options is null)
+        {
+            return;
+        }
+
+        var radioAddress = (byte)options.RadioAddress;
+        var frequency = await _icomCommands.GetFrequencyAsync(radioAddress, ct).ConfigureAwait(false);
+        var (mode, filterWidth, filterSlot) = await _icomCommands.GetModeAsync(radioAddress, ct).ConfigureAwait(false);
+        var current = _stateStore.Current;
+        _stateStore.Update(current with
+        {
+            IsConnected = true,
+            FrequencyHz = frequency,
+            VfoAFrequencyHz = current.IsVfoBActive ? current.VfoAFrequencyHz : frequency,
+            VfoBFrequencyHz = current.IsVfoBActive ? frequency : current.VfoBFrequencyHz,
+            Mode = mode,
+            FilterSlot = filterSlot,
+            FilterWidthHz = filterWidth,
+        });
+    }
+
     private async Task SyncScopeStateAsync(CancellationToken ct)
     {
         var options = _lastOptions;
@@ -913,6 +962,22 @@ public sealed class RadioService : IRadioService, IDisposable
         _controlStateTask = null;
         _controlStateCts.Dispose();
         _controlStateCts = null;
+    }
+
+    private async Task DisconnectAfterFailedConnectAsync()
+    {
+        try
+        {
+            await StopControlStateLoopAsync().ConfigureAwait(false);
+            await StopSmeterLoopAsync().ConfigureAwait(false);
+            await _session.DisconnectAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Preserve the original connect failure for the UI.
+        }
+
+        _stateStore.Update(current => current with { IsConnected = false, IsPttActive = false, Smeter = 0 });
     }
 
     private void HandleUnsolicitedFrame(CivFrame frame)

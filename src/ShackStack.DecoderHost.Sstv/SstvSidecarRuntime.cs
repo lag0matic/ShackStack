@@ -170,7 +170,8 @@ internal sealed class SstvSidecarRuntime
                 status,
                 detectedMode = _receiver.DetectedMode,
                 syncStatus = _receiver.SyncStatus,
-                sessionOrigin = _receiver.SessionOrigin
+                sessionOrigin = _receiver.SessionOrigin,
+                fskIdCallsign = _receiver.LastFskIdCallsign
             };
 
             File.AppendAllText(_diagnosticsLogPath, JsonSerializer.Serialize(payload, _jsonOptions) + Environment.NewLine);
@@ -303,7 +304,8 @@ internal sealed class SstvSidecarRuntime
             richStatus,
             "ShackStack SSTV native sidecar",
             _receiver.SignalLevelPercent,
-            _receiver.DetectedMode));
+            _receiver.DetectedMode,
+            _receiver.LastFskIdCallsign));
     }
 
     private void EmitImage(string status, string? imagePath)

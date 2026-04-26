@@ -5,5 +5,6 @@ public sealed record SstvDecoderTelemetry(
     string Status,
     string ActiveWorker,
     int SignalLevelPercent,
-    string DetectedMode
+    string DetectedMode,
+    string? FskIdCallsign = null
 );

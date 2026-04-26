@@ -8,8 +8,10 @@ internal sealed class NativeSstvReceiver
     private const double MinAutoSyncLeadRatio = 1.06;
     private const double MinMartin1LeadRatio = 1.03;
     private const int SessionIdleSignalThreshold = 6;
+    private const int SessionMissingSyncLineThreshold = 8;
     private const double MinChunkActivityForPendingVis = 0.010;
     private const double MinChunkActivityForSession = 0.006;
+    private const double MinSessionSyncProminence = 1.20;
     private const bool MmsstvAutoStopDefault = false;
     private static readonly bool UseMmsstvFullRxForSessionStart =
         !string.Equals(Environment.GetEnvironmentVariable("SHACKSTACK_SSTV_USE_MMSSTV_FULL_RX"), "0", StringComparison.Ordinal);
@@ -17,6 +19,7 @@ internal sealed class NativeSstvReceiver
     private readonly MmsstvLevelTracker _levelTracker = new(WorkingSampleRate) { FastAgc = true };
     private readonly MmsstvSyncFilterBank _syncFilters = new(WorkingSampleRate);
     private readonly MmsstvDemodulatorBank _controlDemodulators = new(WorkingSampleRate, narrow: false);
+    private readonly MmsstvFskIdDecoder _fskIdDecoder = new(WorkingSampleRate);
     private readonly MmsstvFirFilter _controlBandPass = new();
     private readonly List<float> _samples = [];
     private readonly List<float> _controlSamples = [];
@@ -26,6 +29,7 @@ internal sealed class NativeSstvReceiver
     private bool? _controlBandPassSyncRestart;
     private int _signalLevelPercent;
     private int _sessionIdleSamples;
+    private int _sessionMissingSyncSamples;
     private int? _pendingVisDetectedSample;
     private int _visSearchFrameIndex;
     private int _lastForceProbeSample;
@@ -44,6 +48,7 @@ internal sealed class NativeSstvReceiver
     private string? _latestImagePath;
     private string? _lastMmsstvSlantDebug;
     private string? _lastMmsstvSyncAdjustDebug;
+    private string? _lastFskIdCallsign;
     private SstvModeProfile? _pendingVisProfile;
     private NativeImageSession? _session;
     private NativeImageSession? _lastCompletedSession;
@@ -60,6 +65,7 @@ internal sealed class NativeSstvReceiver
     public string? LatestImagePath => _latestImagePath;
     public string? LastMmsstvSlantDebug => _lastMmsstvSlantDebug;
     public string? LastMmsstvSyncAdjustDebug => _lastMmsstvSyncAdjustDebug;
+    public string? LastFskIdCallsign => _lastFskIdCallsign;
     public string SyncStatus => _syncStatus;
     public string SessionOrigin => _sessionOrigin;
     public double LastSyncProminence => _lastSyncProminence;
@@ -82,6 +88,9 @@ internal sealed class NativeSstvReceiver
             ? "Listening for VIS / sync tones"
             : $"Listening for {ConfiguredMode} sync";
     }
+
+    public void Configure(string? mode, string? frequencyLabel, int manualSlant, int manualOffset)
+        => Configure(mode, frequencyLabel);
 
     public void SetMmsstvRxControls(
         bool remoteSyncStart,
@@ -163,8 +172,10 @@ internal sealed class NativeSstvReceiver
     {
         IsRunning = false;
         _demodState.Reset();
+        _fskIdDecoder.Reset();
         _signalLevelPercent = 0;
         _sessionIdleSamples = 0;
+        _sessionMissingSyncSamples = 0;
         _pendingVisDetectedSample = null;
         _lastChunkActivity = 0.0;
         _lastRawChunkActivity = 0.0;
@@ -190,6 +201,7 @@ internal sealed class NativeSstvReceiver
         _latestImagePath = null;
         _lastMmsstvSlantDebug = null;
         _lastMmsstvSyncAdjustDebug = null;
+        _lastFskIdCallsign = null;
         _pendingVisProfile = null;
         _manualForceStartPending = false;
         _detectedMode = ConfiguredMode;
@@ -281,6 +293,12 @@ internal sealed class NativeSstvReceiver
         }
 
         var controlSamples = BuildControlSamples(monoWorkingSamples);
+        var fskIdCallsign = _fskIdDecoder.Process(monoWorkingSamples);
+        if (!string.IsNullOrWhiteSpace(fskIdCallsign))
+        {
+            _lastFskIdCallsign = fskIdCallsign;
+        }
+
         _signalLevelPercent = SstvAudioMath.EstimateSignalLevelPercent(controlSamples);
         _lastChunkActivity = AverageAbsolute(controlSamples);
         _lastRawChunkActivity = AverageAbsolute(monoWorkingSamples);
@@ -1174,6 +1192,19 @@ internal sealed class NativeSstvReceiver
             return false;
         }
 
+        if (session.LineIndex > 0 && HasSessionSync(controlSamples))
+        {
+            _sessionMissingSyncSamples = 0;
+        }
+        else if (session.LineIndex > 0)
+        {
+            _sessionMissingSyncSamples += controlSamples.Length;
+            if (_sessionMissingSyncSamples >= SessionMissingSyncThresholdSamples(session.Profile))
+            {
+                return true;
+            }
+        }
+
         var dominantTone = DominantTone(controlSamples);
         var plausibleTone =
             dominantTone >= 1000.0
@@ -1189,6 +1220,34 @@ internal sealed class NativeSstvReceiver
 
         _sessionIdleSamples += controlSamples.Length;
         return _sessionIdleSamples >= SessionIdleThresholdSamples(session.Profile);
+    }
+
+    private bool HasSessionSync(ReadOnlySpan<float> controlSamples)
+    {
+        var windowSamples = WorkingSampleRate / 50;
+        if (controlSamples.Length < windowSamples)
+        {
+            return false;
+        }
+
+        var toneBank = _demodState.SyncToneBank;
+        var stepSamples = Math.Max(1, windowSamples / 2);
+        for (var offset = 0; offset + windowSamples <= controlSamples.Length; offset += stepSamples)
+        {
+            var window = controlSamples.Slice(offset, windowSamples);
+            var syncPower = SstvAudioMath.TonePower(window, WorkingSampleRate, toneBank.Tone1200Hz);
+            var comparePower =
+                SstvAudioMath.TonePower(window, WorkingSampleRate, toneBank.Tone1080Hz) +
+                SstvAudioMath.TonePower(window, WorkingSampleRate, toneBank.Tone1320Hz) +
+                SstvAudioMath.TonePower(window, WorkingSampleRate, toneBank.Tone1900Hz);
+            var prominence = syncPower / Math.Max(1e-9, comparePower / 3.0);
+            if (prominence >= MinSessionSyncProminence)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool ShouldAbandonPendingVis()
@@ -1234,6 +1293,12 @@ internal sealed class NativeSstvReceiver
         return Math.Max(WorkingSampleRate * 3, lineSamples * 6);
     }
 
+    private static int SessionMissingSyncThresholdSamples(SstvModeProfile profile)
+    {
+        var lineSamples = MmsstvTimingEngine.CalculateLineSamples(profile, WorkingSampleRate);
+        return Math.Max(WorkingSampleRate * 2, lineSamples * SessionMissingSyncLineThreshold);
+    }
+
     private void ClearPendingVis()
     {
         _pendingVisProfile = null;
@@ -1252,6 +1317,7 @@ internal sealed class NativeSstvReceiver
         _lastCatalogStartSample = null;
         _lastForceProbeSample = 0;
         _sessionIdleSamples = 0;
+        _sessionMissingSyncSamples = 0;
         _sessionOrigin = "idle";
         _lastSyncProminence = 0.0;
         _demodState.Reset();

@@ -20,6 +20,7 @@ namespace ShackStack.UI.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
+    private static readonly TimeSpan RadioConnectUiTimeout = TimeSpan.FromSeconds(12);
     private readonly DispatcherTimer _smeterUiTimer;
     private readonly DispatcherTimer _longwaveRefreshTimer;
     private double _displayedSmeterLevel;
@@ -365,6 +366,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 {
                     RttyRxStatus = telemetry.Status;
                     RttySessionNotes = $"{telemetry.ActiveWorker}  |  Signal {telemetry.SignalLevelPercent}%  |  Shift {telemetry.EstimatedShiftHz} Hz  |  Baud {telemetry.EstimatedBaud:0.##}";
+                    if (telemetry.SuggestedAudioCenterHz > 0)
+                    {
+                        RttySuggestedAudioCenterHz = telemetry.SuggestedAudioCenterHz;
+                        var confidenceLabel = telemetry.TuneConfidence >= 3.0
+                            ? "good"
+                            : telemetry.TuneConfidence >= 1.5
+                                ? "weak"
+                                : "listening";
+                        var lockLabel = telemetry.IsCarrierLocked ? "locked" : "suggested";
+                        RttyTuneHelperSuggestion =
+                            $"Tune helper: {lockLabel} Audio Hz {telemetry.SuggestedAudioCenterHz:0} ({confidenceLabel}, score {telemetry.TuneConfidence:0.0}). " +
+                            $"Mark/space approx {telemetry.SuggestedAudioCenterHz + telemetry.EstimatedShiftHz / 2.0:0}/{telemetry.SuggestedAudioCenterHz - telemetry.EstimatedShiftHz / 2.0:0} Hz.";
+                    }
                 });
             }));
 
@@ -389,7 +403,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 Dispatcher.UIThread.Post(() =>
                 {
                     SstvRxStatus = telemetry.Status;
-                    SstvSessionNotes = $"{telemetry.ActiveWorker}  |  Signal {telemetry.SignalLevelPercent}%  |  Mode {telemetry.DetectedMode}";
+                    if (!string.IsNullOrWhiteSpace(telemetry.FskIdCallsign))
+                    {
+                        SstvDecodedFskIdCallsign = telemetry.FskIdCallsign.Trim().ToUpperInvariant();
+                    }
+
+                    var fskId = string.IsNullOrWhiteSpace(SstvDecodedFskIdCallsign)
+                        ? "FSKID none"
+                        : $"FSKID {SstvDecodedFskIdCallsign}";
+                    SstvSessionNotes = $"{telemetry.ActiveWorker}  |  Signal {telemetry.SignalLevelPercent}%  |  Mode {telemetry.DetectedMode}  |  {fskId}";
                 });
             }));
 
@@ -877,10 +899,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string rttySelectedFrequency = "14.080 MHz USB";
 
     [ObservableProperty]
+    private bool rttyDecodeCurrentRadioFrequency = true;
+
+    [ObservableProperty]
+    private string rttyAudioCenterHz = "1700";
+
+    [ObservableProperty]
+    private string rttyTuneHelperSuggestion = "Start RX, then place an RTTY signal in the passband; helper will suggest Audio Hz.";
+
+    [ObservableProperty]
+    private double rttySuggestedAudioCenterHz;
+
+    [ObservableProperty]
+    private bool rttyReversePolarity;
+
+    [ObservableProperty]
     private string rttyRxStatus = "RTTY receiver ready";
 
     [ObservableProperty]
-    private string rttySessionNotes = "Select a common shift/baud profile, then start receive.";
+    private string rttySessionNotes = "For IC-7300 audio RTTY, use USB-D/LSB-D rather than native RTTY mode. Tune the signal, select shift/baud, then start receive.";
 
     [ObservableProperty]
     private string rttyDecodedText = string.Empty;
@@ -1261,6 +1298,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string sstvSessionNotes = "Auto Detect is the recommended default. Lock a mode only when you know it; Force Start is for late joins or missing VIS.";
 
     [ObservableProperty]
+    private string sstvDecodedFskIdCallsign = string.Empty;
+
+    [ObservableProperty]
     private Bitmap? sstvPreviewBitmap;
 
     [ObservableProperty]
@@ -1321,6 +1361,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private IReadOnlyList<string> sstvReplyTemplates =
     [
         "CQ SSTV DE %m",
+        "%m 599 %tocall",
         "QSL SSTV - TNX DE %m",
         "SSTV REPORT: RSV 595",
         "TNX QSO - 73 DE %m",
@@ -1360,6 +1401,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private bool sstvTxCwIdEnabled;
+
+    [ObservableProperty]
+    private bool sstvTxFskIdEnabled = true;
 
     [ObservableProperty]
     private string sstvTxCwIdText = "DE %m";
@@ -2087,12 +2131,46 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         RttyRxStatus = "RTTY receiver ready";
-        RttySessionNotes = "Select a common shift/baud profile, then start receive.";
+        RttySessionNotes = "For IC-7300 audio RTTY, use USB-D/LSB-D rather than native RTTY mode. Tune the signal, select shift/baud, then start receive.";
+        RttyTuneHelperSuggestion = "Start RX, then place an RTTY signal in the passband; helper will suggest Audio Hz.";
+        RttySuggestedAudioCenterHz = 0;
         RttyDecodedText = string.Empty;
     }
 
     [RelayCommand]
     private void ClearRttyDecodedText() => RttyDecodedText = string.Empty;
+
+    [RelayCommand]
+    private async Task ApplyRttyTuneHelperAsync()
+    {
+        if (RttySuggestedAudioCenterHz <= 0)
+        {
+            RttyTuneHelperSuggestion = "No RTTY tone pair has been detected yet. Start RX and tune until the two tones are visible/audible.";
+            return;
+        }
+
+        RttyAudioCenterHz = $"{RttySuggestedAudioCenterHz:0}";
+        RttyTuneHelperSuggestion = $"Applied Audio Hz {RttyAudioCenterHz}.";
+
+        if (_rttyDecoderHost is null)
+        {
+            return;
+        }
+
+        var (shiftHz, baudRate) = ParseRttyProfile(RttySelectedProfile);
+        var frequencyLabel = RttyDecodeCurrentRadioFrequency
+            ? "Current radio frequency"
+            : RttySelectedFrequency;
+        var config = new RttyDecoderConfiguration(
+            RttySelectedProfile,
+            shiftHz,
+            baudRate,
+            frequencyLabel,
+            RttySuggestedAudioCenterHz,
+            RttyReversePolarity);
+        await _rttyDecoderHost.ConfigureAsync(config, CancellationToken.None);
+        RttyTuneHelperSuggestion = $"Applied Audio Hz {RttyAudioCenterHz}; decoder reconfigured live.";
+    }
 
     [RelayCommand]
     private void StartWsjtxReceive()
@@ -3175,6 +3253,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SstvRxStatus = "SSTV receiver ready";
         SstvImageStatus = "No image captured yet";
         SstvSessionNotes = "Auto Detect is the recommended default. Lock a mode only when you know it; Force Start is for late joins or missing VIS.";
+        SstvDecodedFskIdCallsign = string.Empty;
         UpdateSstvPreview(null);
     }
 
@@ -3276,9 +3355,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var preparedFingerprint = BuildSstvTransmitFingerprint();
             var preparedMode = SstvSelectedTxMode;
             var transmitOptions = BuildSstvTransmitOptions();
+            var preparedTextOverlays = SstvReplyOverlayItems
+                .Select(item => new SstvOverlayItemViewModel
+                {
+                    Text = ExpandSstvReplyMacro(item.Text),
+                    X = item.X,
+                    Y = item.Y,
+                    FontSize = item.FontSize,
+                    FontFamilyName = item.FontFamilyName,
+                    Red = item.Red,
+                    Green = item.Green,
+                    Blue = item.Blue
+                })
+                .ToArray();
             var rgb24 = SstvReplyRenderer.RenderRgb24(
                 SelectedSstvReplyBaseImage.Path,
-                SstvReplyOverlayItems,
+                preparedTextOverlays,
                 SstvReplyImageOverlayItems,
                 pngPath,
                 out var width,
@@ -3300,17 +3392,29 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 _sstvPreparedTransmitFingerprint = preparedFingerprint;
                 _sstvPreparedTransmitMode = preparedMode;
-                _sstvPreparedTransmitCwIdSummary = transmitOptions.CwIdEnabled
-                    ? $"CW ID {transmitOptions.CwIdText} @ {transmitOptions.CwIdFrequencyHz} Hz/{transmitOptions.CwIdWpm} WPM"
-                    : null;
+                var idParts = new List<string>();
+                if (transmitOptions.FskIdEnabled)
+                {
+                    idParts.Add($"FSKID {transmitOptions.FskIdCallsign}");
+                }
+
+                if (transmitOptions.CwIdEnabled)
+                {
+                    idParts.Add($"CW ID {transmitOptions.CwIdText} @ {transmitOptions.CwIdFrequencyHz} Hz/{transmitOptions.CwIdWpm} WPM");
+                }
+
+                _sstvPreparedTransmitCwIdSummary = idParts.Count == 0 ? null : string.Join(" + ", idParts);
                 SstvPreparedTransmitPath = $"{pngPath}  |  {wavPath}";
                 SstvPreparedTransmitImagePath = pngPath;
                 SstvPreparedTransmitBitmap = new Bitmap(pngPath);
                 OnPropertyChanged(nameof(SstvHasPreparedTransmitPreview));
                 OnPropertyChanged(nameof(SstvHasPreparedTransmitClip));
                 _sstvPreparedTransmitDurationSeconds = _sstvPreparedTransmitClip.PcmBytes.Length / (double)(_sstvPreparedTransmitClip.SampleRate * _sstvPreparedTransmitClip.Channels * 2);
-                var cwid = transmitOptions.CwIdEnabled ? " + CWID" : string.Empty;
-                SstvTransmitStatus = $"Prepared {preparedMode}{cwid} TX ({_sstvPreparedTransmitDurationSeconds:0.0}s)";
+                var idSummary = string.Join(
+                    string.Empty,
+                    transmitOptions.FskIdEnabled ? " + FSKID" : string.Empty,
+                    transmitOptions.CwIdEnabled ? " + CWID" : string.Empty);
+                SstvTransmitStatus = $"Prepared {preparedMode}{idSummary} TX ({_sstvPreparedTransmitDurationSeconds:0.0}s)";
                 RefreshPreparedSstvTransmitSummary();
             });
         }
@@ -3330,13 +3434,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             : SettingsCallsign.Trim().ToUpperInvariant();
         var cwidText = (SstvTxCwIdText ?? string.Empty)
             .Replace("%m", stationCallsign, StringComparison.OrdinalIgnoreCase)
+            .Replace("%tocall", SstvDecodedFskIdCallsign, StringComparison.OrdinalIgnoreCase)
             .Trim();
 
         return new SstvTransmitOptions(
             SstvTxCwIdEnabled,
             cwidText,
             SstvTxCwIdFrequencyHz,
-            SstvTxCwIdWpm);
+            SstvTxCwIdWpm,
+            SstvTxFskIdEnabled,
+            stationCallsign);
     }
 
     private string BuildSstvTransmitFingerprint()
@@ -3358,6 +3465,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             SstvTxCwIdText ?? string.Empty,
             SstvTxCwIdFrequencyHz,
             SstvTxCwIdWpm,
+            SstvTxFskIdEnabled,
+            SstvDecodedFskIdCallsign,
             overlays,
             imageOverlays);
     }
@@ -3983,11 +4092,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var stationCallsign = string.IsNullOrWhiteSpace(SettingsCallsign)
             ? "CALL"
             : SettingsCallsign.Trim().ToUpperInvariant();
+        var toCall = string.IsNullOrWhiteSpace(SstvDecodedFskIdCallsign)
+            ? "TOCALL"
+            : SstvDecodedFskIdCallsign.Trim().ToUpperInvariant();
         var grid = string.IsNullOrWhiteSpace(SettingsGridSquare)
             ? "GRID"
             : SettingsGridSquare.Trim().ToUpperInvariant();
         var now = DateTime.Now;
         return (value ?? string.Empty)
+            .Replace("%tocall", toCall, StringComparison.OrdinalIgnoreCase)
             .Replace("%m", stationCallsign, StringComparison.OrdinalIgnoreCase)
             .Replace("%g", grid, StringComparison.OrdinalIgnoreCase)
             .Replace("%f", SstvSelectedFrequency, StringComparison.OrdinalIgnoreCase)
@@ -4079,11 +4192,24 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        await TuneRadioForRttyAsync(RttySelectedFrequency);
+        if (RttyDecodeCurrentRadioFrequency)
+        {
+            await SetRadioForRttyAudioDataModeAsync();
+        }
+        else
+        {
+            await TuneRadioForRttyAsync(RttySelectedFrequency);
+        }
+
         var (shiftHz, baudRate) = ParseRttyProfile(RttySelectedProfile);
-        var config = new RttyDecoderConfiguration(RttySelectedProfile, shiftHz, baudRate, RttySelectedFrequency);
+        var frequencyLabel = RttyDecodeCurrentRadioFrequency
+            ? "Current radio frequency"
+            : RttySelectedFrequency;
+        var audioCenterHz = ParseRttyAudioCenterHz(RttyAudioCenterHz);
+        var config = new RttyDecoderConfiguration(RttySelectedProfile, shiftHz, baudRate, frequencyLabel, audioCenterHz, RttyReversePolarity);
         await _rttyDecoderHost.ConfigureAsync(config, CancellationToken.None);
         await _rttyDecoderHost.StartAsync(CancellationToken.None);
+        RttySessionNotes = "RTTY audio decoder running. IC-7300 should be in USB-D or LSB-D; native RTTY is for the rig's FSK/RTTY path.";
     }
 
     private async Task StartWsjtxReceiveCoreAsync()
@@ -4323,15 +4449,43 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             var mode = frequencyLabel.Contains("LSB", StringComparison.OrdinalIgnoreCase)
-                ? RadioMode.Lsb
-                : RadioMode.Usb;
+                ? RadioMode.LsbData
+                : RadioMode.UsbData;
             await _radioService.SetModeAsync(mode, CancellationToken.None);
             await _radioService.SetFrequencyAsync(hz, CancellationToken.None);
-            RadioStatusSummary = $"RTTY tuned: {hz:N0} Hz {mode.ToString().ToUpperInvariant()}";
+            RadioStatusSummary = $"RTTY tuned: {hz:N0} Hz {FormatModeDisplay(mode)}";
         }
         catch (Exception ex)
         {
             RadioStatusSummary = $"RTTY tune failed: {ex.Message}";
+        }
+    }
+
+    private async Task SetRadioForRttyAudioDataModeAsync()
+    {
+        if (_radioService is null || CanConnect)
+        {
+            RttySessionNotes = "RTTY RX using current radio frequency. Set the IC-7300 to USB-D/LSB-D for audio RTTY.";
+            return;
+        }
+
+        try
+        {
+            var currentMode = _radioService.CurrentState.Mode;
+            var mode = currentMode == RadioMode.Lsb || currentMode == RadioMode.LsbData
+                ? RadioMode.LsbData
+                : RadioMode.UsbData;
+            if (currentMode != mode)
+            {
+                await _radioService.SetModeAsync(mode, CancellationToken.None);
+            }
+
+            RadioStatusSummary = $"RTTY RX using current radio frequency in {FormatModeDisplay(mode)}";
+        }
+        catch (Exception ex)
+        {
+            RadioStatusSummary = $"RTTY mode set failed: {ex.Message}";
+            RttySessionNotes = "RTTY RX will still start, but manually set the IC-7300 to USB-D/LSB-D for audio RTTY.";
         }
     }
 
@@ -5395,6 +5549,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         RefreshPreparedSstvTransmitSummary();
     }
 
+    partial void OnSstvTxFskIdEnabledChanged(bool value)
+    {
+        SstvTransmitStatus = "FSKID setting changed; prepare TX when ready.";
+        RefreshPreparedSstvTransmitSummary();
+    }
+
     partial void OnSstvTxCwIdTextChanged(string value)
     {
         SstvTransmitStatus = "CW ID text changed; prepare TX when ready.";
@@ -6212,12 +6372,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
+            using var connectCts = new CancellationTokenSource(RadioConnectUiTimeout);
             await _radioService.ConnectAsync(
                 new RadioConnectionOptions(
                     _settings.Radio.CivPort,
                     _settings.Radio.CivBaud,
                     _settings.Radio.CivAddress),
-                CancellationToken.None);
+                connectCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            ConnectionState = "Error";
+            RadioStatusSummary = "Connect failed: radio did not answer before timeout.";
+            IsBusy = false;
+            CanConnect = true;
         }
         catch (Exception ex)
         {
@@ -6832,6 +7000,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _ => (170, 45.45),
     };
 
+    private static double ParseRttyAudioCenterHz(string value)
+    {
+        if (double.TryParse(value.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var hz))
+        {
+            return Math.Clamp(hz, 300.0, 3200.0);
+        }
+
+        return 1700.0;
+    }
+
     private static double GetWsjtxCycleLengthSeconds(string modeLabel) =>
         WsjtxModeCatalog.GetMode(modeLabel).CycleLengthSeconds;
 
@@ -7074,23 +7252,37 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private static bool TryParseUiFrequencyHz(string frequencyLabel, out long hz)
     {
         hz = 0;
-        if (string.IsNullOrWhiteSpace(frequencyLabel))
+        var text = frequencyLabel.Trim();
+        if (text.Length == 0)
         {
             return false;
         }
 
-        var match = System.Text.RegularExpressions.Regex.Match(frequencyLabel, @"(\d+(?:\.\d+)?)\s*MHz", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"(\d+(?:\.\d+)?)\s*(MHz|kHz|Hz)?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         if (!match.Success)
         {
             return false;
         }
 
-        if (!double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mhz))
+        if (!double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value))
         {
             return false;
         }
 
-        hz = (long)Math.Round(mhz * 1_000_000.0);
+        var unit = match.Groups[2].Success ? match.Groups[2].Value : string.Empty;
+        var multiplier = unit.Equals("MHz", StringComparison.OrdinalIgnoreCase)
+            ? 1_000_000.0
+            : unit.Equals("kHz", StringComparison.OrdinalIgnoreCase)
+                ? 1_000.0
+                : unit.Equals("Hz", StringComparison.OrdinalIgnoreCase)
+                    ? 1.0
+                    : value >= 1_000_000.0
+                        ? 1.0
+                        : value >= 1_000.0
+                            ? 1_000.0
+                            : 1_000_000.0;
+
+        hz = (long)Math.Round(value * multiplier);
         return hz > 0;
     }
 

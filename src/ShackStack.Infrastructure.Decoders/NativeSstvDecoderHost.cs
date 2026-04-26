@@ -128,7 +128,8 @@ public sealed class NativeSstvDecoderHost : ISstvDecoderHost, IDisposable
                     root.TryGetProperty("status", out var statusEl) ? statusEl.GetString() ?? string.Empty : string.Empty,
                     root.TryGetProperty("activeWorker", out var workerEl) ? workerEl.GetString() ?? "Native SSTV sidecar" : "Native SSTV sidecar",
                     root.TryGetProperty("signalLevelPercent", out var levelEl) ? levelEl.GetInt32() : 0,
-                    root.TryGetProperty("detectedMode", out var modeEl) ? modeEl.GetString() ?? _configuration.Mode : _configuration.Mode));
+                    root.TryGetProperty("detectedMode", out var modeEl) ? modeEl.GetString() ?? _configuration.Mode : _configuration.Mode,
+                    root.TryGetProperty("fskIdCallsign", out var fskEl) ? fskEl.GetString() : null));
             }
             else if (string.Equals(type, "image", StringComparison.OrdinalIgnoreCase))
             {

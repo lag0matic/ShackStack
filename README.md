@@ -3,19 +3,22 @@
 ShackStack is a Windows desktop ham radio application built with C# and Avalonia.
 This was written with the assistance of ChatGPT, Claude, and Other AI tools - I am not a professional coder, and there will be bugs and rough edges.
 
-This clean release-candidate branch contains the operator-facing app code for the `V-0.9.0 RC` release. It is intended to be the GitHub-ready application repo, separate from the larger local development workspace and decoder experimentation harnesses.
+This branch contains the operator-facing app code for the `1.0` release. It is intended to be the GitHub-ready application repo, separate from the larger local development workspace and decoder experimentation harnesses.
 
-## Current Release Candidate Scope
+## Current 1.0 Scope
 
 - direct Icom CI-V radio control
 - VFO A / VFO B, `A/B`, `A=B`, and split operation
 - waterfall, spectrum, S-meter, monitor audio, and persisted operator display/audio settings
 - voice controls and rig-backed transmit settings
 - fake FLRig compatibility for HAMRS-style interop
-- SSTV receive workflow with live preview and pop-out desk/archive
+- SSTV receive workflow with live preview, pop-out desk/archive, MMSSTV-style slant/sync handling, and FSKID callsign capture
+- SSTV transmit workflow with template overlays, received-image thumbnail replies, and optional FSKID callsign encoding
 - WeFAX receive workflow with live preview and pop-out desk/archive
 - decoder host plumbing for CW, RTTY, SSTV, and WeFAX
 - FT8 and FT4 receive/transmit workflow using WSJT-X-derived tooling and sidecars
+- SNTP-backed FT8/FT4 time discipline fallback when Windows Time is unavailable or stale
+- RTTY receive workflow using the GPL fldigi-derived sidecar with manual audio tuning and USB-D/LSB-D friendly radio mode handling
 - weak-signal desk with RX/TX offset control, auto-sequence helpers, and QSO staging
 - Longwave integration for:
   - POTA spots
@@ -31,13 +34,16 @@ This clean release-candidate branch contains the operator-facing app code for th
   - real signal generation path
   - on-air CQ / reply workflow
   - compact band activity / RX frequency panes
+- SSTV receive and transmit for the common ham modes, including MMSSTV-style FSKID decode/encode and `%tocall` template replacement
+- RTTY receive with hand-tuned audio center, reverse mark/space polarity, and fldigi-derived decode behavior
 - POTA hunting workflow in the Voice pane
 - Longwave-backed log submission and logbook-aware logging
 
 ## Still Rough / In Progress
 
 - FT8/FT4 auto-logging and auto-sequencing still need more real-world refinement
-- RTTY, SSTV transmit, and additional digital-mode operating workflows are not first-class yet
+- CW decode remains experimental and may still need a more serious future pass
+- RTTY decode quality is signal-dependent and still benefits from real-world comparison against radio firmware/fldigi/minimodem
 - packaging and installed-build validation still deserve ongoing attention as the app evolves
 - UI polish is active work; expect labels, layouts, and flows to keep changing
 
@@ -57,6 +63,10 @@ This clean release-candidate branch contains the operator-facing app code for th
   - out-of-process decoder boundary components
 - `src/ShackStack.DecoderHost.GplWsjtx`
   - GPL weak-signal sidecar boundary for WSJT-X-style digital decode orchestration
+- `src/ShackStack.DecoderHost.GplFldigiRtty`
+  - GPL RTTY sidecar boundary for fldigi-style receive decoding
+- `src/ShackStack.DecoderHost.Sstv`
+  - native SSTV receive/transmit sidecar with MMSSTV-derived receive flow and TX synthesis
 - `installer`
   - Inno Setup packaging script
 
@@ -71,7 +81,7 @@ dotnet build .\ShackStack.sln
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\installer\Build-DecoderWorkers.ps1
-dotnet publish .\src\ShackStack.Desktop\ShackStack.Desktop.csproj -c Release -r win-x64 --self-contained true -o .\publish\ShackStack-win-x64-v0.1-beta
+dotnet publish .\src\ShackStack.Desktop\ShackStack.Desktop.csproj -c Release -r win-x64 --self-contained true -o .\publish\ShackStack-win-x64-v1.0
 ```
 
 ## Installer
@@ -82,13 +92,13 @@ dotnet publish .\src\ShackStack.Desktop\ShackStack.Desktop.csproj -c Release -r 
 
 ## Version
 
-- current release candidate: `V-0.9.0 RC`
+- current release: `1.0`
 
 ## Notes
 
 - This repo is intentionally app-focused.
 - Local publish artifacts are excluded from source control.
-- Local tests, scratch docs, and development notes are intentionally not included in this clean branch.
+- Local tests, scratch directories, and development notes are intentionally not included in this clean branch.
 - The broader Python decoder lab and experimentation workspace remain separate.
 - Weak-signal digital work uses dedicated external worker boundaries so WSJT-X-derived decode and signal-generation logic can remain separated from the main app.
 - If present, the app will prefer an external GPL sidecar specified by `SHACKSTACK_WSJTX_GPL_SIDECAR_PATH` before falling back to the in-repo development worker.

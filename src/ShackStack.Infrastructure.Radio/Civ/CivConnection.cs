@@ -5,6 +5,7 @@ namespace ShackStack.Infrastructure.Radio.Civ;
 
 public sealed class CivConnection : IAsyncDisposable
 {
+    private static readonly TimeSpan CloseTaskWaitTimeout = TimeSpan.FromSeconds(2);
     private readonly CivParser _parser = new();
     private readonly CivDispatcher _dispatcher;
     private readonly Channel<OutboundCommand> _writeQueue;
@@ -36,8 +37,8 @@ public sealed class CivConnection : IAsyncDisposable
 
         _serialPort = new SerialPort(portName, baudRate)
         {
-            ReadTimeout = -1,
-            WriteTimeout = -1,
+            ReadTimeout = 250,
+            WriteTimeout = 1000,
             DtrEnable = false,
             RtsEnable = false,
         };
@@ -52,25 +53,58 @@ public sealed class CivConnection : IAsyncDisposable
 
     public async Task CloseAsync()
     {
+        var serialPort = _serialPort;
+        _serialPort = null;
+
         if (_cts is not null)
         {
             _cts.Cancel();
         }
 
-        await Task.WhenAll(
-            _readerTask ?? Task.CompletedTask,
-            _writerTask ?? Task.CompletedTask,
-            _timeoutSweepTask ?? Task.CompletedTask).ConfigureAwait(false);
-
-        if (_serialPort is not null)
+        while (_writeQueue.Reader.TryRead(out var command))
         {
-            _serialPort.DtrEnable = false;
+            command.Completion.TrySetCanceled();
         }
 
-        _serialPort?.Dispose();
-        _serialPort = null;
+        if (serialPort is not null)
+        {
+            try
+            {
+                serialPort.DtrEnable = false;
+            }
+            catch
+            {
+                // Best effort during shutdown; the port may already be gone.
+            }
+
+            serialPort.Dispose();
+        }
+
+        _dispatcher.FailAll(new OperationCanceledException("CI-V connection closed."));
+
+        try
+        {
+            await Task.WhenAll(
+                    _readerTask ?? Task.CompletedTask,
+                    _writerTask ?? Task.CompletedTask,
+                    _timeoutSweepTask ?? Task.CompletedTask)
+                .WaitAsync(CloseTaskWaitTimeout)
+                .ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // SerialPort can be stubborn on Windows. The port has already been
+            // disposed, so do not let shutdown strand the UI.
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
         _cts?.Dispose();
         _cts = null;
+        _readerTask = null;
+        _writerTask = null;
+        _timeoutSweepTask = null;
     }
 
     public Task SetDtrAsync(bool enabled, CancellationToken cancellationToken)
@@ -88,14 +122,16 @@ public sealed class CivConnection : IAsyncDisposable
 
     public async Task<CivFrame?> SendAsync(byte[] frameBytes, Func<CivFrame, bool>? matcher, TimeSpan timeout, CancellationToken cancellationToken)
     {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(timeout + TimeSpan.FromSeconds(2));
         var completion = new TaskCompletionSource<CivFrame?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var command = new OutboundCommand(frameBytes, matcher, completion);
-        await _writeQueue.Writer.WriteAsync(command, cancellationToken).ConfigureAwait(false);
-        using var registration = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
+        await _writeQueue.Writer.WriteAsync(command, timeoutCts.Token).ConfigureAwait(false);
+        using var registration = timeoutCts.Token.Register(() => completion.TrySetCanceled(timeoutCts.Token));
         return await completion.Task.ConfigureAwait(false);
     }
 
-    private async Task ReadLoopAsync(CancellationToken cancellationToken)
+    private Task ReadLoopAsync(CancellationToken cancellationToken)
     {
         var buffer = new byte[1024];
 
@@ -103,7 +139,16 @@ public sealed class CivConnection : IAsyncDisposable
         {
             while (!cancellationToken.IsCancellationRequested && _serialPort is not null)
             {
-                var bytesRead = await _serialPort.BaseStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
+                int bytesRead;
+                try
+                {
+                    bytesRead = _serialPort.Read(buffer, 0, buffer.Length);
+                }
+                catch (TimeoutException)
+                {
+                    continue;
+                }
+
                 if (bytesRead <= 0)
                 {
                     continue;
@@ -122,6 +167,8 @@ public sealed class CivConnection : IAsyncDisposable
         {
             _dispatcher.FailAll(ex);
         }
+
+        return Task.CompletedTask;
     }
 
     private async Task WriteLoopAsync(CancellationToken cancellationToken)
@@ -132,6 +179,11 @@ public sealed class CivConnection : IAsyncDisposable
             {
                 while (_writeQueue.Reader.TryRead(out var command))
                 {
+                    if (command.Completion.Task.IsCompleted)
+                    {
+                        continue;
+                    }
+
                     if (_serialPort is null)
                     {
                         command.Completion.TrySetException(new InvalidOperationException("Serial port is not open."));
@@ -139,20 +191,31 @@ public sealed class CivConnection : IAsyncDisposable
                     }
 
                     Guid? pendingId = null;
-                    if (command.ResponseMatcher is not null)
+                    try
                     {
-                        pendingId = _dispatcher.RegisterPending(command.ResponseMatcher, command.Completion, TimeSpan.FromMilliseconds(750));
+                        if (command.ResponseMatcher is not null)
+                        {
+                            pendingId = _dispatcher.RegisterPending(command.ResponseMatcher, command.Completion, TimeSpan.FromMilliseconds(750));
+                        }
+
+                        cancellationToken.ThrowIfCancellationRequested();
+                        _serialPort.Write(command.FrameBytes, 0, command.FrameBytes.Length);
+
+                        if (command.ResponseMatcher is null)
+                        {
+                            command.Completion.TrySetResult(null);
+                        }
                     }
-
-                    await _serialPort.BaseStream.WriteAsync(command.FrameBytes, cancellationToken).ConfigureAwait(false);
-                    await _serialPort.BaseStream.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-                    if (command.ResponseMatcher is null)
+                    catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or IOException)
                     {
-                        command.Completion.TrySetResult(null);
-                    }
+                        if (pendingId is Guid id)
+                        {
+                            _dispatcher.RemovePending(id);
+                        }
 
-                    _ = pendingId;
+                        command.Completion.TrySetException(ex);
+                        _dispatcher.FailAll(ex);
+                    }
                 }
             }
         }

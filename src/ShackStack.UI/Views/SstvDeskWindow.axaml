@@ -207,7 +207,10 @@
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <TextBlock Text="{Binding SstvDecodedFskIdCallsign, StringFormat=Decoded FSKID: {0}}" Foreground="#9BE7FF" TextWrapping="Wrap" />
+                    <TextBlock Text="Macros: %m = my call, %tocall = decoded FSKID call, %g = grid, %f = frequency." Foreground="#7F879B" FontSize="11" TextWrapping="Wrap" />
                     <CheckBox Content="Append CW ID after image" IsChecked="{Binding SstvTxCwIdEnabled}" />
+                    <CheckBox Content="Encode FSKID callsign after image" IsChecked="{Binding SstvTxFskIdEnabled}" />
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                       <TextBlock Grid.Column="0" Text="CW ID" Foreground="#7F879B" VerticalAlignment="Center" />
                       <TextBox Grid.Column="1" Text="{Binding SstvTxCwIdText}" Watermark="DE %m" />

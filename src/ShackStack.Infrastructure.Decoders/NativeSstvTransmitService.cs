@@ -23,7 +23,9 @@ public sealed class NativeSstvTransmitService : ISstvTransmitService
                 options.CwIdEnabled,
                 options.CwIdText,
                 options.CwIdFrequencyHz,
-                options.CwIdWpm);
+                options.CwIdWpm,
+                options.FskIdEnabled,
+                options.FskIdCallsign);
         var clip = _builder.Build(mode, rgb24, width, height, nativeOptions);
         return Task.FromResult(new Pcm16AudioClip(clip.PcmBytes, clip.SampleRate, clip.Channels));
     }

@@ -4,7 +4,9 @@ obj/
 
 publish/
 tests/
-docs/
+docs/*
+!docs/DEPLOYMENT_NOTES.md
+!docs/RELEASE_1.0_NOTES.md
 src/ShackStack.Desktop/DecoderWorkers/
 src/ShackStack.DecoderWorkers.Python/.pyinstaller/
 

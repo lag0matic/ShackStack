@@ -2,6 +2,9 @@ namespace ShackStack.DecoderHost.Sstv.Core;
 
 internal static class MmsstvTxSequenceBuilder
 {
+    private const double FskGuardMs = 100.0;
+    private const double FskIntervalMs = 22.0;
+    private const double FskSpaceHz = 2100.0;
     private const double FreqSync = 1200.0;
     private const double FreqPorch = 1500.0;
     private const double FreqVisStart = 1900.0;
@@ -130,8 +133,14 @@ internal static class MmsstvTxSequenceBuilder
 
     private static void AppendMmsstvFooter(List<MmsstvTxToneSegment> segments, MmsstvTxConfiguration tx, MmsstvTxOptions? options)
     {
+        var fskIdCallsign = options?.FskIdCallsign;
+        var appendFskId = options?.FskIdEnabled == true && !string.IsNullOrWhiteSpace(fskIdCallsign);
         var tailMs = Math.Min(tx.TotalLineTimingMs, 500.0);
-        if (tx.Profile.Narrow)
+        if (appendFskId)
+        {
+            segments.Add(new(tx.Profile.Narrow ? FreqVisStart : FreqPorch, 300.0));
+        }
+        else if (tx.Profile.Narrow)
         {
             segments.Add(new(FreqVisStart, tailMs));
         }
@@ -144,10 +153,59 @@ internal static class MmsstvTxSequenceBuilder
             segments.Add(new(FreqPorch, 100.0));
         }
 
+        if (appendFskId)
+        {
+            AppendFskId(segments, fskIdCallsign!);
+        }
+
         if (options?.CwIdEnabled == true && !string.IsNullOrWhiteSpace(options.CwIdText))
         {
             AppendCwId(segments, options);
         }
+    }
+
+    private static void AppendFskId(List<MmsstvTxToneSegment> segments, string callsign)
+    {
+        var normalized = NormalizeFskIdCallsign(callsign);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return;
+        }
+
+        segments.Add(new(FskSpaceHz, FskGuardMs));
+        segments.Add(new(FreqVisStart, FskIntervalMs));
+        AppendFskSymbol(segments, 0x2a);
+        byte checksum = 0;
+        foreach (var value in normalized)
+        {
+            var symbol = (byte)(value - 0x20);
+            checksum ^= symbol;
+            AppendFskSymbol(segments, symbol);
+        }
+
+        AppendFskSymbol(segments, 0x01);
+        AppendFskSymbol(segments, (byte)(checksum & 0x3f));
+        segments.Add(new(FskSpaceHz, FskGuardMs));
+    }
+
+    private static void AppendFskSymbol(List<MmsstvTxToneSegment> segments, byte value)
+    {
+        for (var i = 0; i < 6; i++)
+        {
+            segments.Add(new((value & 0x01) != 0 ? FreqVisStart : FskSpaceHz, FskIntervalMs));
+            value >>= 1;
+        }
+    }
+
+    private static string NormalizeFskIdCallsign(string callsign)
+    {
+        var normalized = new string(callsign
+            .Trim()
+            .ToUpperInvariant()
+            .Where(static c => c is >= ' ' and <= '_')
+            .Take(16)
+            .ToArray());
+        return normalized;
     }
 
     private static void AppendCwId(List<MmsstvTxToneSegment> segments, MmsstvTxOptions options)

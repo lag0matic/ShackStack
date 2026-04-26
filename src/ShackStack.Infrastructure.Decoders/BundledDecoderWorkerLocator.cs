@@ -144,6 +144,12 @@ internal static class BundledDecoderWorkerLocator
             projectFile = "ShackStack.DecoderHost.GplWsjtx.csproj";
             executableName = "ShackStack.DecoderHost.GplWsjtx.exe";
         }
+        else if (string.Equals(workerBaseName, "rtty_sidecar_worker", StringComparison.OrdinalIgnoreCase))
+        {
+            projectDirectory = Path.Combine(repoRoot, "src", "ShackStack.DecoderHost.GplFldigiRtty");
+            projectFile = "ShackStack.DecoderHost.GplFldigiRtty.csproj";
+            executableName = "ShackStack.DecoderHost.GplFldigiRtty.exe";
+        }
         else if (string.Equals(workerBaseName, "sstv_native_sidecar", StringComparison.OrdinalIgnoreCase))
         {
             projectDirectory = Path.Combine(repoRoot, "src", "ShackStack.DecoderHost.Sstv");
@@ -195,6 +201,8 @@ internal static class BundledDecoderWorkerLocator
     {
         var executableName = string.Equals(workerBaseName, "wsjtx_gpl_sidecar", StringComparison.OrdinalIgnoreCase)
             ? "ShackStack.DecoderHost.GplWsjtx.exe"
+            : string.Equals(workerBaseName, "rtty_sidecar_worker", StringComparison.OrdinalIgnoreCase)
+                ? "ShackStack.DecoderHost.GplFldigiRtty.exe"
             : string.Equals(workerBaseName, "sstv_native_sidecar", StringComparison.OrdinalIgnoreCase)
                 ? "ShackStack.DecoderHost.Sstv.exe"
             : $"{workerBaseName}.exe";

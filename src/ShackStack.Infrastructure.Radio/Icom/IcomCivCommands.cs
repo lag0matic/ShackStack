@@ -84,21 +84,29 @@ internal sealed class IcomCivCommands(CivSession session)
 
     public async Task<(RadioMode Mode, int FilterWidthHz, int FilterSlot)> GetModeAsync(byte radioAddress, CancellationToken cancellationToken)
     {
-        var vfoModeFrame = await session.SendCommandAsync(
-            destination: radioAddress,
-            source: IcomCivConstants.ControllerAddress,
-            command: IcomCivConstants.VfoMode,
-            payload: [0x00],
-            matcher: response => response.Command == IcomCivConstants.VfoMode
-                && response.Source == radioAddress
-                && response.Payload.Length >= 4,
-            cancellationToken).ConfigureAwait(false);
-
-        if (vfoModeFrame is not null && vfoModeFrame.Payload.Length >= 4)
+        try
         {
-            var mode = IcomModeCodec.Decode(vfoModeFrame.Payload[1], vfoModeFrame.Payload[2]);
-            var filterSlot = vfoModeFrame.Payload[3];
-            return (mode, IcomModeCodec.DecodeFilterWidth(mode, filterSlot), filterSlot);
+            var vfoModeFrame = await session.SendCommandAsync(
+                destination: radioAddress,
+                source: IcomCivConstants.ControllerAddress,
+                command: IcomCivConstants.VfoMode,
+                payload: [0x00],
+                matcher: response => response.Command == IcomCivConstants.VfoMode
+                    && response.Source == radioAddress
+                    && response.Payload.Length >= 4,
+                cancellationToken).ConfigureAwait(false);
+
+            if (vfoModeFrame is not null && vfoModeFrame.Payload.Length >= 4)
+            {
+                var mode = IcomModeCodec.Decode(vfoModeFrame.Payload[1], vfoModeFrame.Payload[2]);
+                var filterSlot = vfoModeFrame.Payload[3];
+                return (mode, IcomModeCodec.DecodeFilterWidth(mode, filterSlot), filterSlot);
+            }
+        }
+        catch (TimeoutException)
+        {
+            // Some CI-V mode families are not available in every rig mode.
+            // Fall back to the older mode query rather than failing connection.
         }
 
         var frame = await session.SendCommandAsync(

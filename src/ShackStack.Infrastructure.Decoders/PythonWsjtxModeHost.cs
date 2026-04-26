@@ -675,8 +675,9 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
 
         LogStatusIfChanged(configuration.ModeLabel, status);
 
+        var clock = _clockDisciplineService.Current;
         var cycleLength = configuration.CycleLengthSeconds > 0 ? configuration.CycleLengthSeconds : 15.0;
-        var utcNow = DateTimeOffset.UtcNow;
+        var utcNow = GetDisciplinedUtcNow(clock);
         var cyclePosition = utcNow.ToUnixTimeMilliseconds() / (cycleLength * 1000.0);
         var secondsToNextCycle = cycleLength - ((cyclePosition - Math.Floor(cyclePosition)) * cycleLength);
         if (secondsToNextCycle >= cycleLength)
@@ -684,7 +685,6 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
             secondsToNextCycle = 0;
         }
 
-        var clock = _clockDisciplineService.Current;
         var clockStatus = configuration.RequiresAccurateClock
             ? $"{clock.Status} | Source {clock.SourceLabel}"
             : $"Clock source {clock.SourceLabel}";
@@ -702,6 +702,14 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
             decodeCount,
             autoSequenceEnabled,
             isTransmitArmed));
+    }
+
+    private static DateTimeOffset GetDisciplinedUtcNow(ClockDisciplineSnapshot clock)
+    {
+        var offset = clock.IsSynchronized && double.IsFinite(clock.OffsetMs)
+            ? Math.Clamp(clock.OffsetMs, -5_000.0, 5_000.0)
+            : 0.0;
+        return DateTimeOffset.UtcNow.AddMilliseconds(offset);
     }
 
     private void LogStatusIfChanged(string modeLabel, string status)
