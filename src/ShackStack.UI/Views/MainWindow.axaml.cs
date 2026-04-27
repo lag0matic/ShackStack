@@ -8,6 +8,7 @@ namespace ShackStack.UI.Views;
 public partial class MainWindow : Window
 {
     private bool _spacePttActive;
+    private bool _isClosing;
     private SstvDeskWindow? _sstvDeskWindow;
     private VoiceDeskWindow? _voiceDeskWindow;
     private CwDeskWindow? _cwDeskWindow;
@@ -251,5 +252,58 @@ public partial class MainWindow : Window
         };
         _longwaveDeskWindow.Closed += (_, _) => _longwaveDeskWindow = null;
         _longwaveDeskWindow.Show(this);
+    }
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        _isClosing = true;
+        CloseDeskWindows();
+        base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        KeyDown -= OnWindowKeyDown;
+        KeyUp -= OnWindowKeyUp;
+        Deactivated -= OnWindowDeactivated;
+
+        if (DataContext is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+
+        DataContext = null;
+        base.OnClosed(e);
+    }
+
+    private void CloseDeskWindows()
+    {
+        CloseDeskWindow(_sstvDeskWindow);
+        CloseDeskWindow(_voiceDeskWindow);
+        CloseDeskWindow(_cwDeskWindow);
+        CloseDeskWindow(_rttyDeskWindow);
+        CloseDeskWindow(_wefaxDeskWindow);
+        CloseDeskWindow(_wsjtxDeskWindow);
+        CloseDeskWindow(_js8DeskWindow);
+        CloseDeskWindow(_longwaveDeskWindow);
+
+        _sstvDeskWindow = null;
+        _voiceDeskWindow = null;
+        _cwDeskWindow = null;
+        _rttyDeskWindow = null;
+        _wefaxDeskWindow = null;
+        _wsjtxDeskWindow = null;
+        _js8DeskWindow = null;
+        _longwaveDeskWindow = null;
+    }
+
+    private void CloseDeskWindow(Window? window)
+    {
+        if (window is null || !window.IsVisible || !_isClosing)
+        {
+            return;
+        }
+
+        window.Close();
     }
 }

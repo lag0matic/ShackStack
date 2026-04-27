@@ -26,6 +26,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly DispatcherTimer _wefaxScheduleTimer;
     private double _displayedSmeterLevel;
     private double _targetSmeterLevel;
+    private bool _disposed;
     private bool _monitorAutostartAttempted;
     private string _activeBandLabel = "20m";
     private int _activeFilterSlot = 2;
@@ -1036,7 +1037,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string js8ComposeText = string.Empty;
 
     [ObservableProperty]
-    private string js8ComposeStatus = "Receive is wired. Compose staging is ready; JS8 TX generation is the next port step.";
+    private string js8ComposeStatus = "Receive and compose staging are ready.";
 
     [ObservableProperty]
     private bool wsjtxAutoSequenceEnabled = true;
@@ -2752,7 +2753,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         Js8ComposeText = SelectedJs8SuggestedMessage.MessageText;
-        Js8ComposeStatus = $"Staged JS8 text: {SelectedJs8SuggestedMessage.Label}. TX generation is not wired yet.";
+        Js8ComposeStatus = $"Staged JS8 text: {SelectedJs8SuggestedMessage.Label}. Prepare TX audio before arming.";
     }
 
     [RelayCommand]
@@ -2767,9 +2768,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         var grid = FormatWeakSignalGrid(WsjtxOperatorGridSquare);
         Js8ComposeText = string.IsNullOrWhiteSpace(grid)
-            ? $"{myCall}: HB"
-            : $"{myCall}: HB {grid}";
-        Js8ComposeStatus = "Staged JS8 heartbeat text. TX generation is not wired yet.";
+            ? $"{myCall}: @HB HEARTBEAT"
+            : $"{myCall}: @HB HEARTBEAT {grid}";
+        Js8ComposeStatus = "Staged JS8 heartbeat text. Prepare TX audio before arming.";
     }
 
     [RelayCommand]
@@ -2786,7 +2787,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         Js8ComposeText = string.IsNullOrWhiteSpace(grid)
             ? $"CQ CQ CQ DE {myCall}"
             : $"CQ CQ CQ DE {myCall} {grid}";
-        Js8ComposeStatus = "Staged JS8 CQ text. TX generation is not wired yet.";
+        Js8ComposeStatus = "Staged JS8 CQ text. Prepare TX audio before arming.";
     }
 
     [RelayCommand]
@@ -5800,10 +5801,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     partial void OnWsjtxRxAudioFrequencyHzChanged(int value)
     {
+        var clamped = Math.Clamp(value, 200, 3900);
+        if (clamped != value)
+        {
+            WsjtxRxAudioFrequencyHz = clamped;
+            return;
+        }
+
         OnPropertyChanged(nameof(WsjtxRxFrequencyTitle));
+        OnPropertyChanged(nameof(WsjtxRxTrackStatus));
         OnPropertyChanged(nameof(WsjtxTransmitPlanSummary));
         if (!WsjtxHoldTxFrequency)
         {
+            WsjtxTxAudioFrequencyHz = value;
             OnPropertyChanged(nameof(WsjtxTxTrackStatus));
             OnPropertyChanged(nameof(WsjtxTxFrequencyTitle));
         }
@@ -7889,10 +7899,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 ? $"CQ CQ CQ DE {myCall}"
                 : $"CQ CQ CQ DE {myCall} {myGrid}";
         var heartbeatText = string.IsNullOrWhiteSpace(myCall)
-            ? "<MYCALL>: HB"
+            ? "<MYCALL>: @HB HEARTBEAT"
             : string.IsNullOrWhiteSpace(myGrid)
-                ? $"{myCall}: HB"
-                : $"{myCall}: HB {myGrid}";
+                ? $"{myCall}: @HB HEARTBEAT"
+                : $"{myCall}: @HB HEARTBEAT {myGrid}";
         var directedReply = string.IsNullOrWhiteSpace(myCall)
             ? $"{target}: <MYCALL> COPY"
             : $"{target}: {myCall} COPY";
@@ -8753,10 +8763,23 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _smeterUiTimer.Stop();
         _longwaveRefreshTimer.Stop();
         _wefaxScheduleTimer.Stop();
         _cwSendCts?.Cancel();
+        _runtimeUiStateSaveCts?.Cancel();
+        _sstvTxCts?.Cancel();
+        WsjtxTransmitArmedLocal = false;
+
+        using var shutdownCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        StopRuntimeServices(shutdownCts.Token);
+
         _radioSubscription?.Dispose();
         _audioLevelSubscription?.Dispose();
         _spectrumSubscription?.Dispose();
@@ -8773,5 +8796,62 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _wefaxTelemetrySubscription?.Dispose();
         _wefaxImageSubscription?.Dispose();
         _cwSendCts?.Dispose();
+        _runtimeUiStateSaveCts?.Dispose();
+        _sstvTxCts?.Dispose();
+
+        DisposeIfPresent(_cwDecoderHost);
+        DisposeIfPresent(_rttyDecoderHost);
+        DisposeIfPresent(_sstvDecoderHost);
+        DisposeIfPresent(_wefaxDecoderHost);
+        DisposeIfPresent(_wsjtxModeHost);
+        DisposeIfPresent(_sstvTransmitService);
+    }
+
+    private void StopRuntimeServices(CancellationToken ct)
+    {
+        RunShutdownStep(token => _radioService?.SetPttAsync(false, token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _radioService?.SetCwKeyAsync(false, token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _radioService?.StopCwSendAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _audioService?.StopTransmitAsync(token) ?? Task.CompletedTask, ct);
+
+        RunShutdownStep(token => _cwDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _rttyDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _sstvDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _wefaxDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _wsjtxModeHost?.StopAsync(token) ?? Task.CompletedTask, ct);
+
+        RunShutdownStep(token => _audioService?.StopReceiveAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _interopService?.StopAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _radioService?.DisconnectAsync(token) ?? Task.CompletedTask, ct);
+    }
+
+    private static void RunShutdownStep(Func<CancellationToken, Task> step, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
+            var task = step(ct);
+            task.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch
+        {
+            // Best-effort cleanup: shutdown should not hang on an already-stopped device or worker.
+        }
+    }
+
+    private static void DisposeIfPresent(object? value)
+    {
+        try
+        {
+            (value as IDisposable)?.Dispose();
+        }
+        catch
+        {
+            // Best-effort cleanup only.
+        }
     }
 }

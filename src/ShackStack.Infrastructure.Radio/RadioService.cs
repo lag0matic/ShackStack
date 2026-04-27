@@ -9,6 +9,7 @@ namespace ShackStack.Infrastructure.Radio;
 public sealed class RadioService : IRadioService, IDisposable
 {
     private static readonly TimeSpan InitialConnectCommandTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan DisposeDisconnectTimeout = TimeSpan.FromSeconds(5);
     private const int MaxCwChunkLength = 30;
     private const int CwRetryLimit = 20;
     private readonly CivDispatcher _dispatcher = new();
@@ -24,6 +25,7 @@ public sealed class RadioService : IRadioService, IDisposable
     private Task? _smeterTask;
     private CancellationTokenSource? _controlStateCts;
     private Task? _controlStateTask;
+    private bool _disposed;
 
     public RadioService()
     {
@@ -88,6 +90,7 @@ public sealed class RadioService : IRadioService, IDisposable
     {
         await StopControlStateLoopAsync().ConfigureAwait(false);
         await StopSmeterLoopAsync().ConfigureAwait(false);
+        await ReleaseTransmitControlsAsync(ct).ConfigureAwait(false);
         await _session.DisconnectAsync().ConfigureAwait(false);
         var current = _stateStore.Current;
         _stateStore.Update(current with { IsConnected = false, IsPttActive = false, Smeter = 0 });
@@ -970,6 +973,7 @@ public sealed class RadioService : IRadioService, IDisposable
         {
             await StopControlStateLoopAsync().ConfigureAwait(false);
             await StopSmeterLoopAsync().ConfigureAwait(false);
+            await ReleaseTransmitControlsAsync(CancellationToken.None).ConfigureAwait(false);
             await _session.DisconnectAsync().ConfigureAwait(false);
         }
         catch
@@ -978,6 +982,43 @@ public sealed class RadioService : IRadioService, IDisposable
         }
 
         _stateStore.Update(current => current with { IsConnected = false, IsPttActive = false, Smeter = 0 });
+    }
+
+    private async Task ReleaseTransmitControlsAsync(CancellationToken ct)
+    {
+        var options = _lastOptions;
+        if (options is null)
+        {
+            return;
+        }
+
+        var radioAddress = (byte)options.RadioAddress;
+        try
+        {
+            await _icomCommands.SetPttAsync(radioAddress, false, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Best effort: the port may already be gone during shutdown.
+        }
+
+        try
+        {
+            await _session.SetDtrAsync(false, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Best effort: DTR is also cleared by CivConnection.CloseAsync.
+        }
+
+        try
+        {
+            await _icomCommands.StopCwSendAsync(radioAddress, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Best effort only.
+        }
     }
 
     private void HandleUnsolicitedFrame(CivFrame frame)
@@ -1204,8 +1245,29 @@ public sealed class RadioService : IRadioService, IDisposable
 
     public void Dispose()
     {
-        _controlStateCts?.Cancel();
-        _smeterCts?.Cancel();
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
+        try
+        {
+            DisconnectAsync(CancellationToken.None).Wait(DisposeDisconnectTimeout);
+        }
+        catch
+        {
+            try
+            {
+                _session.DisposeAsync().AsTask().Wait(DisposeDisconnectTimeout);
+            }
+            catch
+            {
+                // Best-effort cleanup only.
+            }
+        }
+
         _unsolicitedSubscription.Dispose();
         _streamSubscription.Dispose();
     }

@@ -4,6 +4,7 @@ namespace ShackStack.Infrastructure.Radio.Civ;
 
 public sealed class CivSession : IAsyncDisposable
 {
+    private static readonly TimeSpan ReconcileShutdownWait = TimeSpan.FromSeconds(1);
     private readonly CivDispatcher _dispatcher;
     private readonly CivConnection _connection;
     private readonly RadioStateStore _stateStore;
@@ -31,8 +32,22 @@ public sealed class CivSession : IAsyncDisposable
 
         if (_reconcileTask is not null)
         {
-            await _reconcileTask.ConfigureAwait(false);
+            try
+            {
+                await _reconcileTask.WaitAsync(ReconcileShutdownWait).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                // Keep moving: the serial connection close below is what releases the COM handle.
+            }
+            catch (OperationCanceledException)
+            {
+            }
         }
+
+        _reconcileTask = null;
+        _reconcileCts?.Dispose();
+        _reconcileCts = null;
 
         await _connection.CloseAsync().ConfigureAwait(false);
     }
@@ -65,5 +80,8 @@ public sealed class CivSession : IAsyncDisposable
         }, _reconcileCts.Token);
     }
 
-    public ValueTask DisposeAsync() => _connection.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await DisconnectAsync().ConfigureAwait(false);
+    }
 }

@@ -587,7 +587,9 @@ internal sealed class WsjtxExternalWaveformPort
         private const string Alphabet72 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-+/?.";
         private const string Alphanumeric = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ /@";
         private const uint NBaseCall = 37 * 36 * 10 * 27 * 27 * 27;
+        private const ushort NMaxGrid = (1 << 15) - 1;
         private const int FrameDirected = 3;
+        private const int FrameHeartbeat = 0;
         private const int Js8Call = 0;
         private const int Js8CallFirst = 1;
         private const int Js8CallLast = 2;
@@ -737,6 +739,13 @@ internal sealed class WsjtxExternalWaveformPort
         {
             var normalized = NormalizeMessage(input);
             var frames = new List<Js8PreparedFrame>();
+            var heartbeat = PackHeartbeatMessage(normalized, out var heartbeatText);
+            if (!string.IsNullOrWhiteSpace(heartbeat))
+            {
+                frames.Add(new Js8PreparedFrame(heartbeat, heartbeatText, Js8Call));
+                normalized = TrimPackedPrefix(normalized, heartbeatText);
+            }
+
             var directed = PackDirectedMessage(normalized, out var directedText);
             if (!string.IsNullOrWhiteSpace(directed))
             {
@@ -744,6 +753,7 @@ internal sealed class WsjtxExternalWaveformPort
                 normalized = TrimPackedPrefix(normalized, directedText);
             }
 
+            normalized = NormalizeDataMessage(normalized);
             while (!string.IsNullOrWhiteSpace(normalized))
             {
                 var frame = PackDataMessage(normalized, out var frameText);
@@ -773,6 +783,140 @@ internal sealed class WsjtxExternalWaveformPort
             packedText = frames[0].Text;
             frameBits = frames[0].Bits;
             return frames[0].Frame;
+        }
+
+        private static string PackHeartbeatMessage(string input, out string packedText)
+        {
+            packedText = string.Empty;
+            var normalized = NormalizeMessage(input);
+            var colonIndex = normalized.IndexOf(':', StringComparison.Ordinal);
+            if (colonIndex <= 1 || colonIndex >= normalized.Length - 1)
+            {
+                return string.Empty;
+            }
+
+            var callsign = normalized[..colonIndex].Trim();
+            var remainder = normalized[(colonIndex + 1)..].TrimStart();
+            var parts = remainder.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            var index = parts[0] is "@HB" or "@ALLCALL" ? 1 : 0;
+            if (index >= parts.Length)
+            {
+                return string.Empty;
+            }
+
+            var type = parts[index];
+            if (type != "HB" && type != "HEARTBEAT")
+            {
+                return string.Empty;
+            }
+
+            var grid = index + 1 < parts.Length ? parts[index + 1] : string.Empty;
+            var packedGrid = NMaxGrid;
+            if (IsFourCharacterGrid(grid))
+            {
+                packedGrid = PackGrid(grid);
+            }
+
+            var frame = PackCompoundFrame(callsign, FrameHeartbeat, packedGrid, bits3: 0);
+            if (string.IsNullOrWhiteSpace(frame))
+            {
+                return string.Empty;
+            }
+
+            packedText = string.IsNullOrWhiteSpace(grid)
+                ? $"{callsign}: @HB HEARTBEAT"
+                : $"{callsign}: @HB HEARTBEAT {grid[..4].ToUpperInvariant()}";
+            return frame;
+        }
+
+        private static string PackCompoundFrame(string callsign, byte type, ushort num, byte bits3)
+        {
+            var packedCallsign = PackAlphaNumeric50(callsign);
+            if (packedCallsign == 0)
+            {
+                return string.Empty;
+            }
+
+            var packed11 = (ushort)((num & (((1 << 11) - 1) << 5)) >> 5);
+            var packed5 = (byte)(num & ((1 << 5) - 1));
+            var packed8 = (byte)((packed5 << 3) | (bits3 & 0x07));
+
+            var bits = new List<bool>(64);
+            AppendBits(bits, type, 3);
+            AppendBits(bits, packedCallsign, 50);
+            AppendBits(bits, packed11, 11);
+            return Pack72Bits(BitsToUInt64(bits, 0, 64), packed8);
+        }
+
+        private static ulong PackAlphaNumeric50(string value)
+        {
+            var word = new string(value
+                .ToUpperInvariant()
+                .Where(ch => Alphanumeric.Contains(ch, StringComparison.Ordinal))
+                .ToArray());
+            if (word.Length > 3 && word[3] != '/')
+            {
+                word = word.Insert(3, " ");
+            }
+
+            if (word.Length > 7 && word[7] != '/')
+            {
+                word = word.Insert(7, " ");
+            }
+
+            if (word.Length < 11)
+            {
+                word = word.PadRight(11);
+            }
+            else if (word.Length > 11)
+            {
+                word = word[..11];
+            }
+
+            var a = Pow38(8) * 4UL * (ulong)Alphanumeric.IndexOf(word[0], StringComparison.Ordinal);
+            var b = Pow38(7) * 4UL * (ulong)Alphanumeric.IndexOf(word[1], StringComparison.Ordinal);
+            var c = Pow38(6) * 4UL * (ulong)Alphanumeric.IndexOf(word[2], StringComparison.Ordinal);
+            var d = Pow38(6) * 2UL * (ulong)(word[3] == '/' ? 1 : 0);
+            var e = Pow38(5) * 2UL * (ulong)Alphanumeric.IndexOf(word[4], StringComparison.Ordinal);
+            var f = Pow38(4) * 2UL * (ulong)Alphanumeric.IndexOf(word[5], StringComparison.Ordinal);
+            var g = Pow38(3) * 2UL * (ulong)Alphanumeric.IndexOf(word[6], StringComparison.Ordinal);
+            var h = Pow38(3) * (ulong)(word[7] == '/' ? 1 : 0);
+            var i = Pow38(2) * (ulong)Alphanumeric.IndexOf(word[8], StringComparison.Ordinal);
+            var j = 38UL * (ulong)Alphanumeric.IndexOf(word[9], StringComparison.Ordinal);
+            var k = (ulong)Alphanumeric.IndexOf(word[10], StringComparison.Ordinal);
+
+            return a + b + c + d + e + f + g + h + i + j + k;
+        }
+
+        private static ulong Pow38(int exponent)
+        {
+            var value = 1UL;
+            for (var i = 0; i < exponent; i++)
+            {
+                value *= 38UL;
+            }
+
+            return value;
+        }
+
+        private static bool IsFourCharacterGrid(string value) =>
+            value.Length >= 4
+            && value[0] is >= 'A' and <= 'R'
+            && value[1] is >= 'A' and <= 'R'
+            && value[2] is >= '0' and <= '9'
+            && value[3] is >= '0' and <= '9';
+
+        private static ushort PackGrid(string value)
+        {
+            var grid = value[..4].ToUpperInvariant();
+            var longitude = 180 - (20 * (grid[0] - 'A')) - (2 * (grid[2] - '0'));
+            var latitude = -90 + (10 * (grid[1] - 'A')) + (grid[3] - '0');
+            return (ushort)((((longitude + 180) / 2) * 180) + (latitude + 90));
         }
 
         private static string TrimPackedPrefix(string text, string packedPrefix)

@@ -107,6 +107,47 @@
                       Command="{Binding UseSelectedJs8DecodeCommand}"
                       HorizontalAlignment="Left"
                       Padding="10,4" />
+              <Border Background="#080B12" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="8">
+                <StackPanel Spacing="7">
+                  <TextBlock Text="Audio Offsets" FontSize="13" FontWeight="SemiBold" Foreground="#C4C8D8" />
+                  <TextBlock Text="{Binding WsjtxRxTrackStatus}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
+                  <Grid ColumnDefinitions="76,80,*" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Text="RX Hz" Foreground="#7F879B" VerticalAlignment="Center" />
+                    <TextBox Grid.Column="1"
+                             Text="{Binding WsjtxRxAudioFrequencyHz}"
+                             HorizontalContentAlignment="Center"
+                             VerticalContentAlignment="Center" />
+                    <Button Grid.Column="2"
+                            Content="RX = Selected"
+                            Command="{Binding TrackSelectedWsjtxOffsetCommand}"
+                            Padding="10,4" />
+                  </Grid>
+                  <Grid ColumnDefinitions="76,80,*" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Text="TX Hz" Foreground="#7F879B" VerticalAlignment="Center" />
+                    <TextBox Grid.Column="1"
+                             Text="{Binding WsjtxTxAudioFrequencyHz}"
+                             HorizontalContentAlignment="Center"
+                             VerticalContentAlignment="Center" />
+                    <Button Grid.Column="2"
+                            Content="TX = Selected"
+                            Command="{Binding SetSelectedWsjtxTxOffsetCommand}"
+                            Padding="10,4" />
+                  </Grid>
+                  <CheckBox IsChecked="{Binding WsjtxHoldTxFrequency}"
+                            Content="Hold TX offset while selecting other decodes"
+                            Foreground="#C4C8D8"
+                            FontSize="10.5" />
+                  <TextBlock Text="{Binding WsjtxTxTrackStatus}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
+                  <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Button Content="-100" Command="{Binding NudgeWsjtxTxOffsetDown100Command}" Margin="0,0,6,6" Padding="8,4" />
+                    <Button Content="-50" Command="{Binding NudgeWsjtxTxOffsetDown50Command}" Margin="0,0,6,6" Padding="8,4" />
+                    <Button Content="+50" Command="{Binding NudgeWsjtxTxOffsetUp50Command}" Margin="0,0,6,6" Padding="8,4" />
+                    <Button Content="+100" Command="{Binding NudgeWsjtxTxOffsetUp100Command}" Margin="0,0,6,6" Padding="8,4" />
+                    <Button Content="TX = RX" Command="{Binding SyncWsjtxTxToRxCommand}" Margin="0,0,6,6" Padding="10,4" />
+                    <Button Content="Reset 1500" Command="{Binding ResetWsjtxRxFrequencyTrackCommand}" Margin="0,0,6,6" Padding="10,4" />
+                  </WrapPanel>
+                </StackPanel>
+              </Border>
             </StackPanel>
           </Border>
 

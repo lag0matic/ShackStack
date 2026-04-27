@@ -36,7 +36,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\shackstack.ico
 SetupIconFile={#MyIconFile}
 
 [Languages]
@@ -47,11 +47,12 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyIconFile}"; DestDir: "{app}"; DestName: "shackstack.ico"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\ShackStack"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\ShackStack"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\shackstack.ico"
 Name: "{group}\Uninstall ShackStack"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\ShackStack"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\ShackStack"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\shackstack.ico"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch ShackStack"; Flags: nowait postinstall skipifsilent
