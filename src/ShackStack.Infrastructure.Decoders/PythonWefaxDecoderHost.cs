@@ -14,7 +14,29 @@ public sealed class PythonWefaxDecoderHost : IWefaxDecoderHost, IDisposable
     private readonly DecoderWorkerProcess _workerProcess;
     private readonly DecoderAudioPump _audioPump;
 
-    private WefaxDecoderConfiguration _configuration = new("IOC 576 / 120 LPM", 576, 120, "NOAA Atlantic 12750.0 kHz USB-D", 0, 0);
+    private WefaxDecoderConfiguration _configuration = new(
+        "IOC 576 / 120 LPM",
+        576,
+        120,
+        "NOAA Atlantic 12750.0 kHz USB-D",
+        0,
+        0,
+        1900,
+        800,
+        1500,
+        "Medium",
+        true,
+        30,
+        10,
+        500,
+        0.05,
+        15,
+        false,
+        false,
+        128,
+        false,
+        24,
+        1);
     private bool _isRunning;
 
     public PythonWefaxDecoderHost(IAudioService audioService)
@@ -62,6 +84,22 @@ public sealed class PythonWefaxDecoderHost : IWefaxDecoderHost, IDisposable
             frequencyLabel = configuration.FrequencyLabel,
             manualSlant = configuration.ManualSlant,
             manualOffset = configuration.ManualOffset,
+            centerHz = configuration.CenterHz,
+            shiftHz = configuration.ShiftHz,
+            maxRows = configuration.MaxRows,
+            filterName = configuration.FilterName,
+            autoAlign = configuration.AutoAlign,
+            autoAlignAfterRows = configuration.AutoAlignAfterRows,
+            autoAlignEveryRows = configuration.AutoAlignEveryRows,
+            autoAlignStopRows = configuration.AutoAlignStopRows,
+            correlationThreshold = configuration.CorrelationThreshold,
+            correlationRows = configuration.CorrelationRows,
+            invertImage = configuration.InvertImage,
+            binaryImage = configuration.BinaryImage,
+            binaryThreshold = configuration.BinaryThreshold,
+            noiseRemoval = configuration.NoiseRemoval,
+            noiseThreshold = configuration.NoiseThreshold,
+            noiseMargin = configuration.NoiseMargin,
         }, ct).ConfigureAwait(false);
     }
 

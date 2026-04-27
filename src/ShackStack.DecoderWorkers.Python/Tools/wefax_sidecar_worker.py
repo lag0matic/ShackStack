@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
-from scipy.signal import resample_poly
+from scipy.signal import medfilt2d, resample_poly
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -36,6 +36,22 @@ class WefaxWorker:
         self._frequency_label = "NOAA Atlantic 12750.0 kHz USB-D"
         self._manual_slant = 0
         self._manual_offset = 0
+        self._center_hz = 1900
+        self._shift_hz = 800
+        self._max_rows = 1500
+        self._filter_name = "Medium"
+        self._auto_align = True
+        self._auto_align_after_rows = 30
+        self._auto_align_every_rows = 10
+        self._auto_align_stop_rows = 500
+        self._correlation_threshold = 0.05
+        self._correlation_rows = 15
+        self._invert_image = False
+        self._binary_image = False
+        self._binary_threshold = 128
+        self._noise_removal = False
+        self._noise_threshold = 24
+        self._noise_margin = 1
         self._running = False
         self._line_count = 0
         self._rows: list[np.ndarray] = []
@@ -63,6 +79,19 @@ class WefaxWorker:
             status_callback=self._on_status,
             telemetry_callback=self._on_telemetry,
         )
+        self._decoder.configure_receive(
+            center_hz=self._center_hz,
+            shift_hz=self._shift_hz,
+            max_rows=self._max_rows,
+            filter_name=self._filter_name,
+            auto_align=self._auto_align,
+            auto_align_after_rows=self._auto_align_after_rows,
+            auto_align_every_rows=self._auto_align_every_rows,
+            auto_align_stop_rows=self._auto_align_stop_rows,
+            correlation_threshold=self._correlation_threshold,
+            correlation_rows=self._correlation_rows,
+        )
+        self._decoder.set_manual_slant(self._manual_slant)
 
     def configure(self, payload: dict[str, Any]) -> None:
         self._mode_label = str(payload.get("modeLabel") or self._mode_label)
@@ -71,6 +100,22 @@ class WefaxWorker:
         self._frequency_label = str(payload.get("frequencyLabel") or self._frequency_label)
         self._manual_slant = int(payload.get("manualSlant") or self._manual_slant)
         self._manual_offset = int(payload.get("manualOffset") or self._manual_offset)
+        self._center_hz = int(payload.get("centerHz") or self._center_hz)
+        self._shift_hz = int(payload.get("shiftHz") or self._shift_hz)
+        self._max_rows = int(payload.get("maxRows") or self._max_rows)
+        self._filter_name = str(payload.get("filterName") or self._filter_name)
+        self._auto_align = bool(payload.get("autoAlign", self._auto_align))
+        self._auto_align_after_rows = int(payload.get("autoAlignAfterRows") or self._auto_align_after_rows)
+        self._auto_align_every_rows = int(payload.get("autoAlignEveryRows") or self._auto_align_every_rows)
+        self._auto_align_stop_rows = int(payload.get("autoAlignStopRows") or self._auto_align_stop_rows)
+        self._correlation_threshold = float(payload.get("correlationThreshold") or self._correlation_threshold)
+        self._correlation_rows = int(payload.get("correlationRows") or self._correlation_rows)
+        self._invert_image = bool(payload.get("invertImage", self._invert_image))
+        self._binary_image = bool(payload.get("binaryImage", self._binary_image))
+        self._binary_threshold = int(np.clip(int(payload.get("binaryThreshold", self._binary_threshold)), 0, 255))
+        self._noise_removal = bool(payload.get("noiseRemoval", self._noise_removal))
+        self._noise_threshold = int(np.clip(int(payload.get("noiseThreshold", self._noise_threshold)), 1, 96))
+        self._noise_margin = int(np.clip(int(payload.get("noiseMargin", self._noise_margin)), 1, 2))
         self._line_count = 0
         self._rows = []
         self._active_image_path = None
@@ -174,7 +219,7 @@ class WefaxWorker:
     def _on_image_complete(self, image: Image.Image) -> None:
         if self._active_image_path is None:
             self._active_image_path = SAVE_ROOT / f"wefax_{datetime.now():%Y%m%d_%H%M%S}_{self._ioc}_{self._lpm}.png"
-        self._save_preview_image()
+        image.convert("L").save(self._active_image_path)
         self._emit_image(f"WeFAX image complete: {self._active_image_path.name}", str(self._active_image_path))
 
     def _save_preview_image(self) -> None:
@@ -190,16 +235,42 @@ class WefaxWorker:
         self._save_preview_image()
 
     def _render_rows(self) -> np.ndarray:
-        auto_offsets = self._estimate_auto_offsets(self._rows)
+        auto_offsets = [0] * len(self._rows)
         rendered: list[np.ndarray] = []
         for index, row in enumerate(self._rows):
             shift = self._manual_offset
-            if index < len(auto_offsets):
+            if not self._auto_align and index < len(auto_offsets):
                 shift -= auto_offsets[index]
             if self._manual_slant != 0 and index > 0:
                 shift += int(round(index * (self._manual_slant / 1000.0)))
             rendered.append(np.roll(row, shift) if shift else row)
-        return np.vstack(rendered)
+        arr = np.vstack(rendered)
+        arr = self._stretch_contrast(arr)
+        return self._postprocess_image(arr)
+
+    def _stretch_contrast(self, arr: np.ndarray) -> np.ndarray:
+        if arr.size == 0:
+            return arr.astype(np.uint8, copy=False)
+        values = arr.astype(np.float32, copy=False)
+        lo, hi = np.percentile(values, [1.0, 99.0])
+        if hi <= lo + 1.0:
+            return np.clip(values, 0, 255).astype(np.uint8)
+        values = (values - lo) * (255.0 / (hi - lo))
+        return np.clip(values, 0, 255).astype(np.uint8)
+
+    def _postprocess_image(self, arr: np.ndarray) -> np.ndarray:
+        out = arr.astype(np.uint8, copy=True)
+        if self._noise_removal and out.shape[0] >= 3 and out.shape[1] >= 3:
+            kernel = 3 if self._noise_margin <= 1 else 5
+            median = medfilt2d(out, kernel_size=kernel).astype(np.int16)
+            values = out.astype(np.int16)
+            mask = np.abs(values - median) >= self._noise_threshold
+            out = np.where(mask, median, values).astype(np.uint8)
+        if self._invert_image:
+            out = (255 - out).astype(np.uint8)
+        if self._binary_image:
+            out = np.where(out >= self._binary_threshold, 255, 0).astype(np.uint8)
+        return out
 
     def _estimate_auto_offsets(self, rows: list[np.ndarray]) -> list[int]:
         if len(rows) < 12:
@@ -266,6 +337,14 @@ class WefaxWorker:
             "stopConfidence": round(self._last_stop_conf, 3),
             "modeLabel": self._mode_label,
             "frequencyLabel": self._frequency_label,
+            "centerHz": self._center_hz,
+            "shiftHz": self._shift_hz,
+            "filterName": self._filter_name,
+            "autoAlign": self._auto_align,
+            "correlationThreshold": round(self._correlation_threshold, 3),
+            "invertImage": self._invert_image,
+            "binaryImage": self._binary_image,
+            "noiseRemoval": self._noise_removal,
         })
 
     def _emit_image(self, status: str, image_path: str | None) -> None:

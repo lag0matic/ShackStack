@@ -799,7 +799,8 @@ public sealed class PythonWsjtxModeHost : IWsjtxModeHost, IDisposable
             || status.StartsWith("Decoder output parse error:", StringComparison.OrdinalIgnoreCase)
             || status.StartsWith("Mode mismatch:", StringComparison.OrdinalIgnoreCase)
             || status.StartsWith("Worker missing:", StringComparison.OrdinalIgnoreCase)
-            || status.StartsWith("WSJT worker exited:", StringComparison.OrdinalIgnoreCase))
+            || status.StartsWith("WSJT worker exited:", StringComparison.OrdinalIgnoreCase)
+            || status.Contains("decoder binary missing", StringComparison.OrdinalIgnoreCase))
         {
             return status;
         }

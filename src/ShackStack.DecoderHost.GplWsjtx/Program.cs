@@ -92,6 +92,7 @@ internal static class Program
         private readonly Ft8MessageUnpackerPort _messageUnpacker = new();
         private readonly Ft8SubtractorPort _ft8Subtractor = new();
         private readonly Jt9ExternalDecoderPort? _jt9ExternalDecoder = Jt9ExternalDecoderPort.CreateDefault();
+        private readonly Js8ExternalDecoderPort? _js8ExternalDecoder = Js8ExternalDecoderPort.CreateDefault();
         private readonly Ft4CandidateSearchPort _ft4CandidateSearch = new();
         private readonly Ft4DownsamplePort _ft4Downsample = new();
         private readonly Ft4SyncPort _ft4Sync = new();
@@ -247,6 +248,7 @@ internal static class Program
 
         private static int GetInputSamplesPerCycle(string modeLabel) => modeLabel.Trim().ToUpperInvariant() switch
         {
+            _ when Js8ExternalDecoderPort.IsJs8Mode(modeLabel) => Js8ExternalDecoderPort.GetInputSamplesPerCycle(modeLabel),
             "FT4" => Ft4Constants.InputSamplesPerCycle,
             "FT8" => Ft8Constants.InputSamplesPerCycle,
             "Q65" => Ft8Constants.InputSampleRate * 15,
@@ -263,13 +265,19 @@ internal static class Program
         private void ProcessExternalModeCycle(float[] cycle)
         {
             _cycleCount += 1;
+            if (Js8ExternalDecoderPort.IsJs8Mode(_modeLabel))
+            {
+                ProcessJs8ModeCycle(cycle);
+                return;
+            }
+
             if (_jt9ExternalDecoder is null)
             {
                 EmitTelemetry($"{_modeLabel} cycle {_cycleCount}: decoder binary missing");
                 return;
             }
 
-            var result = _jt9ExternalDecoder.DecodeCycle(_modeLabel, cycle, _stationCallsign, _stationGridSquare, _cycleCount);
+            var result = _jt9ExternalDecoder.DecodeCycle(_modeLabel, _frequencyLabel, cycle, _stationCallsign, _stationGridSquare, _cycleCount);
             foreach (var decode in result.Decodes)
             {
                 _decodeCount += 1;
@@ -294,6 +302,38 @@ internal static class Program
                 {
                     UpdateRecentFt8HisCalls(decode.MessageText);
                 }
+            }
+
+            EmitTelemetry(result.Summary);
+        }
+
+        private void ProcessJs8ModeCycle(float[] cycle)
+        {
+            if (_js8ExternalDecoder is null)
+            {
+                EmitTelemetry($"{_modeLabel} cycle {_cycleCount}: JS8Call decoder binary missing (set SHACKSTACK_JS8_JT9_PATH)");
+                return;
+            }
+
+            var result = _js8ExternalDecoder.DecodeCycle(_modeLabel, cycle, _stationCallsign, _cycleCount);
+            foreach (var decode in result.Decodes)
+            {
+                _decodeCount += 1;
+                var isDirectedToMe = !string.IsNullOrWhiteSpace(_stationCallsign)
+                    && decode.MessageText.Contains(_stationCallsign.Trim(), StringComparison.OrdinalIgnoreCase);
+                Emit(new
+                {
+                    type = "decode",
+                    timestampUtc = DateTime.UtcNow,
+                    modeLabel = decode.ModeLabel,
+                    frequencyOffsetHz = decode.FrequencyHz,
+                    snrDb = decode.SnrDb,
+                    deltaTimeSeconds = decode.DtSeconds,
+                    messageText = decode.MessageText,
+                    confidence = 1.0,
+                    isDirectedToMe = isDirectedToMe,
+                    isCq = decode.MessageText.StartsWith("CQ ", StringComparison.OrdinalIgnoreCase),
+                });
             }
 
             EmitTelemetry(result.Summary);

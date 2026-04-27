@@ -6,13 +6,13 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\shackstack.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <Version>0.9.0-rc</Version>
-    <AssemblyVersion>0.9.0.0</AssemblyVersion>
-    <FileVersion>0.9.0.0</FileVersion>
-    <InformationalVersion>V-0.9.0 RC</InformationalVersion>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0</InformationalVersion>
     <Product>ShackStack</Product>
     <Company>ShackStack</Company>
-    <AssemblyTitle>ShackStack V-0.9.0 RC</AssemblyTitle>
+    <AssemblyTitle>ShackStack 1.0</AssemblyTitle>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,6 +23,10 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
     <Content Include="wsjtx-tools\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="js8call-tools\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
@@ -57,6 +61,7 @@
     <ItemGroup>
       <BundledWorkerFiles Include="$(ProjectDir)DecoderWorkers\**\*" />
       <BundledWsjtxToolFiles Include="$(ProjectDir)wsjtx-tools\**\*" />
+      <BundledJs8CallToolFiles Include="$(ProjectDir)js8call-tools\**\*" />
     </ItemGroup>
 
     <Copy
@@ -67,6 +72,11 @@
     <Copy
       SourceFiles="@(BundledWsjtxToolFiles)"
       DestinationFiles="@(BundledWsjtxToolFiles->'$(PublishDir)wsjtx-tools\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+
+    <Copy
+      SourceFiles="@(BundledJs8CallToolFiles)"
+      DestinationFiles="@(BundledJs8CallToolFiles->'$(PublishDir)js8call-tools\%(RecursiveDir)%(Filename)%(Extension)')"
       SkipUnchangedFiles="true" />
   </Target>
 </Project>

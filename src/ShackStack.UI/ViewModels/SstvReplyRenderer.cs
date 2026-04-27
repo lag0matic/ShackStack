@@ -71,7 +71,7 @@ internal static class SstvReplyRenderer
                 using var font = CreateFont(overlay.FontFamilyName, (float)overlay.FontSize);
                 using var format = new DrawingStringFormat
                 {
-                    Alignment = DrawingStringAlignment.Center,
+                    Alignment = DrawingStringAlignment.Near,
                 };
                 var x = (float)Math.Max(0.0, overlay.X);
                 var y = (float)Math.Max(0.0, overlay.Y);

@@ -14,6 +14,10 @@ public static class WsjtxModeCatalog
         new("JT4", 60.0, true, false),
         new("WSPR", 120.0, true, false),
         new("MSK144", 15.0, true, false),
+        new("JS8 Normal", 15.0, true, false),
+        new("JS8 Fast", 10.0, true, false),
+        new("JS8 Turbo", 6.0, true, false),
+        new("JS8 Slow", 28.0, true, false),
     ];
 
     public static readonly IReadOnlyList<WsjtxFrequencyPreset> FrequencyPresets =
@@ -53,6 +57,16 @@ public static class WsjtxModeCatalog
         new("WSPR", "10m WSPR 28.1246 MHz USB-D", 28_124_600),
         new("WSPR", "6m WSPR 50.2930 MHz USB-D", 50_293_000),
         new("MSK144", "6m MSK144 50.280 MHz USB-D", 50_280_000),
+        new("JS8", "160m JS8 1.842 MHz USB-D", 1_842_000),
+        new("JS8", "80m JS8 3.578 MHz USB-D", 3_578_000),
+        new("JS8", "40m JS8 7.078 MHz USB-D", 7_078_000),
+        new("JS8", "30m JS8 10.130 MHz USB-D", 10_130_000),
+        new("JS8", "20m JS8 14.078 MHz USB-D", 14_078_000),
+        new("JS8", "17m JS8 18.104 MHz USB-D", 18_104_000),
+        new("JS8", "15m JS8 21.078 MHz USB-D", 21_078_000),
+        new("JS8", "12m JS8 24.922 MHz USB-D", 24_922_000),
+        new("JS8", "10m JS8 28.078 MHz USB-D", 28_078_000),
+        new("JS8", "6m JS8 50.318 MHz USB-D", 50_318_000),
     ];
 
     public static WsjtxModeDefinition GetMode(string label) =>
@@ -66,14 +80,24 @@ public static class WsjtxModeCatalog
         Modes
             .Where(mode =>
                 string.Equals(mode.Label, "FT8", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(mode.Label, "FT4", StringComparison.OrdinalIgnoreCase))
+                string.Equals(mode.Label, "FT4", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(mode.Label, "WSPR", StringComparison.OrdinalIgnoreCase))
+            .Select(mode => mode.Label)
+            .ToArray();
+
+    public static IReadOnlyList<string> GetJs8ModeLabels() =>
+        Modes
+            .Where(mode => mode.Label.StartsWith("JS8 ", StringComparison.OrdinalIgnoreCase))
             .Select(mode => mode.Label)
             .ToArray();
 
     public static IReadOnlyList<string> GetFrequencyLabels(string modeLabel)
     {
+        var presetModeLabel = modeLabel.StartsWith("JS8 ", StringComparison.OrdinalIgnoreCase)
+            ? "JS8"
+            : modeLabel;
         var labels = FrequencyPresets
-            .Where(preset => string.Equals(preset.ModeLabel, modeLabel, StringComparison.OrdinalIgnoreCase))
+            .Where(preset => string.Equals(preset.ModeLabel, presetModeLabel, StringComparison.OrdinalIgnoreCase))
             .Select(preset => preset.DisplayLabel)
             .ToArray();
 

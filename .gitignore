@@ -1,6 +1,8 @@
 bin/
 obj/
 .vs/
+!src/ShackStack.Desktop/js8call-tools/
+!src/ShackStack.Desktop/js8call-tools/**
 
 publish/
 tests/

@@ -13,17 +13,31 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from modes.cw_engine_hybrid import CwHybridDecoder
-from modes.cw_engine_adaptive import CwAdaptiveDecoder
-from modes.cw_engine_minimal import CwMinimalDecoder
-from modes.morse_decoder_ext import MorseConfig as ExternalMorseConfig
-from modes.morse_decoder_ext import MorseDecoder as ExternalMorseDecoder
+from modes.cw_engine_fldigi import CwFldigiDecoder
 
 
 _lock = threading.RLock()
 _decoder = None
 _running = False
-_config = {"pitchHz": 700, "wpm": 20, "profile": "Adaptive"}
+_config = {
+    "pitchHz": 700,
+    "wpm": 20,
+    "profile": "Fldigi",
+    "bandwidthHz": 220,
+    "matchedFilterEnabled": True,
+    "trackingEnabled": True,
+    "trackingRangeWpm": 8,
+    "lowerWpmLimit": 5,
+    "upperWpmLimit": 60,
+    "attack": "Normal",
+    "decay": "Slow",
+    "noiseCharacter": "Suppress",
+    "autoToneSearchEnabled": True,
+    "afcEnabled": True,
+    "toneSearchSpanHz": 250,
+    "squelch": "Off",
+    "spacing": "Normal",
+}
 _last_confidence = 0.0
 _estimated_pitch = 700
 _estimated_wpm = 20
@@ -35,59 +49,7 @@ def emit(payload: dict[str, Any]) -> None:
 
 
 def worker_name_for(profile: str) -> str:
-    return {
-        "Minimal": "Python minimal",
-        "Adaptive": "Python adaptive",
-        "Hybrid": "Python hybrid",
-        "External": "Python external",
-    }.get(profile, "Python adaptive")
-
-
-class ExternalDecoderAdapter:
-    def __init__(
-        self,
-        *,
-        sample_rate: int,
-        tone_hz: float,
-        text_callback,
-        initial_wpm: int,
-    ):
-        self._cfg = ExternalMorseConfig(
-            sample_rate=sample_rate,
-            tone_freq=tone_hz,
-            wpm_initial=float(initial_wpm),
-        )
-        self._decoder = ExternalMorseDecoder(self._cfg)
-        self._text_callback = text_callback
-        self._decoder.on_result = self._on_result
-        self._decoder._wire_callbacks()
-
-    def _on_result(self, result):
-        if self._text_callback is None:
-            return
-        self._text_callback(type("ExternalEvent", (), {
-            "text": getattr(result, "character", ""),
-            "confidence": float(getattr(result, "confidence", 0.0)),
-        })())
-
-    def start(self):
-        return None
-
-    def stop(self):
-        self._decoder.flush()
-
-    def reset(self):
-        self._decoder.reset()
-
-    def push_samples(self, samples: np.ndarray):
-        self._decoder.feed(np.asarray(samples, dtype=np.float32))
-
-    @property
-    def stats(self):
-        return type("ExternalStats", (), {
-            "tracked_tone_hz": float(self._decoder.config.tone_freq),
-            "estimated_wpm": float(self._decoder.current_wpm),
-        })()
+    return "fldigi CW port"
 
 
 def emit_telemetry(status: str | None = None) -> None:
@@ -137,41 +99,29 @@ def build_decoder() -> None:
 
         pitch = int(_config.get("pitchHz", 700))
         wpm = int(_config.get("wpm", 20))
-        profile = str(_config.get("profile", "Adaptive"))
-
-        if profile == "Minimal":
-            _decoder = CwMinimalDecoder(
-                sample_rate=48000,
-                tone_hz=float(pitch),
-                text_callback=on_decode,
-                initial_wpm=wpm,
-                use_goertzel=True,
-            )
-        elif profile == "Hybrid":
-            _decoder = CwHybridDecoder(
-                sample_rate=48000,
-                tone_hz=float(pitch),
-                text_callback=on_decode,
-                initial_wpm=wpm,
-            )
-        elif profile == "External":
-            _decoder = ExternalDecoderAdapter(
-                sample_rate=8000,
-                tone_hz=float(pitch),
-                text_callback=on_decode,
-                initial_wpm=wpm,
-            )
-        else:
-            _decoder = CwAdaptiveDecoder(
-                sample_rate=48000,
-                tone_hz=float(pitch),
-                text_callback=on_decode,
-                initial_wpm=wpm,
-            )
-            if hasattr(_decoder, "set_afc_callback"):
-                _decoder.set_afc_callback(on_pitch)
-            if hasattr(_decoder, "set_wpm_callback"):
-                _decoder.set_wpm_callback(on_wpm)
+        _config["profile"] = "Fldigi"
+        _decoder = CwFldigiDecoder(
+            sample_rate=48000,
+            tone_hz=float(pitch),
+            text_callback=on_decode,
+            initial_wpm=wpm,
+            bandwidth_hz=int(_config.get("bandwidthHz", 220)),
+            matched_filter_enabled=bool(_config.get("matchedFilterEnabled", True)),
+            tracking_enabled=bool(_config.get("trackingEnabled", True)),
+            tracking_range_wpm=int(_config.get("trackingRangeWpm", 8)),
+            lower_wpm_limit=int(_config.get("lowerWpmLimit", 5)),
+            upper_wpm_limit=int(_config.get("upperWpmLimit", 60)),
+            attack=str(_config.get("attack", "Normal")),
+            decay=str(_config.get("decay", "Slow")),
+            noise_character=str(_config.get("noiseCharacter", "Suppress")),
+            auto_tone_search_enabled=bool(_config.get("autoToneSearchEnabled", True)),
+            afc_enabled=bool(_config.get("afcEnabled", True)),
+            tone_search_span_hz=int(_config.get("toneSearchSpanHz", 250)),
+            squelch=str(_config.get("squelch", "Off")),
+            spacing=str(_config.get("spacing", "Normal")),
+        )
+        _decoder.set_afc_callback(on_pitch)
+        _decoder.set_wpm_callback(on_wpm)
 
         if hasattr(_decoder, "set_initial_wpm"):
             _decoder.set_initial_wpm(wpm)
@@ -190,10 +140,24 @@ def handle_configure(message: dict[str, Any]) -> None:
     with _lock:
         _config["pitchHz"] = int(message.get("pitchHz", _config["pitchHz"]))
         _config["wpm"] = int(message.get("wpm", _config["wpm"]))
-        _config["profile"] = str(message.get("profile", _config["profile"]))
+        _config["profile"] = "Fldigi"
+        _config["bandwidthHz"] = int(message.get("bandwidthHz", _config["bandwidthHz"]))
+        _config["matchedFilterEnabled"] = bool(message.get("matchedFilterEnabled", _config["matchedFilterEnabled"]))
+        _config["trackingEnabled"] = bool(message.get("trackingEnabled", _config["trackingEnabled"]))
+        _config["trackingRangeWpm"] = int(message.get("trackingRangeWpm", _config["trackingRangeWpm"]))
+        _config["lowerWpmLimit"] = int(message.get("lowerWpmLimit", _config["lowerWpmLimit"]))
+        _config["upperWpmLimit"] = int(message.get("upperWpmLimit", _config["upperWpmLimit"]))
+        _config["attack"] = str(message.get("attack", _config["attack"]))
+        _config["decay"] = str(message.get("decay", _config["decay"]))
+        _config["noiseCharacter"] = str(message.get("noiseCharacter", _config["noiseCharacter"]))
+        _config["autoToneSearchEnabled"] = bool(message.get("autoToneSearchEnabled", _config["autoToneSearchEnabled"]))
+        _config["afcEnabled"] = bool(message.get("afcEnabled", _config["afcEnabled"]))
+        _config["toneSearchSpanHz"] = int(message.get("toneSearchSpanHz", _config["toneSearchSpanHz"]))
+        _config["squelch"] = str(message.get("squelch", _config["squelch"]))
+        _config["spacing"] = str(message.get("spacing", _config["spacing"]))
 
     build_decoder()
-    emit_telemetry(f"Configured for {_config['pitchHz']} Hz / {_config['wpm']} WPM")
+    emit_telemetry(f"Configured for {_config['pitchHz']} Hz / {_config['wpm']} WPM / {_config['bandwidthHz']} Hz BW")
 
 
 def handle_start() -> None:
@@ -245,13 +209,6 @@ def handle_audio(message: dict[str, Any]) -> None:
     if samples.size == 0:
         return
 
-    profile = str(_config.get("profile", "Adaptive"))
-    if profile == "External":
-        source_rate = int(message.get("sampleRate", 48000))
-        samples = downsample_for_external(samples.astype(np.float32, copy=False), source_rate)
-        if samples.size == 0:
-            return
-
     _decoder.push_samples(samples.astype(np.float32, copy=False))
 
     if hasattr(_decoder, "stats"):
@@ -261,26 +218,6 @@ def handle_audio(message: dict[str, Any]) -> None:
             globals()["_estimated_wpm"] = int(round(float(getattr(stats, "estimated_wpm", _estimated_wpm))))
         except Exception:
             pass
-
-
-def downsample_for_external(samples: np.ndarray, sample_rate: int) -> np.ndarray:
-    target_rate = 8000
-    if sample_rate <= 0 or samples.size == 0:
-        return samples.astype(np.float32, copy=False)
-    if sample_rate == target_rate:
-        return samples.astype(np.float32, copy=False)
-    if sample_rate % target_rate == 0:
-        factor = sample_rate // target_rate
-        usable = (len(samples) // factor) * factor
-        if usable <= 0:
-            return np.array([], dtype=np.float32)
-        return samples[:usable].reshape(-1, factor).mean(axis=1).astype(np.float32)
-
-    x_old = np.linspace(0.0, 1.0, num=len(samples), endpoint=False)
-    new_len = max(1, int(round(len(samples) * target_rate / sample_rate)))
-    x_new = np.linspace(0.0, 1.0, num=new_len, endpoint=False)
-    return np.interp(x_new, x_old, samples).astype(np.float32)
-
 
 def main() -> int:
     emit_telemetry("Python CW worker ready")

@@ -1,0 +1,96 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ShackStack.UI.ViewModels"
+        x:Class="ShackStack.UI.Views.RttyDeskWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1180"
+        Height="760"
+        MinWidth="960"
+        MinHeight="640"
+        Title="RTTY Desk"
+        Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
+        Background="#0F1117"
+        Foreground="#C4C8D8">
+  <Grid RowDefinitions="Auto,*" Margin="10">
+    <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,10">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Spacing="4">
+          <TextBlock Text="RTTY Desk" FontSize="20" FontWeight="SemiBold" />
+          <TextBlock Text="Manual tuning, audio center helper, polarity, and live copy in one place."
+                     Foreground="#AAB1C7"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+        <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+          <Button Content="Start RX" Command="{Binding StartRttyReceiveCommand}" Margin="0,0,8,0" />
+          <Button Content="Stop RX" Command="{Binding StopRttyReceiveCommand}" Margin="0,0,8,0" />
+          <Button Content="Reset" Command="{Binding ResetRttySessionCommand}" />
+        </WrapPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="360,*" ColumnSpacing="10">
+      <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Receive Setup" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="Use USB-D/LSB-D for IC-7300 audio RTTY. Leave tuned-frequency mode on when you want the radio VFO to be the truth."
+                       Foreground="#AAB1C7"
+                       TextWrapping="Wrap" />
+            <CheckBox Content="Use tuned frequency" IsChecked="{Binding RttyDecodeCurrentRadioFrequency}" />
+            <Grid ColumnDefinitions="82,*" ColumnSpacing="10">
+              <TextBlock Grid.Column="0" Text="Profile" Foreground="#7F879B" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding RttyProfileOptions}" SelectedItem="{Binding RttySelectedProfile}" />
+            </Grid>
+            <Grid ColumnDefinitions="82,*" ColumnSpacing="10">
+              <TextBlock Grid.Column="0" Text="Tune" Foreground="#7F879B" VerticalAlignment="Center" />
+              <AutoCompleteBox Grid.Column="1"
+                               ItemsSource="{Binding RttyFrequencyOptions}"
+                               Text="{Binding RttySelectedFrequency}"
+                               FilterMode="Contains"
+                               MinimumPrefixLength="0" />
+            </Grid>
+            <Grid ColumnDefinitions="82,*" ColumnSpacing="10">
+              <TextBlock Grid.Column="0" Text="Audio Hz" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Text="{Binding RttyAudioCenterHz}" />
+            </Grid>
+            <Border Background="#101827" BorderBrush="#263248" BorderThickness="1" CornerRadius="6" Padding="8">
+              <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
+                <TextBlock Grid.Row="0" Text="{Binding RttyTuneHelperSuggestion}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                <Button Grid.Row="1" Content="Apply Tune Helper" Command="{Binding ApplyRttyTuneHelperCommand}" HorizontalAlignment="Left" />
+              </Grid>
+            </Border>
+            <CheckBox Content="Reverse mark/space polarity" IsChecked="{Binding RttyReversePolarity}" />
+            <Border Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Status" FontSize="13" FontWeight="SemiBold" />
+                <Grid ColumnDefinitions="82,*" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="RX" Foreground="#7F879B" />
+                  <TextBlock Grid.Column="1" Text="{Binding RttyRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                </Grid>
+                <Grid ColumnDefinitions="82,*" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
+                  <TextBlock Grid.Column="1" Text="{Binding RttySessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+        <Grid RowDefinitions="Auto,*">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+            <TextBlock Text="Decoded Text" FontSize="16" FontWeight="SemiBold" />
+            <Button Grid.Column="1" Content="Clear" Command="{Binding ClearRttyDecodedTextCommand}" />
+          </Grid>
+          <TextBox Grid.Row="1"
+                   Text="{Binding RttyDecodedText}"
+                   AcceptsReturn="True"
+                   IsReadOnly="True"
+                   TextWrapping="Wrap"
+                   FontSize="15" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

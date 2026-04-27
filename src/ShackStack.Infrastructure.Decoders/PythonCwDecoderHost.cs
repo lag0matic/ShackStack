@@ -56,6 +56,20 @@ public sealed class PythonCwDecoderHost : ICwDecoderHost, IDisposable
             pitchHz = configuration.PitchHz,
             wpm = configuration.Wpm,
             profile = configuration.Profile,
+            bandwidthHz = configuration.BandwidthHz,
+            matchedFilterEnabled = configuration.MatchedFilterEnabled,
+            trackingEnabled = configuration.TrackingEnabled,
+            trackingRangeWpm = configuration.TrackingRangeWpm,
+            lowerWpmLimit = configuration.LowerWpmLimit,
+            upperWpmLimit = configuration.UpperWpmLimit,
+            attack = configuration.Attack,
+            decay = configuration.Decay,
+            noiseCharacter = configuration.NoiseCharacter,
+            autoToneSearchEnabled = configuration.AutoToneSearchEnabled,
+            afcEnabled = configuration.AfcEnabled,
+            toneSearchSpanHz = configuration.ToneSearchSpanHz,
+            squelch = configuration.Squelch,
+            spacing = configuration.Spacing,
         }, ct).ConfigureAwait(false);
     }
 

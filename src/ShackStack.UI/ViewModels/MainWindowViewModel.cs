@@ -23,6 +23,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private static readonly TimeSpan RadioConnectUiTimeout = TimeSpan.FromSeconds(12);
     private readonly DispatcherTimer _smeterUiTimer;
     private readonly DispatcherTimer _longwaveRefreshTimer;
+    private readonly DispatcherTimer _wefaxScheduleTimer;
     private double _displayedSmeterLevel;
     private double _targetSmeterLevel;
     private bool _monitorAutostartAttempted;
@@ -67,6 +68,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string? _sstvPreparedTransmitFingerprint;
     private string? _sstvPreparedTransmitMode;
     private string? _sstvPreparedTransmitCwIdSummary;
+    private string? _sstvPreparedTransmitImageFile;
+    private string? _sstvPreparedTransmitWaveFile;
     private double _sstvPreparedTransmitDurationSeconds;
     private CancellationTokenSource? _sstvTxCts;
     private bool _wsjtxSlotSendInFlight;
@@ -177,7 +180,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         VoiceRfPowerPercent = 100;
         CwPitchHz = 700;
         CwWpm = 20;
-        CwDecoderProfile = "Auto";
+        CwDecoderProfile = "Fldigi";
         _voiceRigSettingsDirty = false;
         _cwRigSettingsDirty = false;
         SettingsStatusMessage = "Settings loaded";
@@ -247,6 +250,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         };
         _longwaveRefreshTimer.Tick += async (_, _) => await OnLongwaveRefreshTimerTickAsync();
         _longwaveRefreshTimer.Start();
+        RebuildWefaxSchedule();
+        _wefaxScheduleTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMinutes(1)
+        };
+        _wefaxScheduleTimer.Tick += (_, _) => RebuildWefaxSchedule();
+        _wefaxScheduleTimer.Start();
 
         if (radioService is not null)
         {
@@ -350,10 +360,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         return;
                     }
 
-                    CwDecodedText = string.IsNullOrWhiteSpace(CwDecodedText)
+                    CwDecodedText = string.IsNullOrEmpty(CwDecodedText)
                         ? chunk.Text
-                        : $"{CwDecodedText} {chunk.Text}".Trim();
+                        : $"{CwDecodedText}{chunk.Text}";
                     CwDecoderConfidenceDisplay = $"{chunk.Confidence:P0}";
+                    UpdateCwDetectedCallsign();
                 });
             }));
         }
@@ -432,7 +443,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 Dispatcher.UIThread.Post(() =>
                 {
                     WefaxRxStatus = telemetry.Status;
-                    WefaxSessionNotes = $"{telemetry.ActiveWorker}  |  Lines {telemetry.LinesReceived}  |  Auto {telemetry.AlignedOffset}  |  Slant {WefaxManualSlant}  |  Offset {WefaxManualOffset}  |  Start {telemetry.StartConfidence:P0}";
+                    WefaxSessionNotes = $"{telemetry.ActiveWorker}  |  Lines {telemetry.LinesReceived}  |  {WefaxSelectedFilter} {WefaxCenterHz}/{WefaxShiftHz} Hz  |  Auto {telemetry.AlignedOffset}  |  Slant {WefaxManualSlant}  |  Offset {WefaxManualOffset}  |  Start {telemetry.StartConfidence:P0}";
                 });
             }));
 
@@ -852,10 +863,67 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private int cwWpm = 20;
 
     [ObservableProperty]
-    private string cwDecoderProfile = "Auto";
+    private int cwBandwidthHz = 220;
 
     [ObservableProperty]
-    private IReadOnlyList<string> cwDecoderProfiles = ["Auto"];
+    private bool cwMatchedFilterEnabled = true;
+
+    [ObservableProperty]
+    private bool cwTrackingEnabled = true;
+
+    [ObservableProperty]
+    private int cwTrackingRangeWpm = 8;
+
+    [ObservableProperty]
+    private int cwLowerWpmLimit = 5;
+
+    [ObservableProperty]
+    private int cwUpperWpmLimit = 60;
+
+    [ObservableProperty]
+    private IReadOnlyList<string> cwAttackOptions = ["Fast", "Normal", "Slow"];
+
+    [ObservableProperty]
+    private string cwSelectedAttack = "Normal";
+
+    [ObservableProperty]
+    private IReadOnlyList<string> cwDecayOptions = ["Fast", "Normal", "Slow"];
+
+    [ObservableProperty]
+    private string cwSelectedDecay = "Slow";
+
+    [ObservableProperty]
+    private IReadOnlyList<string> cwNoiseCharacterOptions = ["Suppress", "Asterisk", "Underscore", "Space"];
+
+    [ObservableProperty]
+    private string cwSelectedNoiseCharacter = "Suppress";
+
+    [ObservableProperty]
+    private bool cwAutoToneSearchEnabled = true;
+
+    [ObservableProperty]
+    private bool cwAfcEnabled = true;
+
+    [ObservableProperty]
+    private int cwToneSearchSpanHz = 250;
+
+    [ObservableProperty]
+    private IReadOnlyList<string> cwSquelchOptions = ["Off", "Low", "Medium", "High"];
+
+    [ObservableProperty]
+    private string cwSelectedSquelch = "Off";
+
+    [ObservableProperty]
+    private IReadOnlyList<string> cwSpacingOptions = ["Tight", "Normal", "Loose"];
+
+    [ObservableProperty]
+    private string cwSelectedSpacing = "Normal";
+
+    [ObservableProperty]
+    private string cwDecoderProfile = "Fldigi";
+
+    [ObservableProperty]
+    private IReadOnlyList<string> cwDecoderProfiles = ["Fldigi"];
 
     [ObservableProperty]
     private string cwDecoderStatus = "Ready";
@@ -874,6 +942,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private string cwDecodedText = string.Empty;
+
+    [ObservableProperty]
+    private string cwDetectedCallsign = string.Empty;
+
+    [ObservableProperty]
+    private string cwOperatorHint = "No CW callsign detected yet.";
+
+    [ObservableProperty]
+    private IReadOnlyList<string> cwMacroLabels = ["CQ", "DE", "RST", "TU", "73", "POTA"];
 
     [ObservableProperty]
     private IReadOnlyList<string> rttyProfileOptions =
@@ -935,18 +1012,45 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string wsjtxSelectedFrequency = WsjtxModeCatalog.GetDefaultFrequencyLabel("FT8");
 
     [ObservableProperty]
+    private IReadOnlyList<string> js8ModeOptions = WsjtxModeCatalog.GetJs8ModeLabels();
+
+    [ObservableProperty]
+    private string js8SelectedMode = "JS8 Normal";
+
+    [ObservableProperty]
+    private IReadOnlyList<string> js8FrequencyOptions = WsjtxModeCatalog.GetFrequencyLabels("JS8 Normal");
+
+    [ObservableProperty]
+    private string js8SelectedFrequency = WsjtxModeCatalog.GetDefaultFrequencyLabel("JS8 Normal");
+
+    [ObservableProperty]
+    private ObservableCollection<WsjtxSuggestedMessageItem> js8SuggestedMessages = [];
+
+    [ObservableProperty]
+    private WsjtxSuggestedMessageItem? selectedJs8SuggestedMessage;
+
+    [ObservableProperty]
+    private string js8TargetCallsign = string.Empty;
+
+    [ObservableProperty]
+    private string js8ComposeText = string.Empty;
+
+    [ObservableProperty]
+    private string js8ComposeStatus = "Receive is wired. Compose staging is ready; JS8 TX generation is the next port step.";
+
+    [ObservableProperty]
     private bool wsjtxAutoSequenceEnabled = true;
 
     [ObservableProperty]
     private IReadOnlyList<WsjtxReplyAutomationModeItem> wsjtxReplyAutomationModeOptions =
     [
         new("manual", "Manual", "Suggest the next reply, but do not stage or ready it automatically."),
-        new("stage", "Auto Stage Only", "Auto-select and stage the next reply for the active FT8/FT4 conversation lane."),
-        new("ready", "Auto Ready Next", "Auto-stage, prepare, and arm the next reply for the locked FT8/FT4 conversation lane."),
+        new("stage", "Auto Stage Only", "Auto-select and stage the next reply for the active weak-signal conversation lane."),
+        new("ready", "Auto Ready Next", "Auto-stage, prepare, and arm the next reply for the locked weak-signal conversation lane."),
     ];
 
     [ObservableProperty]
-    private WsjtxReplyAutomationModeItem selectedWsjtxReplyAutomationMode = new("stage", "Auto Stage Only", "Auto-select and stage the next reply for the active FT8/FT4 conversation lane.");
+    private WsjtxReplyAutomationModeItem selectedWsjtxReplyAutomationMode = new("stage", "Auto Stage Only", "Auto-select and stage the next reply for the active weak-signal conversation lane.");
 
     [ObservableProperty]
     private string wsjtxRxStatus = "WSJT-style digital receiver ready";
@@ -1097,6 +1201,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private WsjtxSuggestedMessageItem? wsjtxQueuedTransmitMessage;
 
     [ObservableProperty]
+    private string wsjtxManualTransmitText = string.Empty;
+
+    [ObservableProperty]
     private WsjtxPreparedTransmit? wsjtxPreparedTransmit;
 
     [ObservableProperty]
@@ -1122,6 +1229,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
 
     private double _lastObservedWsjtxSecondsToNextCycle = double.NaN;
+    private bool _isSettingWsjtxManualTransmitText;
+    private bool _wsjtxManualTransmitOverride;
 
     [ObservableProperty]
     private WsjtxActiveSession? wsjtxActiveSession;
@@ -1157,6 +1266,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public string WsjtxSelectedMessageText => SelectedWsjtxMessage?.MessageText ?? "No decodes yet.";
 
+    public string Js8SelectedDecodeSummary => SelectedWsjtxMessage is null || !SelectedWsjtxMessage.ModeText.StartsWith("JS8", StringComparison.OrdinalIgnoreCase)
+        ? "Select a JS8 decode to target a reply."
+        : $"{SelectedWsjtxMessage.MessageText}  |  {SelectedWsjtxMessage.SnrText}  |  {SelectedWsjtxMessage.HzText}";
+
+    public string Js8TargetSummary => string.IsNullOrWhiteSpace(Js8TargetCallsign)
+        ? "No JS8 target selected."
+        : $"Target: {Js8TargetCallsign}";
+
+    public string Js8TransmitReadiness => WsjtxPreparedTransmit is not null && WsjtxPreparedTransmit.ModeLabel.StartsWith("JS8", StringComparison.OrdinalIgnoreCase)
+        ? WsjtxTransmitArmSummary
+        : "JS8 TX generation is wired for short Varicode/Huffman text frames; prepare before arming live PTT.";
+
     public string WsjtxRxFrequencyTitle => $"Rx Frequency ({WsjtxRxAudioFrequencyHz:+0;-0;0} Hz)";
 
     public string WsjtxTxFrequencyTitle => $"Tx Offset ({WsjtxTxAudioFrequencyHz:+0;-0;0} Hz)";
@@ -1171,11 +1292,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public string WsjtxSuggestedMessagePreview => SelectedWsjtxSuggestedMessage?.MessageText ?? "No reply/CQ scaffolding yet.";
 
-    public string WsjtxQueuedTransmitPreview => WsjtxQueuedTransmitMessage?.MessageText ?? "No TX message staged.";
+    public string WsjtxEffectiveTransmitText => NormalizeWsjtxTransmitText(WsjtxManualTransmitText)
+        ?? WsjtxQueuedTransmitMessage?.MessageText
+        ?? string.Empty;
+
+    public string WsjtxQueuedTransmitPreview => string.IsNullOrWhiteSpace(WsjtxEffectiveTransmitText)
+        ? "No TX message staged."
+        : WsjtxEffectiveTransmitText;
 
     public string WsjtxPreparedTransmitSummary => WsjtxPreparedTransmitStatus;
 
     public string WsjtxReplyAutomationSummary => SelectedWsjtxReplyAutomationMode.Summary;
+
+    public bool WsjtxSelectedModeSupportsQso => IsWsjtxQsoMode(WsjtxSelectedMode);
 
     public string WsjtxTransmitArmSummary
     {
@@ -1442,6 +1571,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public Bitmap? SstvReplyPreviewBitmap => SelectedSstvReplyBaseImage?.Bitmap;
 
+    public double SstvReplyCanvasWidth => SelectedSstvReplyBaseImage?.Bitmap.PixelSize.Width ?? 320;
+
+    public double SstvReplyCanvasHeight => SelectedSstvReplyBaseImage?.Bitmap.PixelSize.Height ?? 256;
+
     public bool SstvReplyHasBaseImage => SelectedSstvReplyBaseImage is not null;
 
     public bool SstvReplyShowPlaceholder => !SstvReplyHasBaseImage;
@@ -1481,10 +1614,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         "NOAA Gulf 8503.9 kHz USB-D",
         "NOAA Gulf 12789.9 kHz USB-D",
         "NOAA Hawaii 9982.5 kHz USB-D",
+        "NOAA Hawaii 11090.0 kHz USB-D",
+        "NOAA Kodiak 8459.0 kHz USB-D",
+        "NOAA Kodiak 12412.5 kHz USB-D",
     ];
 
     [ObservableProperty]
     private string wefaxSelectedFrequency = "NOAA Atlantic 12750.0 kHz USB-D";
+
+    [ObservableProperty]
+    private ObservableCollection<WefaxScheduleItem> wefaxScheduleItems = [];
+
+    [ObservableProperty]
+    private WefaxScheduleItem? selectedWefaxScheduleItem;
+
+    [ObservableProperty]
+    private string wefaxScheduleStatus = "NOAA radiofax schedule loaded from built-in UTC table.";
 
     [ObservableProperty]
     private int wefaxManualSlant;
@@ -1493,13 +1638,64 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private int wefaxManualOffset;
 
     [ObservableProperty]
+    private int wefaxCenterHz = 1900;
+
+    [ObservableProperty]
+    private int wefaxShiftHz = 800;
+
+    [ObservableProperty]
+    private int wefaxMaxRows = 1500;
+
+    [ObservableProperty]
+    private IReadOnlyList<string> wefaxFilterOptions = ["Narrow", "Medium", "Wide"];
+
+    [ObservableProperty]
+    private string wefaxSelectedFilter = "Medium";
+
+    [ObservableProperty]
+    private bool wefaxAutoAlign = false;
+
+    [ObservableProperty]
+    private int wefaxAutoAlignAfterRows = 30;
+
+    [ObservableProperty]
+    private int wefaxAutoAlignEveryRows = 10;
+
+    [ObservableProperty]
+    private int wefaxAutoAlignStopRows = 500;
+
+    [ObservableProperty]
+    private double wefaxCorrelationThreshold = 0.05;
+
+    [ObservableProperty]
+    private int wefaxCorrelationRows = 15;
+
+    [ObservableProperty]
+    private bool wefaxInvertImage;
+
+    [ObservableProperty]
+    private bool wefaxBinaryImage;
+
+    [ObservableProperty]
+    private int wefaxBinaryThreshold = 128;
+
+    [ObservableProperty]
+    private bool wefaxNoiseRemoval;
+
+    [ObservableProperty]
+    private int wefaxNoiseThreshold = 24;
+
+    [ObservableProperty]
+    private int wefaxNoiseMargin = 1;
+
+    [ObservableProperty]
     private string wefaxRxStatus = "WeFAX receiver ready";
 
     [ObservableProperty]
     private string wefaxImageStatus = "No WeFAX image captured yet";
 
     [ObservableProperty]
-    private string wefaxSessionNotes = "Auto slant correction is enabled. Start RX for normal operation, or Start Now if you joined the broadcast late.";
+    private string wefaxSessionNotes = "Live auto-align is off by default because real maps can fool seam tracking. Use Start RX for scheduled captures, or Start Now if you joined late.";
 
     [ObservableProperty]
     private Bitmap? wefaxPreviewBitmap;
@@ -1778,6 +1974,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         LongwaveLogOperatorCallsign = FormatCallsign(SettingsCallsign);
         LongwaveLogGridSquare = SettingsGridSquare.Trim().ToUpperInvariant();
         LongwaveLogStatus = $"Prefilled log from rig: {LongwaveLogBand} {LongwaveLogMode} at {LongwaveLogFrequencyKhz} kHz.";
+    }
+
+    [RelayCommand]
+    private void UseRigForCwLongwaveLog()
+    {
+        UseRigForLongwaveLog();
+        LongwaveLogMode = "CW";
+        LongwaveLogRstSent = "599";
+        LongwaveLogRstReceived = "599";
+        LongwaveLogStatus = $"Prefilled CW log from rig: {LongwaveLogBand} CW at {LongwaveLogFrequencyKhz} kHz.";
     }
 
     [RelayCommand]
@@ -2068,7 +2274,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        var config = new CwDecoderConfiguration(Math.Clamp(CwPitchHz, 300, 1200), Math.Clamp(CwWpm, 5, 60), CwDecoderProfile);
+        var lowerLimit = Math.Clamp(CwLowerWpmLimit, 5, 60);
+        var upperLimit = Math.Clamp(CwUpperWpmLimit, lowerLimit + 1, 80);
+        var config = new CwDecoderConfiguration(
+            Math.Clamp(CwPitchHz, 300, 1200),
+            Math.Clamp(CwWpm, 5, 60),
+            CwDecoderProfile,
+            Math.Clamp(CwBandwidthHz, 40, 600),
+            CwMatchedFilterEnabled,
+            CwTrackingEnabled,
+            Math.Clamp(CwTrackingRangeWpm, 1, 30),
+            lowerLimit,
+            upperLimit,
+            CwSelectedAttack,
+            CwSelectedDecay,
+            CwSelectedNoiseCharacter,
+            CwAutoToneSearchEnabled,
+            CwAfcEnabled,
+            Math.Clamp(CwToneSearchSpanHz, 50, 800),
+            CwSelectedSquelch,
+            CwSelectedSpacing);
         await _cwDecoderHost.ConfigureAsync(config, CancellationToken.None);
         await _cwDecoderHost.StartAsync(CancellationToken.None);
     }
@@ -2093,11 +2318,54 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         CwDecodedText = string.Empty;
+        CwDetectedCallsign = string.Empty;
+        CwOperatorHint = "No CW callsign detected yet.";
         await _cwDecoderHost.ResetAsync(CancellationToken.None);
     }
 
     [RelayCommand]
-    private void ClearCwDecodedText() => CwDecodedText = string.Empty;
+    private void ClearCwDecodedText()
+    {
+        CwDecodedText = string.Empty;
+        CwDetectedCallsign = string.Empty;
+        CwOperatorHint = "No CW callsign detected yet.";
+    }
+
+    [RelayCommand]
+    private void LoadCwMacro(string? label)
+    {
+        var text = ExpandCwMacro(label);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            CwTxStatus = "No CW macro selected.";
+            return;
+        }
+
+        CwSendText = text;
+        CwTxStatus = $"Loaded CW macro: {text}";
+    }
+
+    [RelayCommand]
+    private async Task SendCwMacroAsync(string? label)
+    {
+        LoadCwMacro(label);
+        await QueueCwSendTextAsync();
+    }
+
+    [RelayCommand]
+    private void UseDetectedCwCallForLog()
+    {
+        var detected = FormatCallsign(CwDetectedCallsign);
+        if (string.IsNullOrWhiteSpace(detected))
+        {
+            CwOperatorHint = "No decoded CW callsign to log yet.";
+            return;
+        }
+
+        UseRigForCwLongwaveLog();
+        LongwaveLogCallsign = detected;
+        CwOperatorHint = $"Prepared CW log for {detected}.";
+    }
 
     [RelayCommand]
     private void StartRttyReceive()
@@ -2185,6 +2453,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private async Task StartJs8ReceiveAsync()
+    {
+        if (_wsjtxModeHost is null)
+        {
+            WsjtxRxStatus = "JS8 host unavailable";
+            return;
+        }
+
+        ActivateJs8Desk();
+        await StartWsjtxReceiveCoreAsync();
+    }
+
+    [RelayCommand]
     private void StopWsjtxReceive()
     {
         if (_wsjtxModeHost is null)
@@ -2216,6 +2497,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WsjtxSuggestedMessages.Clear();
         SelectedWsjtxSuggestedMessage = null;
         WsjtxQueuedTransmitMessage = null;
+        SetWsjtxManualTransmitText(string.Empty, isManualOverride: false);
         WsjtxPreparedTransmit = null;
         _wsjtxPreparedTransmitClip = null;
         WsjtxPreparedTransmitStatus = "No TX signal prepared.";
@@ -2244,6 +2526,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WsjtxSuggestedMessages.Clear();
         SelectedWsjtxSuggestedMessage = null;
         WsjtxQueuedTransmitMessage = null;
+        SetWsjtxManualTransmitText(string.Empty, isManualOverride: false);
         WsjtxPreparedTransmit = null;
         _wsjtxPreparedTransmitClip = null;
         WsjtxPreparedTransmitStatus = "No TX signal prepared.";
@@ -2269,6 +2552,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WsjtxActiveSession = null;
         WsjtxCallingCq = false;
         WsjtxQueuedTransmitMessage = null;
+        SetWsjtxManualTransmitText(string.Empty, isManualOverride: false);
         WsjtxPreparedTransmit = null;
         _wsjtxPreparedTransmitClip = null;
         WsjtxPreparedTransmitStatus = "No TX signal prepared.";
@@ -2348,12 +2632,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void StageSelectedWsjtxSuggestedMessage()
     {
+        if (!IsWsjtxQsoMode(WsjtxSelectedMode))
+        {
+            WsjtxRxStatus = $"{WsjtxSelectedMode} is receive/monitor only in ShackStack for now.";
+            return;
+        }
+
         if (SelectedWsjtxSuggestedMessage is null)
         {
             return;
         }
 
         WsjtxQueuedTransmitMessage = SelectedWsjtxSuggestedMessage;
+        SetWsjtxManualTransmitText(SelectedWsjtxSuggestedMessage.MessageText, isManualOverride: false);
         var myCall = FormatCallsign(WsjtxOperatorCallsign);
         if (string.Equals(SelectedWsjtxSuggestedMessage.Label, "CQ", StringComparison.OrdinalIgnoreCase))
         {
@@ -2390,6 +2681,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void StageWsjtxCq()
     {
+        if (!IsWsjtxQsoMode(WsjtxSelectedMode))
+        {
+            WsjtxRxStatus = $"{WsjtxSelectedMode} is receive/monitor only in ShackStack for now.";
+            return;
+        }
+
         var myCall = FormatCallsign(WsjtxOperatorCallsign);
         if (string.IsNullOrWhiteSpace(myCall))
         {
@@ -2405,6 +2702,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var cqMessage = new WsjtxSuggestedMessageItem("CQ", cqText, "Call CQ on current TX offset");
         SelectedWsjtxSuggestedMessage = cqMessage;
         WsjtxQueuedTransmitMessage = cqMessage;
+        SetWsjtxManualTransmitText(cqMessage.MessageText, isManualOverride: false);
         WsjtxCallingCq = true;
         WsjtxActiveSession = null;
         WsjtxPreparedTransmitStatus = "Staged CQ ready.";
@@ -2418,6 +2716,136 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private void UseSelectedJs8Decode()
+    {
+        if (SelectedWsjtxMessage is null || !SelectedWsjtxMessage.ModeText.StartsWith("JS8", StringComparison.OrdinalIgnoreCase))
+        {
+            Js8ComposeStatus = "Select a JS8 decode first.";
+            return;
+        }
+
+        var target = TryExtractCallsign(SelectedWsjtxMessage.MessageText);
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            Js8ComposeStatus = "Selected JS8 decode does not contain an obvious callsign.";
+            return;
+        }
+
+        Js8TargetCallsign = target;
+        WsjtxRxAudioFrequencyHz = SelectedWsjtxMessage.FrequencyOffsetHz;
+        if (!WsjtxHoldTxFrequency)
+        {
+            WsjtxTxAudioFrequencyHz = SelectedWsjtxMessage.FrequencyOffsetHz;
+        }
+
+        RebuildJs8SuggestedMessages();
+        Js8ComposeStatus = $"JS8 target set to {target} at {SelectedWsjtxMessage.FrequencyOffsetHz:+0;-0;0} Hz.";
+    }
+
+    [RelayCommand]
+    private void StageSelectedJs8SuggestedMessage()
+    {
+        if (SelectedJs8SuggestedMessage is null)
+        {
+            Js8ComposeStatus = "Choose a JS8 quick message first.";
+            return;
+        }
+
+        Js8ComposeText = SelectedJs8SuggestedMessage.MessageText;
+        Js8ComposeStatus = $"Staged JS8 text: {SelectedJs8SuggestedMessage.Label}. TX generation is not wired yet.";
+    }
+
+    [RelayCommand]
+    private void StageJs8Heartbeat()
+    {
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        if (string.IsNullOrWhiteSpace(myCall))
+        {
+            Js8ComposeStatus = "Set your callsign before staging a heartbeat.";
+            return;
+        }
+
+        var grid = FormatWeakSignalGrid(WsjtxOperatorGridSquare);
+        Js8ComposeText = string.IsNullOrWhiteSpace(grid)
+            ? $"{myCall}: HB"
+            : $"{myCall}: HB {grid}";
+        Js8ComposeStatus = "Staged JS8 heartbeat text. TX generation is not wired yet.";
+    }
+
+    [RelayCommand]
+    private void StageJs8Cq()
+    {
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        if (string.IsNullOrWhiteSpace(myCall))
+        {
+            Js8ComposeStatus = "Set your callsign before staging CQ.";
+            return;
+        }
+
+        var grid = FormatWeakSignalGrid(WsjtxOperatorGridSquare);
+        Js8ComposeText = string.IsNullOrWhiteSpace(grid)
+            ? $"CQ CQ CQ DE {myCall}"
+            : $"CQ CQ CQ DE {myCall} {grid}";
+        Js8ComposeStatus = "Staged JS8 CQ text. TX generation is not wired yet.";
+    }
+
+    [RelayCommand]
+    private void ClearJs8Compose()
+    {
+        Js8TargetCallsign = string.Empty;
+        Js8ComposeText = string.Empty;
+        SelectedJs8SuggestedMessage = Js8SuggestedMessages.FirstOrDefault();
+        Js8ComposeStatus = "JS8 compose cleared.";
+        OnPropertyChanged(nameof(Js8TargetSummary));
+    }
+
+    [RelayCommand]
+    private async Task PrepareJs8TransmitAsync()
+    {
+        var text = NormalizeWsjtxTransmitText(Js8ComposeText);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            Js8ComposeStatus = "Type or stage JS8 text before preparing TX.";
+            return;
+        }
+
+        WsjtxSelectedMode = Js8SelectedMode;
+        WsjtxSelectedFrequency = Js8SelectedFrequency;
+        SetWsjtxManualTransmitText(text, isManualOverride: true);
+        WsjtxQueuedTransmitMessage = new WsjtxSuggestedMessageItem("JS8", text, "JS8 compose message");
+        Js8ComposeStatus = $"Preparing {Js8SelectedMode} TX audio...";
+
+        await PrepareWsjtxQueuedTransmitAsync().ConfigureAwait(false);
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            Js8ComposeStatus = WsjtxPreparedTransmit is not null && WsjtxPreparedTransmit.ModeLabel.StartsWith("JS8", StringComparison.OrdinalIgnoreCase)
+                ? $"Prepared JS8 TX: {WsjtxPreparedTransmit.MessageText}"
+                : WsjtxPreparedTransmitStatus;
+            OnPropertyChanged(nameof(Js8TransmitReadiness));
+        });
+    }
+
+    [RelayCommand]
+    private async Task PrepareAndArmJs8TransmitAsync()
+    {
+        await PrepareJs8TransmitAsync().ConfigureAwait(false);
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (WsjtxPreparedTransmit is null || !WsjtxPreparedTransmit.ModeLabel.StartsWith("JS8", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            ArmPreparedWsjtxTransmit();
+            Js8ComposeStatus = WsjtxTransmitArmedLocal
+                ? $"Armed JS8 for next {Js8SelectedMode} slot."
+                : WsjtxTransmitArmStatus;
+            OnPropertyChanged(nameof(Js8TransmitReadiness));
+        });
+    }
+
+    [RelayCommand]
     private async Task CallWsjtxCqNextSlotAsync()
     {
         StageWsjtxCq();
@@ -2427,17 +2855,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task SendNextWsjtxMessageAsync()
     {
-        if (SelectedWsjtxSuggestedMessage is not null
+        if (string.IsNullOrWhiteSpace(WsjtxManualTransmitText)
+            && SelectedWsjtxSuggestedMessage is not null
             && (WsjtxQueuedTransmitMessage is null
                 || !string.Equals(WsjtxQueuedTransmitMessage.MessageText, SelectedWsjtxSuggestedMessage.MessageText, StringComparison.Ordinal)))
         {
             StageSelectedWsjtxSuggestedMessage();
         }
 
-        if (WsjtxQueuedTransmitMessage is null)
+        var transmitText = NormalizeWsjtxTransmitText(WsjtxManualTransmitText)
+            ?? WsjtxQueuedTransmitMessage?.MessageText;
+        if (string.IsNullOrWhiteSpace(transmitText))
         {
-            WsjtxRxStatus = "Select or stage the next weak-signal message first.";
+            WsjtxRxStatus = "Select, stage, or type a weak-signal TX message first.";
             return;
+        }
+
+        if (WsjtxQueuedTransmitMessage is null || !string.Equals(WsjtxQueuedTransmitMessage.MessageText, transmitText, StringComparison.Ordinal))
+        {
+            WsjtxQueuedTransmitMessage = new WsjtxSuggestedMessageItem("Manual", transmitText, "Manual TX message");
         }
 
         await PrepareAndArmQueuedWsjtxTransmitAsync(WsjtxQueuedTransmitMessage.Label);
@@ -2447,6 +2883,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void ClearWsjtxQueuedMessage()
     {
         WsjtxQueuedTransmitMessage = null;
+        SetWsjtxManualTransmitText(string.Empty, isManualOverride: false);
         WsjtxPreparedTransmit = null;
         _wsjtxPreparedTransmitClip = null;
         WsjtxActiveSession = null;
@@ -2472,11 +2909,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (WsjtxQueuedTransmitMessage is null)
+        if (!IsWsjtxQsoMode(WsjtxSelectedMode))
         {
-            WsjtxPreparedTransmitStatus = "Stage a TX message first.";
+            WsjtxPreparedTransmitStatus = $"{WsjtxSelectedMode} transmit is not wired into the QSO rail.";
+            WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+            WsjtxTransmitArmStatus = $"{WsjtxSelectedMode} is receive/monitor only for now.";
+            return;
+        }
+
+        var transmitText = NormalizeWsjtxTransmitText(WsjtxManualTransmitText)
+            ?? WsjtxQueuedTransmitMessage?.MessageText;
+        if (string.IsNullOrWhiteSpace(transmitText))
+        {
+            WsjtxPreparedTransmitStatus = "Stage or type a TX message first.";
             WsjtxPreparedTransmitPath = "No prepared TX artifact.";
             return;
+        }
+
+        if (WsjtxQueuedTransmitMessage is null || !string.Equals(WsjtxQueuedTransmitMessage.MessageText, transmitText, StringComparison.Ordinal))
+        {
+            WsjtxQueuedTransmitMessage = new WsjtxSuggestedMessageItem("Manual", transmitText, "Manual TX message");
         }
 
         WsjtxPreparedTransmitStatus = $"Preparing {WsjtxSelectedMode} TX signal...";
@@ -2485,7 +2937,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var result = await _wsjtxModeHost
             .PrepareTransmitAsync(
                 WsjtxSelectedMode,
-                WsjtxQueuedTransmitMessage.MessageText,
+                transmitText,
                 WsjtxTxAudioFrequencyHz,
                 CancellationToken.None)
             .ConfigureAwait(false);
@@ -2941,6 +3393,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var hadPreparedAudio = WsjtxPreparedTransmit is not null || _wsjtxPreparedTransmitClip is not null;
         SelectedWsjtxSuggestedMessage = top;
         WsjtxQueuedTransmitMessage = ShouldAutoStageWsjtxReplies ? top : null;
+        if (ShouldAutoStageWsjtxReplies && !_wsjtxManualTransmitOverride)
+        {
+            SetWsjtxManualTransmitText(top.MessageText, isManualOverride: false);
+        }
+        else if (!ShouldAutoStageWsjtxReplies && !_wsjtxManualTransmitOverride)
+        {
+            SetWsjtxManualTransmitText(string.Empty, isManualOverride: false);
+        }
         WsjtxPreparedTransmit = null;
         _wsjtxPreparedTransmitClip = null;
         WsjtxPreparedTransmitStatus = ShouldAutoStageWsjtxReplies
@@ -3308,7 +3768,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         WefaxRxStatus = "WeFAX receiver ready";
         WefaxImageStatus = "No WeFAX image captured yet";
-        WefaxSessionNotes = "Auto slant correction is enabled. Start RX for normal operation, or Start Now if you joined the broadcast late.";
+        WefaxSessionNotes = "Live auto-align is off by default because real maps can fool seam tracking. Use Start RX for scheduled captures, or Start Now if you joined late.";
         UpdateWefaxPreview(null);
     }
 
@@ -3316,6 +3776,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void RefreshWefaxArchive()
     {
         LoadWefaxArchiveImages();
+    }
+
+    [RelayCommand]
+    private void RefreshWefaxSchedule()
+    {
+        RebuildWefaxSchedule();
+    }
+
+    [RelayCommand]
+    private void ApplyWefaxScheduleItem(WefaxScheduleItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        WefaxSelectedMode = item.ModeLabel;
+        WefaxSelectedFrequency = item.FrequencyLabel;
+        SelectedWefaxScheduleItem = item;
+        WefaxScheduleStatus = $"Selected {item.Station}: {item.Product} at {item.TimeText} UTC.";
     }
 
     [RelayCommand]
@@ -3347,6 +3827,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
+            DeletePreparedSstvTransmitArtifacts();
             var timestamp = DateTime.Now;
             Directory.CreateDirectory(_sstvTxDirectory);
             var stem = $"{timestamp:yyyyMMdd_HHmmss}_{SstvSelectedTxMode.ToLowerInvariant().Replace(' ', '_')}";
@@ -3392,6 +3873,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 _sstvPreparedTransmitFingerprint = preparedFingerprint;
                 _sstvPreparedTransmitMode = preparedMode;
+                _sstvPreparedTransmitImageFile = pngPath;
+                _sstvPreparedTransmitWaveFile = wavPath;
                 var idParts = new List<string>();
                 if (transmitOptions.FskIdEnabled)
                 {
@@ -3473,6 +3956,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void ClearPreparedSstvTransmit(string status)
     {
+        DeletePreparedSstvTransmitArtifacts();
         _sstvPreparedTransmitClip = null;
         _sstvPreparedTransmitFingerprint = null;
         _sstvPreparedTransmitMode = null;
@@ -3485,6 +3969,30 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(SstvHasPreparedTransmitPreview));
         OnPropertyChanged(nameof(SstvHasPreparedTransmitClip));
         SstvTransmitStatus = status;
+    }
+
+    private void DeletePreparedSstvTransmitArtifacts()
+    {
+        SstvPreparedTransmitBitmap = null;
+        foreach (var path in new[] { _sstvPreparedTransmitImageFile, _sstvPreparedTransmitWaveFile })
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                continue;
+            }
+
+            try
+            {
+                File.Delete(path);
+            }
+            catch
+            {
+                // Best effort only: a preview or audio device may still be releasing the file.
+            }
+        }
+
+        _sstvPreparedTransmitImageFile = null;
+        _sstvPreparedTransmitWaveFile = null;
     }
 
     private void RefreshPreparedSstvTransmitSummary()
@@ -3623,16 +4131,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             token.ThrowIfCancellationRequested();
 
             var route = BuildCurrentAudioRoute();
-            var clip = _sstvPreparedTransmitClip;
+            var clip = WithLeadingSilence(_sstvPreparedTransmitClip, 250);
             var clipDurationMs = Math.Max(500, (int)Math.Ceiling(
                 clip.PcmBytes.Length / (double)(clip.SampleRate * clip.Channels * 2) * 1000.0));
 
-            await _radioService!.SetPttAsync(true, token).ConfigureAwait(false);
-            pttRaised = true;
-            await Task.Delay(120, token).ConfigureAwait(false);
-            await VerifySstvPttRaisedAsync(token).ConfigureAwait(false);
             await _audioService!.StartTransmitPcmAsync(route, clip, token).ConfigureAwait(false);
             txAudioStarted = true;
+            await _radioService!.SetPttAsync(true, token).ConfigureAwait(false);
+            pttRaised = true;
+            await VerifySstvPttRaisedAsync(token).ConfigureAwait(false);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -3645,14 +4152,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                SstvTransmitStatus = $"SSTV TX sent: {_sstvPreparedTransmitMode ?? SstvSelectedTxMode}";
+                ClearPreparedSstvTransmit($"SSTV TX sent: {_sstvPreparedTransmitMode ?? SstvSelectedTxMode}. Prepared artifacts discarded.");
             });
         }
         catch (OperationCanceledException)
         {
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                SstvTransmitStatus = "SSTV TX stopped.";
+                ClearPreparedSstvTransmit("SSTV TX stopped. Prepared artifacts discarded.");
                 VoiceTxStatus = "TX audio idle";
                 RadioStatusSummary = "SSTV TX stopped.";
             });
@@ -3726,7 +4233,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             SstvTxIsSending = false;
             VoiceTxStatus = "TX audio idle";
-            SstvTransmitStatus = "SSTV TX stop requested.";
+            ClearPreparedSstvTransmit("SSTV TX stop requested. Prepared artifacts discarded.");
             RadioStatusSummary = "SSTV TX stop requested.";
         });
     }
@@ -3964,19 +4471,23 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void AddSstvReplyOverlay()
+    private void AddSstvReplyOverlay(string? template = null)
     {
         SstvReplyPresetKind = null;
+        var text = string.IsNullOrWhiteSpace(template)
+            ? "QSL SSTV - TNX DE %m"
+            : template.Trim();
         var item = new SstvOverlayItemViewModel
         {
-            Text = ExpandSstvReplyMacro("QSL SSTV - TNX DE %m"),
-            X = 160 + (SstvReplyOverlayItems.Count * 12),
-            Y = 210 + (SstvReplyOverlayItems.Count * 12),
+            Text = ExpandSstvReplyMacro(text),
+            X = 24 + (SstvReplyOverlayItems.Count * 12),
+            Y = 24 + (SstvReplyOverlayItems.Count * 28),
             FontSize = 18,
             FontFamilyName = "Segoe UI",
         };
         SstvReplyOverlayItems.Add(item);
         SelectedSstvReplyOverlayItem = item;
+        SstvReplyTemplateStatus = $"Added text box '{item.Text}'";
         SstvTransmitStatus = "Reply layout changed; prepare TX when ready.";
     }
 
@@ -4212,6 +4723,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         RttySessionNotes = "RTTY audio decoder running. IC-7300 should be in USB-D or LSB-D; native RTTY is for the rig's FSK/RTTY path.";
     }
 
+    public void ActivateJs8Desk()
+    {
+        WsjtxSelectedMode = Js8SelectedMode;
+        WsjtxSelectedFrequency = Js8SelectedFrequency;
+        WsjtxSessionNotes = DescribeWsjtxMode(Js8SelectedMode);
+        WsjtxRxStatus = $"JS8 desk selected: {Js8SelectedMode}";
+        RebuildJs8SuggestedMessages();
+    }
+
     private async Task StartWsjtxReceiveCoreAsync()
     {
         if (_wsjtxModeHost is null)
@@ -4254,7 +4774,29 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         var (ioc, lpm) = ParseWefaxMode(WefaxSelectedMode);
         await TuneRadioForWefaxAsync(WefaxSelectedFrequency);
-        var config = new WefaxDecoderConfiguration(WefaxSelectedMode, ioc, lpm, WefaxSelectedFrequency, WefaxManualSlant, WefaxManualOffset);
+        var config = new WefaxDecoderConfiguration(
+            WefaxSelectedMode,
+            ioc,
+            lpm,
+            WefaxSelectedFrequency,
+            WefaxManualSlant,
+            WefaxManualOffset,
+            Math.Clamp(WefaxCenterHz, 1000, 2400),
+            Math.Clamp(WefaxShiftHz, 750, 900),
+            Math.Clamp(WefaxMaxRows, 1000, 10000),
+            WefaxSelectedFilter,
+            WefaxAutoAlign,
+            Math.Clamp(WefaxAutoAlignAfterRows, 1, 500),
+            Math.Clamp(WefaxAutoAlignEveryRows, 1, 100),
+            Math.Clamp(WefaxAutoAlignStopRows, 1, 5000),
+            Math.Clamp(WefaxCorrelationThreshold, 0.01, 0.10),
+            Math.Clamp(WefaxCorrelationRows, 2, 25),
+            WefaxInvertImage,
+            WefaxBinaryImage,
+            Math.Clamp(WefaxBinaryThreshold, 0, 255),
+            WefaxNoiseRemoval,
+            Math.Clamp(WefaxNoiseThreshold, 1, 96),
+            Math.Clamp(WefaxNoiseMargin, 1, 2));
         await _wefaxDecoderHost.ConfigureAsync(config, CancellationToken.None);
         if (forceNow)
         {
@@ -4264,6 +4806,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             await _wefaxDecoderHost.StartAsync(CancellationToken.None);
         }
+    }
+
+    private void RebuildWefaxSchedule()
+    {
+        var now = DateTime.UtcNow;
+        var items = BuildWefaxScheduleItems(now);
+        WefaxScheduleItems = new ObservableCollection<WefaxScheduleItem>(items);
+        WefaxScheduleStatus = $"Schedule shown in UTC. Updated {now:HH:mm}Z from built-in NOAA/NWS radiofax table.";
     }
 
     private async Task TuneRadioForWefaxAsync(string frequencyLabel)
@@ -4348,20 +4898,33 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             throw new InvalidOperationException("Radio service unavailable.");
         }
 
-        try
+        if (_radioService.CurrentState.IsPttActive)
         {
-            await _radioService.RefreshStateAsync(ct).ConfigureAwait(false);
-        }
-        catch
-        {
-            // If the rig cannot be polled while PTT is being changed, fall back to the local state update
-            // from SetPttAsync rather than dropping transmit on a transient readback failure.
+            return;
         }
 
-        if (!_radioService.CurrentState.IsPttActive)
+        for (var attempt = 0; attempt < 3; attempt++)
         {
-            throw new InvalidOperationException("Radio did not report PTT active after keying request.");
+            await Task.Delay(100 + (attempt * 100), ct).ConfigureAwait(false);
+            try
+            {
+                await _radioService.RefreshStateAsync(ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                // If the rig cannot be polled while PTT is changing, keep the successful
+                // SetPttAsync command as authoritative instead of dropping transmit.
+                return;
+            }
+
+            if (_radioService.CurrentState.IsPttActive)
+            {
+                return;
+            }
         }
+
+        // Some Icom CI-V paths can lag or momentarily report RX after accepting the PTT command.
+        // SetPttAsync throws on command failure, so do not abort SSTV audio on an ambiguous readback.
     }
 
     private string? ValidateSstvLiveTransmitInterlock()
@@ -4412,6 +4975,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         return null;
+    }
+
+    private static Pcm16AudioClip WithLeadingSilence(Pcm16AudioClip clip, int milliseconds)
+    {
+        if (milliseconds <= 0 || clip.SampleRate <= 0 || clip.Channels <= 0)
+        {
+            return clip;
+        }
+
+        var bytesPerSampleFrame = clip.Channels * 2;
+        var silenceFrames = (int)Math.Ceiling(clip.SampleRate * (milliseconds / 1000.0));
+        var silenceBytes = Math.Max(0, silenceFrames * bytesPerSampleFrame);
+        if (silenceBytes == 0)
+        {
+            return clip;
+        }
+
+        var padded = new byte[silenceBytes + clip.PcmBytes.Length];
+        Buffer.BlockCopy(clip.PcmBytes, 0, padded, silenceBytes, clip.PcmBytes.Length);
+        return new Pcm16AudioClip(padded, clip.SampleRate, clip.Channels);
     }
 
     [RelayCommand]
@@ -4893,7 +5476,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var upper = mode.Trim().ToUpperInvariant();
         return upper switch
         {
-            "FT8" or "FT4" => frequencyHz < 10_000_000 ? RadioMode.LsbData : RadioMode.UsbData,
+            "FT8" or "FT4" or "WSPR" => frequencyHz < 10_000_000 ? RadioMode.LsbData : RadioMode.UsbData,
             "RTTY" => RadioMode.Rtty,
             "CW" => RadioMode.Cw,
             "AM" => RadioMode.Am,
@@ -4908,7 +5491,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private static bool IsWeakSignalSpotMode(string mode) =>
         string.Equals(mode, "FT8", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(mode, "FT4", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(mode, "FT4", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(mode, "WSPR", StringComparison.OrdinalIgnoreCase)
+        || mode.StartsWith("JS8", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsWsjtxQsoMode(string mode) =>
+        string.Equals(mode, "FT8", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(mode, "FT4", StringComparison.OrdinalIgnoreCase)
+        || mode.StartsWith("JS8", StringComparison.OrdinalIgnoreCase);
 
     private bool ShouldAutoStageWsjtxReplies =>
         string.Equals(SelectedWsjtxReplyAutomationMode.Key, "stage", StringComparison.OrdinalIgnoreCase)
@@ -4923,8 +5513,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         || string.Equals(mode, "LSB", StringComparison.OrdinalIgnoreCase)
         || string.Equals(mode, "FM", StringComparison.OrdinalIgnoreCase);
 
-    private static string NormalizeWeakSignalMode(string mode) =>
-        string.Equals(mode, "FT4", StringComparison.OrdinalIgnoreCase) ? "FT4" : "FT8";
+    private static string NormalizeWeakSignalMode(string mode)
+    {
+        if (string.Equals(mode, "FT4", StringComparison.OrdinalIgnoreCase))
+        {
+            return "FT4";
+        }
+
+        if (string.Equals(mode, "WSPR", StringComparison.OrdinalIgnoreCase))
+        {
+            return "WSPR";
+        }
+
+        if (mode.StartsWith("JS8", StringComparison.OrdinalIgnoreCase))
+        {
+            return "JS8 Normal";
+        }
+
+        return "FT8";
+    }
 
     private static string MapRadioModeToLogMode(RadioMode mode) => mode switch
     {
@@ -5056,6 +5663,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(SstvSelectedReceivedBitmap));
         OnPropertyChanged(nameof(SstvSelectedReceivedPath));
         OnPropertyChanged(nameof(SstvReplyPreviewBitmap));
+        OnPropertyChanged(nameof(SstvReplyCanvasWidth));
+        OnPropertyChanged(nameof(SstvReplyCanvasHeight));
         OnPropertyChanged(nameof(SstvReplyHasBaseImage));
         OnPropertyChanged(nameof(SstvReplyShowPlaceholder));
         OnPropertyChanged(nameof(SstvReceivedFolderPath));
@@ -5159,11 +5768,34 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(WefaxSelectedReceivedPath));
     }
 
+    partial void OnSelectedWefaxScheduleItemChanged(WefaxScheduleItem? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        WefaxSelectedMode = value.ModeLabel;
+        WefaxSelectedFrequency = value.FrequencyLabel;
+        WefaxScheduleStatus = $"Selected {value.Station}: {value.Product} at {value.TimeText} UTC.";
+    }
+
     partial void OnSelectedWsjtxMessageChanged(WsjtxMessageItem? value)
     {
         OnPropertyChanged(nameof(WsjtxSelectedMessageText));
         OnPropertyChanged(nameof(WsjtxRxTrackStatus));
+        OnPropertyChanged(nameof(Js8SelectedDecodeSummary));
         RebuildWsjtxSuggestedMessages();
+        if (value is not null && value.ModeText.StartsWith("JS8", StringComparison.OrdinalIgnoreCase))
+        {
+            var callsign = TryExtractCallsign(value.MessageText);
+            if (!string.IsNullOrWhiteSpace(callsign))
+            {
+                Js8TargetCallsign = callsign;
+            }
+
+            RebuildJs8SuggestedMessages();
+        }
     }
 
     partial void OnWsjtxRxAudioFrequencyHzChanged(int value)
@@ -5220,7 +5852,55 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnWsjtxQueuedTransmitMessageChanged(WsjtxSuggestedMessageItem? value)
     {
         OnPropertyChanged(nameof(WsjtxQueuedTransmitPreview));
+        OnPropertyChanged(nameof(WsjtxEffectiveTransmitText));
         OnPropertyChanged(nameof(WsjtxQsoRailSummary));
+    }
+
+    partial void OnWsjtxManualTransmitTextChanged(string value)
+    {
+        if (!_isSettingWsjtxManualTransmitText)
+        {
+            _wsjtxManualTransmitOverride = !string.IsNullOrWhiteSpace(value);
+            WsjtxPreparedTransmit = null;
+            _wsjtxPreparedTransmitClip = null;
+            WsjtxPreparedTransmitStatus = string.IsNullOrWhiteSpace(value)
+                ? "No TX signal prepared."
+                : "Manual TX message changed; prepare TX before sending.";
+            WsjtxPreparedTransmitPath = "No prepared TX artifact.";
+            WsjtxTransmitArmedLocal = false;
+            WsjtxAwaitingReply = false;
+            WsjtxTransmitArmStatus = string.IsNullOrWhiteSpace(value)
+                ? "Nothing armed."
+                : "Manual message not prepared yet.";
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                WsjtxQueuedTransmitMessage = new WsjtxSuggestedMessageItem("Manual", NormalizeWsjtxTransmitText(value)!, "Manual TX message");
+            }
+        }
+
+        OnPropertyChanged(nameof(WsjtxQueuedTransmitPreview));
+        OnPropertyChanged(nameof(WsjtxEffectiveTransmitText));
+        OnPropertyChanged(nameof(WsjtxQsoRailSummary));
+    }
+
+    partial void OnJs8TargetCallsignChanged(string value)
+    {
+        var normalized = value.Trim().ToUpperInvariant();
+        if (!string.Equals(value, normalized, StringComparison.Ordinal))
+        {
+            Js8TargetCallsign = normalized;
+            return;
+        }
+
+        RebuildJs8SuggestedMessages();
+        OnPropertyChanged(nameof(Js8TargetSummary));
+    }
+
+    partial void OnJs8ComposeTextChanged(string value)
+    {
+        Js8ComposeStatus = string.IsNullOrWhiteSpace(value)
+            ? "Receive is wired. Compose is ready."
+            : "JS8 text staged locally. Prepare TX audio before arming.";
     }
 
     partial void OnWsjtxOperatorCallsignChanged(string value)
@@ -5326,7 +6006,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return "Live TX blocked: operator callsign is not set.";
         }
 
-        if (WsjtxQueuedTransmitMessage is null)
+        if (string.IsNullOrWhiteSpace(WsjtxEffectiveTransmitText))
         {
             return "Live TX blocked: no staged TX message.";
         }
@@ -5337,6 +6017,37 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         return null;
+    }
+
+    private void SetWsjtxManualTransmitText(string text, bool isManualOverride)
+    {
+        _isSettingWsjtxManualTransmitText = true;
+        try
+        {
+            WsjtxManualTransmitText = text;
+        }
+        finally
+        {
+            _isSettingWsjtxManualTransmitText = false;
+        }
+
+        _wsjtxManualTransmitOverride = isManualOverride && !string.IsNullOrWhiteSpace(text);
+        OnPropertyChanged(nameof(WsjtxQueuedTransmitPreview));
+        OnPropertyChanged(nameof(WsjtxEffectiveTransmitText));
+        OnPropertyChanged(nameof(WsjtxQsoRailSummary));
+    }
+
+    private static string? NormalizeWsjtxTransmitText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var normalized = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+            .Trim()
+            .ToUpperInvariant();
+        return normalized.Length == 0 ? null : normalized;
     }
 
     private async Task ExecuteArmedWsjtxTransmitAsync()
@@ -5372,18 +6083,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
 
             var route = BuildCurrentAudioRoute();
-            var liveClip = preparedClip!;
+            var liveClip = WithLeadingSilence(preparedClip!, 250);
             var audioService = _audioService!;
             var radioService = _radioService!;
             var clipDurationMs = Math.Max(250, (int)Math.Ceiling(
                 liveClip.PcmBytes.Length / (double)(liveClip.SampleRate * liveClip.Channels * 2) * 1000.0));
 
             attemptedLiveTransmit = true;
-            await radioService.SetPttAsync(true, CancellationToken.None).ConfigureAwait(false);
-            pttRaised = true;
-            await Task.Delay(60, CancellationToken.None).ConfigureAwait(false);
             await audioService.StartTransmitPcmAsync(route, liveClip, CancellationToken.None).ConfigureAwait(false);
             txAudioStarted = true;
+            await radioService.SetPttAsync(true, CancellationToken.None).ConfigureAwait(false);
+            pttRaised = true;
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 VoiceTxStatus = "WSJT TX audio live";
@@ -5497,9 +6207,33 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WsjtxAutoSequenceEnabled = mode.SupportsAutoSequence && WsjtxAutoSequenceEnabled;
         WsjtxCycleDisplay = $"{mode.Label}  |  {mode.CycleLengthSeconds:0.#}s cycle  |  Next --.-s";
         WsjtxSessionNotes = DescribeWsjtxMode(value);
+        OnPropertyChanged(nameof(WsjtxSelectedModeSupportsQso));
         ClearWsjtxMessages();
         WsjtxRxStatus = $"Mode selected: {value}";
         RebuildWsjtxSuggestedMessages();
+    }
+
+    partial void OnJs8SelectedModeChanged(string value)
+    {
+        Js8FrequencyOptions = WsjtxModeCatalog.GetFrequencyLabels(value);
+        if (!Js8FrequencyOptions.Contains(Js8SelectedFrequency, StringComparer.OrdinalIgnoreCase))
+        {
+            Js8SelectedFrequency = WsjtxModeCatalog.GetDefaultFrequencyLabel(value);
+        }
+
+        if (WsjtxSelectedMode.StartsWith("JS8", StringComparison.OrdinalIgnoreCase))
+        {
+            WsjtxSelectedMode = value;
+            WsjtxSelectedFrequency = Js8SelectedFrequency;
+        }
+    }
+
+    partial void OnJs8SelectedFrequencyChanged(string value)
+    {
+        if (WsjtxSelectedMode.StartsWith("JS8", StringComparison.OrdinalIgnoreCase))
+        {
+            WsjtxSelectedFrequency = value;
+        }
     }
 
     partial void OnNoiseReductionLevelChanged(int value)
@@ -5529,6 +6263,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnSelectedSstvReplyBaseImageChanged(SstvImageItem? value)
     {
         OnPropertyChanged(nameof(SstvReplyPreviewBitmap));
+        OnPropertyChanged(nameof(SstvReplyCanvasWidth));
+        OnPropertyChanged(nameof(SstvReplyCanvasHeight));
         OnPropertyChanged(nameof(SstvReplyHasBaseImage));
         OnPropertyChanged(nameof(SstvReplyShowPlaceholder));
         SstvTransmitStatus = value is null
@@ -6442,6 +7178,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WsjtxOperatorCallsign = normalized;
         LongwaveLogOperatorCallsign = normalized;
         RebuildWsjtxSuggestedMessages();
+        RebuildJs8SuggestedMessages();
         UpdateHeaderCallsign();
     }
 
@@ -6456,6 +7193,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         WsjtxOperatorGridSquare = normalized;
         RebuildWsjtxSuggestedMessages();
+        RebuildJs8SuggestedMessages();
     }
 
     partial void OnSelectedLongwavePotaSpotChanged(LongwaveSpotSummaryItem? value)
@@ -7017,24 +7755,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (!string.IsNullOrWhiteSpace(frequencyLabel))
         {
-            if (frequencyLabel.Contains("FT4", StringComparison.OrdinalIgnoreCase))
+            foreach (var modeLabel in WsjtxModeCatalog.GetModeLabels())
             {
-                return "FT4";
-            }
-
-            if (frequencyLabel.Contains("FT8", StringComparison.OrdinalIgnoreCase))
-            {
-                return "FT8";
-            }
-
-            if (frequencyLabel.Contains("Q65", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Q65";
-            }
-
-            if (frequencyLabel.Contains("WSPR", StringComparison.OrdinalIgnoreCase))
-            {
-                return "WSPR";
+                if (frequencyLabel.Contains(modeLabel, StringComparison.OrdinalIgnoreCase))
+                {
+                    return modeLabel;
+                }
             }
         }
 
@@ -7044,6 +7770,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private static string DescribeWsjtxMode(string modeLabel)
     {
         var mode = WsjtxModeCatalog.GetMode(modeLabel);
+        if (string.Equals(mode.Label, "WSPR", StringComparison.OrdinalIgnoreCase))
+        {
+            return "WSPR monitor ready. Uses the selected two-minute WSPR band window; TX/QSO rail is hidden for now.";
+        }
+
+        if (mode.Label.StartsWith("JS8 ", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{mode.Label} receive scaffold ready. Uses JS8Call-compatible cycles and expects a JS8Call jt9.exe via SHACKSTACK_JS8_JT9_PATH or a bundled js8call-tools runtime.";
+        }
+
         var sequenceText = mode.SupportsAutoSequence ? "Auto-sequence capable." : "Manual/semi-manual sequencing expected.";
         var clockText = mode.RequiresAccurateClock ? "Tight UTC discipline matters." : "Clock still matters, but this mode is less timing-sensitive.";
         return $"{mode.Label} ready. {sequenceText} {clockText}";
@@ -7052,6 +7788,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void RebuildWsjtxSuggestedMessages()
     {
         var items = new List<WsjtxSuggestedMessageItem>();
+        if (!IsWsjtxQsoMode(WsjtxSelectedMode))
+        {
+            WsjtxSuggestedMessages = new ObservableCollection<WsjtxSuggestedMessageItem>(items);
+            SelectedWsjtxSuggestedMessage = null;
+            return;
+        }
+
         var myCall = FormatCallsign(WsjtxOperatorCallsign);
         var myGrid = FormatWeakSignalGrid(WsjtxOperatorGridSquare);
         var selected = FindActiveWsjtxConversationAnchor(myCall) ?? SelectedWsjtxMessage;
@@ -7123,11 +7866,53 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ?? preferredByStage
             ?? WsjtxSuggestedMessages.FirstOrDefault();
 
-        if (preferredQueued is not null)
+        if (preferredQueued is not null && !_wsjtxManualTransmitOverride)
         {
             WsjtxQueuedTransmitMessage = preferredQueued;
+            SetWsjtxManualTransmitText(preferredQueued.MessageText, isManualOverride: false);
         }
         OnPropertyChanged(nameof(WsjtxSuggestedMessagePreview));
+    }
+
+    private void RebuildJs8SuggestedMessages()
+    {
+        var items = new List<WsjtxSuggestedMessageItem>();
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        var myGrid = FormatWeakSignalGrid(WsjtxOperatorGridSquare);
+        var target = string.IsNullOrWhiteSpace(Js8TargetCallsign)
+            ? TryExtractCallsign(SelectedWsjtxMessage?.MessageText) ?? "<CALL>"
+            : Js8TargetCallsign.Trim().ToUpperInvariant();
+
+        var cqText = string.IsNullOrWhiteSpace(myCall)
+            ? "CQ CQ CQ DE <MYCALL>"
+            : string.IsNullOrWhiteSpace(myGrid)
+                ? $"CQ CQ CQ DE {myCall}"
+                : $"CQ CQ CQ DE {myCall} {myGrid}";
+        var heartbeatText = string.IsNullOrWhiteSpace(myCall)
+            ? "<MYCALL>: HB"
+            : string.IsNullOrWhiteSpace(myGrid)
+                ? $"{myCall}: HB"
+                : $"{myCall}: HB {myGrid}";
+        var directedReply = string.IsNullOrWhiteSpace(myCall)
+            ? $"{target}: <MYCALL> COPY"
+            : $"{target}: {myCall} COPY";
+        var reportText = string.IsNullOrWhiteSpace(myCall)
+            ? $"{target}: <MYCALL> SNR?"
+            : $"{target}: {myCall} SNR?";
+        var ackText = $"{target}: ACK";
+        var seventyThreeText = $"{target}: 73";
+
+        items.Add(new WsjtxSuggestedMessageItem("CQ", cqText, "General JS8 CQ text"));
+        items.Add(new WsjtxSuggestedMessageItem("Heartbeat", heartbeatText, "JS8 heartbeat-style presence text"));
+        items.Add(new WsjtxSuggestedMessageItem("Reply", directedReply, "Directed reply to the selected station"));
+        items.Add(new WsjtxSuggestedMessageItem("SNR?", reportText, "Ask the selected station for a report"));
+        items.Add(new WsjtxSuggestedMessageItem("ACK", ackText, "Acknowledge the selected station"));
+        items.Add(new WsjtxSuggestedMessageItem("73", seventyThreeText, "Close the JS8 exchange"));
+
+        Js8SuggestedMessages = new ObservableCollection<WsjtxSuggestedMessageItem>(items);
+        SelectedJs8SuggestedMessage = Js8SuggestedMessages.FirstOrDefault(item =>
+                string.Equals(item.MessageText, SelectedJs8SuggestedMessage?.MessageText, StringComparison.Ordinal))
+            ?? Js8SuggestedMessages.FirstOrDefault();
     }
 
     private static string? TryExtractCallsign(string? messageText)
@@ -7163,6 +7948,190 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         return null;
+    }
+
+    private void UpdateCwDetectedCallsign()
+    {
+        var detected = TryExtractCwCallsign(CwDecodedText, FormatCallsign(SettingsCallsign));
+        if (string.IsNullOrWhiteSpace(detected))
+        {
+            if (!string.IsNullOrWhiteSpace(CwDetectedCallsign))
+            {
+                CwDetectedCallsign = string.Empty;
+            }
+
+            CwOperatorHint = "Listening for CQ/DE exchange before suggesting a call.";
+            return;
+        }
+
+        if (!string.Equals(CwDetectedCallsign, detected, StringComparison.OrdinalIgnoreCase))
+        {
+            CwDetectedCallsign = detected;
+            CwOperatorHint = $"Detected {detected}. Load/send macros can use %tocall, or prefill the CW log.";
+        }
+    }
+
+    private static string? TryExtractCwCallsign(string? decodedText, string myCall)
+    {
+        if (string.IsNullOrWhiteSpace(decodedText))
+        {
+            return null;
+        }
+
+        var tokens = TokenizeCwAssistText(decodedText);
+        if (tokens.Length == 0)
+        {
+            return null;
+        }
+
+        var myCallNormalized = FormatCallsign(myCall);
+        for (var i = tokens.Length - 1; i >= 0; i--)
+        {
+            var token = tokens[i];
+            if (token == "CQ")
+            {
+                var candidate = FindNextCwCallsign(tokens, i + 1, myCallNormalized, stopAtDe: true);
+                if (!string.IsNullOrWhiteSpace(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            if (token == "DE")
+            {
+                var candidate = FindNextCwCallsign(tokens, i + 1, myCallNormalized, stopAtDe: false);
+                if (!string.IsNullOrWhiteSpace(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            if (i + 2 < tokens.Length && tokens[i + 1] == "DE")
+            {
+                var left = tokens[i];
+                var right = tokens[i + 2];
+                if (IsLikelyCwCallsign(left) && IsLikelyCwCallsign(right))
+                {
+                    if (string.Equals(right, myCallNormalized, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(left, myCallNormalized, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return left;
+                    }
+
+                    if (!string.Equals(right, myCallNormalized, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return right;
+                    }
+                }
+            }
+
+            if (i + 1 < tokens.Length && IsCwReportToken(tokens[i + 1]) && IsLikelyCwCallsign(token))
+            {
+                if (!string.Equals(token, myCallNormalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    return token;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string[] TokenizeCwAssistText(string decodedText)
+    {
+        var compact = decodedText
+            .ToUpperInvariant()
+            .Replace('\r', ' ')
+            .Replace('\n', ' ');
+
+        return compact
+            .Split([' ', '\t', ',', ';', ':'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(static token => token.Trim('.', '?', '!', '"', '\''))
+            .Where(static token => !string.IsNullOrWhiteSpace(token))
+            .ToArray();
+    }
+
+    private static string? FindNextCwCallsign(string[] tokens, int startIndex, string myCall, bool stopAtDe)
+    {
+        for (var i = startIndex; i < tokens.Length && i < startIndex + 4; i++)
+        {
+            if (stopAtDe && tokens[i] == "DE")
+            {
+                return null;
+            }
+
+            if (!IsLikelyCwCallsign(tokens[i]))
+            {
+                continue;
+            }
+
+            if (string.Equals(tokens[i], myCall, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return tokens[i];
+        }
+
+        return null;
+    }
+
+    private static bool IsLikelyCwCallsign(string token)
+    {
+        if (token.Length < 3 || token.Length > 12)
+        {
+            return false;
+        }
+
+        if (token is "CQ" or "DE" or "TEST" or "POTA" or "K" or "KN" or "SK" or "TU" or "UR" or "RST" or "RR" or "R")
+        {
+            return false;
+        }
+
+        var hasLetter = token.Any(char.IsLetter);
+        var hasDigit = token.Any(char.IsDigit);
+        return hasLetter && hasDigit && token.All(ch => char.IsLetterOrDigit(ch) || ch == '/');
+    }
+
+    private static bool IsCwReportToken(string token)
+        => token is "599" or "5NN" or "579" or "589" or "559" or "RST";
+
+    private string ExpandCwMacro(string? label)
+    {
+        var myCall = FormatCallsign(SettingsCallsign);
+        if (string.IsNullOrWhiteSpace(myCall))
+        {
+            myCall = "<MYCALL>";
+        }
+
+        var toCall = FormatCallsign(CwDetectedCallsign);
+        if (string.IsNullOrWhiteSpace(toCall))
+        {
+            toCall = "<CALL>";
+        }
+
+        var park = string.IsNullOrWhiteSpace(LongwaveLogParkReference)
+            ? SelectedVoiceLongwavePotaSpot?.ParkReference ?? SelectedLongwavePotaSpot?.ParkReference ?? string.Empty
+            : LongwaveLogParkReference.Trim().ToUpperInvariant();
+
+        var text = (label ?? string.Empty).Trim().ToUpperInvariant() switch
+        {
+            "CQ" => $"CQ CQ DE {myCall} {myCall} K",
+            "DE" => $"{toCall} DE {myCall}",
+            "RST" => $"{toCall} DE {myCall} 599 599",
+            "TU" => $"{toCall} DE {myCall} TU",
+            "73" => $"{toCall} DE {myCall} 73",
+            "POTA" => string.IsNullOrWhiteSpace(park)
+                ? $"CQ POTA DE {myCall} {myCall} K"
+                : $"CQ POTA DE {myCall} {myCall} {park} K",
+            _ => string.Empty,
+        };
+
+        return text
+            .Replace("%MYCALL", myCall, StringComparison.OrdinalIgnoreCase)
+            .Replace("%TOCALL", toCall, StringComparison.OrdinalIgnoreCase)
+            .Replace("%RST", "599", StringComparison.OrdinalIgnoreCase)
+            .Trim();
     }
 
     private static WsjtxQsoState ClassifyWsjtxQsoState(string? messageText, string myCall)
@@ -7534,6 +8503,130 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ];
     }
 
+    private static IReadOnlyList<WefaxScheduleItem> BuildWefaxScheduleItems(DateTime utcNow)
+    {
+        var items = new List<WefaxScheduleItem>();
+        foreach (var definition in BuildWefaxScheduleDefinitions())
+        {
+            var start = new DateTime(
+                utcNow.Year,
+                utcNow.Month,
+                utcNow.Day,
+                definition.Hour,
+                definition.Minute,
+                0,
+                DateTimeKind.Utc);
+            var end = start.AddMinutes(definition.DurationMinutes);
+            if (end <= utcNow)
+            {
+                start = start.AddDays(1);
+                end = end.AddDays(1);
+            }
+
+            var isOnAir = start <= utcNow && utcNow < end;
+            var status = isOnAir ? "ON AIR" : "NEXT";
+            var until = isOnAir
+                ? $"ends in {FormatWefaxScheduleDelta(end - utcNow)}"
+                : $"in {FormatWefaxScheduleDelta(start - utcNow)}";
+            items.Add(new WefaxScheduleItem(
+                status,
+                start.ToString("HH:mm"),
+                until,
+                definition.Station,
+                definition.Product,
+                definition.FrequencyLabel,
+                "IOC 576 / 120 LPM",
+                definition.Source,
+                start,
+                end,
+                BuildWefaxScheduleStatusBrush(isOnAir)));
+        }
+
+        return items
+            .OrderBy(item => item.Status == "ON AIR" ? 0 : 1)
+            .ThenBy(item => item.StartUtc)
+            .Take(14)
+            .ToList();
+    }
+
+    private static IReadOnlyList<WefaxScheduleDefinition> BuildWefaxScheduleDefinitions()
+    {
+        var schedule = new List<WefaxScheduleDefinition>();
+
+        AddWefax(schedule, "Boston NMF", "NOAA Atlantic 9110.0 kHz USB-D", "NOAA Atlantic hfmarsh.txt", 0233, "00Z Preliminary Surface Analysis");
+        AddWefax(schedule, "Boston NMF", "NOAA Atlantic 9110.0 kHz USB-D", "NOAA Atlantic hfmarsh.txt", 0325, "00Z Surface Analysis Part 1 NE Atlantic", 13);
+        AddWefax(schedule, "Boston NMF", "NOAA Atlantic 9110.0 kHz USB-D", "NOAA Atlantic hfmarsh.txt", 0338, "00Z Surface Analysis Part 2 NW Atlantic", 13);
+        AddWefax(schedule, "Boston NMF", "NOAA Atlantic 9110.0 kHz USB-D", "NOAA Atlantic hfmarsh.txt", 0805, "24Hr Surface Forecast");
+        AddWefax(schedule, "Boston NMF", "NOAA Atlantic 9110.0 kHz USB-D", "NOAA Atlantic hfmarsh.txt", 0845, "48Hr Surface Forecast");
+        AddWefax(schedule, "Boston NMF", "NOAA Atlantic 12750.0 kHz USB-D", "NOAA Atlantic hfmarsh.txt", 1453, "12Z Preliminary Surface Analysis");
+        AddWefax(schedule, "Boston NMF", "NOAA Atlantic 12750.0 kHz USB-D", "NOAA Atlantic hfmarsh.txt", 1810, "24Hr Surface Forecast");
+        AddWefax(schedule, "Boston NMF", "NOAA Atlantic 12750.0 kHz USB-D", "NOAA Atlantic hfmarsh.txt", 1955, "48Hr Surface Forecast");
+        AddWefax(schedule, "Boston NMF", "NOAA Atlantic 12750.0 kHz USB-D", "NOAA Atlantic hfmarsh.txt", 2125, "18Z Surface Analysis Part 1 NE Atlantic", 13);
+        AddWefax(schedule, "Boston NMF", "NOAA Atlantic 12750.0 kHz USB-D", "NOAA Atlantic hfmarsh.txt", 2138, "18Z Surface Analysis Part 2 NW Atlantic", 13);
+
+        AddWefax(schedule, "Pt Reyes NMC", "NOAA Pacific 8682.0 kHz USB-D", "NOAA Pacific hfreyes.txt", 0143, "NE Pacific GOES IR Satellite Image");
+        AddWefax(schedule, "Pt Reyes NMC", "NOAA Pacific 8682.0 kHz USB-D", "NOAA Pacific hfreyes.txt", 0305, "Prelim Surface Analysis Part 1 NE Pacific", 13);
+        AddWefax(schedule, "Pt Reyes NMC", "NOAA Pacific 8682.0 kHz USB-D", "NOAA Pacific hfreyes.txt", 0318, "Prelim Surface Analysis Part 2 NW Pacific", 13);
+        AddWefax(schedule, "Pt Reyes NMC", "NOAA Pacific 8682.0 kHz USB-D", "NOAA Pacific hfreyes.txt", 0828, "48Hr Surface Forecast");
+        AddWefax(schedule, "Pt Reyes NMC", "NOAA Pacific 12786.0 kHz USB-D", "NOAA Pacific hfreyes.txt", 1403, "NE Pacific GOES IR Satellite Image");
+        AddWefax(schedule, "Pt Reyes NMC", "NOAA Pacific 12786.0 kHz USB-D", "NOAA Pacific hfreyes.txt", 1822, "24Hr Surface Forecast");
+        AddWefax(schedule, "Pt Reyes NMC", "NOAA Pacific 12786.0 kHz USB-D", "NOAA Pacific hfreyes.txt", 2013, "48Hr Surface Forecast");
+        AddWefax(schedule, "Pt Reyes NMC", "NOAA Pacific 12786.0 kHz USB-D", "NOAA Pacific hfreyes.txt", 2113, "Pacific GOES IR Satellite Image");
+
+        AddWefax(schedule, "New Orleans NMG", "NOAA Gulf 8503.9 kHz USB-D", "NOAA Gulf hfgulf.txt", 0005, "U.S./Tropical Surface Analysis W Half", 15);
+        AddWefax(schedule, "New Orleans NMG", "NOAA Gulf 8503.9 kHz USB-D", "NOAA Gulf hfgulf.txt", 0020, "Tropical Surface Analysis E Half", 15);
+        AddWefax(schedule, "New Orleans NMG", "NOAA Gulf 8503.9 kHz USB-D", "NOAA Gulf hfgulf.txt", 0655, "24Hr Surface Forecast");
+        AddWefax(schedule, "New Orleans NMG", "NOAA Gulf 8503.9 kHz USB-D", "NOAA Gulf hfgulf.txt", 0705, "48Hr Surface Forecast");
+        AddWefax(schedule, "New Orleans NMG", "NOAA Gulf 12789.9 kHz USB-D", "NOAA Gulf hfgulf.txt", 1805, "U.S./Tropical Surface Analysis W Half", 15);
+        AddWefax(schedule, "New Orleans NMG", "NOAA Gulf 12789.9 kHz USB-D", "NOAA Gulf hfgulf.txt", 1820, "Tropical Surface Analysis E Half", 15);
+        AddWefax(schedule, "New Orleans NMG", "NOAA Gulf 12789.9 kHz USB-D", "NOAA Gulf hfgulf.txt", 1855, "24Hr Surface Forecast");
+        AddWefax(schedule, "New Orleans NMG", "NOAA Gulf 12789.9 kHz USB-D", "NOAA Gulf hfgulf.txt", 1905, "48Hr Surface Forecast");
+
+        AddWefax(schedule, "Honolulu KVM70", "NOAA Hawaii 11090.0 kHz USB-D", "NOAA Hawaii hfhi.txt", 0535, "Cyclone Danger Area");
+        AddWefax(schedule, "Honolulu KVM70", "NOAA Hawaii 11090.0 kHz USB-D", "NOAA Hawaii hfhi.txt", 0615, "Surface Analysis");
+        AddWefax(schedule, "Honolulu KVM70", "NOAA Hawaii 11090.0 kHz USB-D", "NOAA Hawaii hfhi.txt", 0701, "24Hr Surface Forecast");
+        AddWefax(schedule, "Honolulu KVM70", "NOAA Hawaii 11090.0 kHz USB-D", "NOAA Hawaii hfhi.txt", 0917, "Surface Analysis Part 1 NE Pacific", 13);
+        AddWefax(schedule, "Honolulu KVM70", "NOAA Hawaii 11090.0 kHz USB-D", "NOAA Hawaii hfhi.txt", 1530, "Surface Analysis Part 1 NE Pacific", 13);
+        AddWefax(schedule, "Honolulu KVM70", "NOAA Hawaii 9982.5 kHz USB-D", "NOAA Hawaii hfhi.txt", 1719, "Test Pattern");
+        AddWefax(schedule, "Honolulu KVM70", "NOAA Hawaii 9982.5 kHz USB-D", "NOAA Hawaii hfhi.txt", 1815, "Surface Analysis");
+        AddWefax(schedule, "Honolulu KVM70", "NOAA Hawaii 9982.5 kHz USB-D", "NOAA Hawaii hfhi.txt", 1914, "48Hr Surface Forecast");
+
+        return schedule;
+    }
+
+    private static void AddWefax(
+        List<WefaxScheduleDefinition> schedule,
+        string station,
+        string frequencyLabel,
+        string source,
+        int hhmm,
+        string product,
+        int durationMinutes = 10)
+    {
+        schedule.Add(new WefaxScheduleDefinition(
+            station,
+            frequencyLabel,
+            source,
+            hhmm / 100,
+            hhmm % 100,
+            durationMinutes,
+            product));
+    }
+
+    private static string FormatWefaxScheduleDelta(TimeSpan delta)
+    {
+        var totalMinutes = Math.Max(0, (int)Math.Round(delta.TotalMinutes, MidpointRounding.AwayFromZero));
+        if (totalMinutes < 60)
+        {
+            return $"{totalMinutes}m";
+        }
+
+        return $"{totalMinutes / 60}h {totalMinutes % 60:00}m";
+    }
+
+    private static IBrush BuildWefaxScheduleStatusBrush(bool isOnAir) =>
+        new SolidColorBrush(Color.Parse(isOnAir ? "#1E6F5C" : "#24304A"));
+
     private static string GetBandLabelForFrequency(long frequencyHz) => frequencyHz switch
     {
         >= 1_800_000 and <= 2_000_000 => "160m",
@@ -7649,10 +8742,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             Lerp(off.B, active.B)));
     }
 
+    private sealed record WefaxScheduleDefinition(
+        string Station,
+        string FrequencyLabel,
+        string Source,
+        int Hour,
+        int Minute,
+        int DurationMinutes,
+        string Product);
+
     public void Dispose()
     {
         _smeterUiTimer.Stop();
         _longwaveRefreshTimer.Stop();
+        _wefaxScheduleTimer.Stop();
         _cwSendCts?.Cancel();
         _radioSubscription?.Dispose();
         _audioLevelSubscription?.Dispose();

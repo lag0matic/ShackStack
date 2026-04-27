@@ -65,7 +65,7 @@ public partial class SstvDeskWindow : Window
             viewModel.SelectedSstvReplyOverlayItem = item;
         }
 
-        _dragStartPoint = e.GetPosition(this);
+        _dragStartPoint = e.GetPosition(SstvReplyCompositionCanvas);
         _dragStartX = item.X;
         _dragStartY = item.Y;
         e.Pointer.Capture(control);
@@ -79,11 +79,11 @@ public partial class SstvDeskWindow : Window
             return;
         }
 
-        var point = e.GetPosition(this);
+        var point = e.GetPosition(SstvReplyCompositionCanvas);
         var dx = point.X - _dragStartPoint.X;
         var dy = point.Y - _dragStartPoint.Y;
-        _dragOverlayItem.X = Math.Max(0, _dragStartX + dx);
-        _dragOverlayItem.Y = Math.Max(0, _dragStartY + dy);
+        _dragOverlayItem.X = ClampCanvasX(_dragStartX + dx);
+        _dragOverlayItem.Y = ClampCanvasY(_dragStartY + dy);
         e.Handled = true;
     }
 
@@ -126,7 +126,7 @@ public partial class SstvDeskWindow : Window
             viewModel.SelectedSstvReplyImageOverlayItem = item;
         }
 
-        _dragStartPoint = e.GetPosition(this);
+        _dragStartPoint = e.GetPosition(SstvReplyCompositionCanvas);
         _dragStartX = item.X;
         _dragStartY = item.Y;
         e.Pointer.Capture(control);
@@ -140,11 +140,11 @@ public partial class SstvDeskWindow : Window
             return;
         }
 
-        var point = e.GetPosition(this);
+        var point = e.GetPosition(SstvReplyCompositionCanvas);
         var dx = point.X - _dragStartPoint.X;
         var dy = point.Y - _dragStartPoint.Y;
-        _dragImageOverlayItem.X = Math.Max(0, _dragStartX + dx);
-        _dragImageOverlayItem.Y = Math.Max(0, _dragStartY + dy);
+        _dragImageOverlayItem.X = ClampCanvasX(_dragStartX + dx);
+        _dragImageOverlayItem.Y = ClampCanvasY(_dragStartY + dy);
         e.Handled = true;
     }
 
@@ -163,4 +163,10 @@ public partial class SstvDeskWindow : Window
     {
         ResetOverlayDrag();
     }
+
+    private double ClampCanvasX(double value)
+        => Math.Clamp(value, 0, Math.Max(0, SstvReplyCompositionCanvas.Bounds.Width - 8));
+
+    private double ClampCanvasY(double value)
+        => Math.Clamp(value, 0, Math.Max(0, SstvReplyCompositionCanvas.Bounds.Height - 8));
 }

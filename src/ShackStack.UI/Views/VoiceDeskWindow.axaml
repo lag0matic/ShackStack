@@ -98,7 +98,7 @@
           <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
             <StackPanel Spacing="8">
               <TextBlock Text="Transmit" FontSize="16" FontWeight="SemiBold" />
-              <TextBlock Text="Use the desk PTT here while hunting or logging without squeezing into the side panel." Foreground="#AAB1C7" TextWrapping="Wrap" />
+              <TextBlock Text="Key PTT while hunting or logging." Foreground="#AAB1C7" TextWrapping="Wrap" />
               <TextBlock Text="{Binding VoiceTxStatus}" Foreground="#99A3BF" TextWrapping="Wrap" />
               <Border Background="#18202E"
                       BorderBrush="#2A3550"

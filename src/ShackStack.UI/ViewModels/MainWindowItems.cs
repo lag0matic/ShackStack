@@ -10,6 +10,22 @@ public sealed record FrequencyMarker(string Label);
 public sealed record FilterPreset(string Label, int Slot, IBrush Brush);
 public sealed record BandConditionCellViewModel(string BandLabel, string DayCondition, IBrush DayBrush, string NightCondition, IBrush NightBrush);
 public sealed record WefaxImageItem(string Label, string Path, DateTime Timestamp, Bitmap Bitmap);
+public sealed record WefaxScheduleItem(
+    string Status,
+    string TimeText,
+    string UntilText,
+    string Station,
+    string Product,
+    string FrequencyLabel,
+    string ModeLabel,
+    string Source,
+    DateTime StartUtc,
+    DateTime EndUtc,
+    IBrush StatusBrush)
+{
+    public string SummaryText => $"{Station}  |  {Product}";
+    public string DetailText => $"{TimeText} UTC  |  {FrequencyLabel}";
+}
 
 public sealed record WsjtxMessageItem(
     DateTime TimestampUtc,

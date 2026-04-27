@@ -6,5 +6,21 @@ public sealed record WefaxDecoderConfiguration(
     int Lpm,
     string FrequencyLabel,
     int ManualSlant,
-    int ManualOffset
+    int ManualOffset,
+    int CenterHz,
+    int ShiftHz,
+    int MaxRows,
+    string FilterName,
+    bool AutoAlign,
+    int AutoAlignAfterRows,
+    int AutoAlignEveryRows,
+    int AutoAlignStopRows,
+    double CorrelationThreshold,
+    int CorrelationRows,
+    bool InvertImage,
+    bool BinaryImage,
+    int BinaryThreshold,
+    bool NoiseRemoval,
+    int NoiseThreshold,
+    int NoiseMargin
 );

@@ -10,8 +10,12 @@ public partial class MainWindow : Window
     private bool _spacePttActive;
     private SstvDeskWindow? _sstvDeskWindow;
     private VoiceDeskWindow? _voiceDeskWindow;
+    private CwDeskWindow? _cwDeskWindow;
+    private RttyDeskWindow? _rttyDeskWindow;
     private WefaxDeskWindow? _wefaxDeskWindow;
     private WsjtxDeskWindow? _wsjtxDeskWindow;
+    private Js8DeskWindow? _js8DeskWindow;
+    private LongwaveDeskWindow? _longwaveDeskWindow;
 
     public MainWindow()
     {
@@ -148,6 +152,38 @@ public partial class MainWindow : Window
         _voiceDeskWindow.Show(this);
     }
 
+    private void OnOpenCwDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_cwDeskWindow is { IsVisible: true })
+        {
+            _cwDeskWindow.Activate();
+            return;
+        }
+
+        _cwDeskWindow = new CwDeskWindow
+        {
+            DataContext = DataContext,
+        };
+        _cwDeskWindow.Closed += (_, _) => _cwDeskWindow = null;
+        _cwDeskWindow.Show(this);
+    }
+
+    private void OnOpenRttyDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_rttyDeskWindow is { IsVisible: true })
+        {
+            _rttyDeskWindow.Activate();
+            return;
+        }
+
+        _rttyDeskWindow = new RttyDeskWindow
+        {
+            DataContext = DataContext,
+        };
+        _rttyDeskWindow.Closed += (_, _) => _rttyDeskWindow = null;
+        _rttyDeskWindow.Show(this);
+    }
+
     private void OnOpenWefaxDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_wefaxDeskWindow is { IsVisible: true })
@@ -178,5 +214,42 @@ public partial class MainWindow : Window
         };
         _wsjtxDeskWindow.Closed += (_, _) => _wsjtxDeskWindow = null;
         _wsjtxDeskWindow.Show(this);
+    }
+
+    private void OnOpenJs8DeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+        {
+            vm.ActivateJs8Desk();
+        }
+
+        if (_js8DeskWindow is { IsVisible: true })
+        {
+            _js8DeskWindow.Activate();
+            return;
+        }
+
+        _js8DeskWindow = new Js8DeskWindow
+        {
+            DataContext = DataContext,
+        };
+        _js8DeskWindow.Closed += (_, _) => _js8DeskWindow = null;
+        _js8DeskWindow.Show(this);
+    }
+
+    private void OnOpenLongwaveDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_longwaveDeskWindow is { IsVisible: true })
+        {
+            _longwaveDeskWindow.Activate();
+            return;
+        }
+
+        _longwaveDeskWindow = new LongwaveDeskWindow
+        {
+            DataContext = DataContext,
+        };
+        _longwaveDeskWindow.Closed += (_, _) => _longwaveDeskWindow = null;
+        _longwaveDeskWindow.Show(this);
     }
 }

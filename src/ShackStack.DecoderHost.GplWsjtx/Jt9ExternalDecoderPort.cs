@@ -62,6 +62,7 @@ internal sealed class Jt9ExternalDecoderPort
 
     public Jt9DecodeCycleResult DecodeCycle(
         string modeLabel,
+        string frequencyLabel,
         float[] samples,
         string? stationCallsign,
         string? stationGridSquare,
@@ -86,7 +87,7 @@ internal sealed class Jt9ExternalDecoderPort
             return new Jt9DecodeCycleResult([], [], [], $"{modeLabel} cycle {cycleNumber}: decoder binary missing");
         }
 
-        var args = BuildArguments(modeLabel, wavPath, tempPath, stationCallsign, stationGridSquare);
+        var args = BuildArguments(modeLabel, frequencyLabel, wavPath, tempPath, stationCallsign, stationGridSquare);
         var stopwatch = Stopwatch.StartNew();
         var stdoutLines = new List<string>();
         var stderrLines = new List<string>();
@@ -158,16 +159,17 @@ internal sealed class Jt9ExternalDecoderPort
             ? _wsprdPath
             : _jt9Path;
 
-    private string BuildArguments(string modeLabel, string wavPath, string tempPath, string? stationCallsign, string? stationGridSquare)
+    private string BuildArguments(string modeLabel, string frequencyLabel, string wavPath, string tempPath, string? stationCallsign, string? stationGridSquare)
     {
         if (string.Equals(modeLabel, "WSPR", StringComparison.OrdinalIgnoreCase))
         {
+            var receiveFrequencyMhz = ExtractFrequencyMhz(frequencyLabel) ?? 14.0956;
             var wsprArgs = new List<string>
             {
                 "-a", Quote(tempPath),
                 "-d",
                 "-o", "4",
-                "-f", "14.0956",
+                "-f", receiveFrequencyMhz.ToString("0.####", CultureInfo.InvariantCulture),
                 Quote(wavPath),
             };
             return string.Join(" ", wsprArgs);
@@ -233,6 +235,24 @@ internal sealed class Jt9ExternalDecoderPort
 
         arguments.Add(Quote(wavPath));
         return string.Join(" ", arguments);
+    }
+
+    private static double? ExtractFrequencyMhz(string frequencyLabel)
+    {
+        if (string.IsNullOrWhiteSpace(frequencyLabel))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(frequencyLabel, @"(?<mhz>\d+(?:\.\d+)?)\s*MHz", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        return double.TryParse(match.Groups["mhz"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var mhz)
+            ? mhz
+            : null;
     }
 
     private static string Quote(string value) => $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";

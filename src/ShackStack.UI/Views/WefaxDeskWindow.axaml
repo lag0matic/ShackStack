@@ -3,10 +3,10 @@
         xmlns:vm="using:ShackStack.UI.ViewModels"
         x:Class="ShackStack.UI.Views.WefaxDeskWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1180"
-        Height="760"
-        MinWidth="920"
-        MinHeight="620"
+        Width="1420"
+        Height="860"
+        MinWidth="1120"
+        MinHeight="700"
         Title="WeFAX Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
         Background="#0F1117"
@@ -15,20 +15,53 @@
     <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,10">
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Spacing="4">
-          <TextBlock Text="WeFAX Desk" FontSize="19" FontWeight="SemiBold" />
-          <TextBlock Text="Received weather fax images live here. The desk is receive-only and keeps an archive of completed captures." Foreground="#AAB1C7" TextWrapping="Wrap" />
+          <TextBlock Text="WeFAX Desk" FontSize="20" FontWeight="SemiBold" />
+          <TextBlock Text="Receive NOAA radiofax, follow upcoming broadcasts, and correct chart alignment."
+                     Foreground="#AAB1C7"
+                     TextWrapping="Wrap" />
         </StackPanel>
         <Button Grid.Column="1" Content="Refresh Archive" Command="{Binding RefreshWefaxArchiveCommand}" VerticalAlignment="Center" />
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="300,*" ColumnSpacing="10">
+    <Grid Grid.Row="1" ColumnDefinitions="330,*,360" ColumnSpacing="10">
       <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Spacing="8">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Schedule And Archive" FontSize="16" FontWeight="SemiBold" />
+            <Border Background="#111827" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="8">
+              <StackPanel Spacing="7">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="Next Broadcasts" Foreground="#DDE7FF" FontWeight="SemiBold" />
+                  <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshWefaxScheduleCommand}" Padding="8,3" />
+                </Grid>
+                <TextBlock Text="Select a row to set the published frequency and expected IOC/LPM. Times are UTC."
+                           Foreground="#8F9BB4"
+                           TextWrapping="Wrap" />
+                <TextBlock Text="{Binding WefaxScheduleStatus}" Foreground="#8F9BB4" TextWrapping="Wrap" />
+                <ListBox ItemsSource="{Binding WefaxScheduleItems}"
+                         SelectedItem="{Binding SelectedWefaxScheduleItem}"
+                         MaxHeight="240">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:WefaxScheduleItem">
+                      <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="5" Padding="7" Margin="0,0,0,5">
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="{Binding SummaryText}" Foreground="#E5ECFF" FontWeight="SemiBold" TextWrapping="Wrap" />
+                          <TextBlock Text="{Binding DetailText}" Foreground="#AAB1C7" FontSize="12" TextWrapping="Wrap" />
+                          <TextBlock Text="{Binding UntilText}" Foreground="#7CFFCA" FontSize="11" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </StackPanel>
+            </Border>
+
             <TextBlock Text="Past Images" FontSize="16" FontWeight="SemiBold" />
             <TextBlock Text="{Binding WefaxReceivedFolderPath, StringFormat=Folder: {0}}" Foreground="#7F879B" TextWrapping="Wrap" />
-            <ListBox ItemsSource="{Binding WefaxReceivedImages}" SelectedItem="{Binding SelectedWefaxReceivedImage}" MinHeight="460">
+            <ListBox ItemsSource="{Binding WefaxReceivedImages}"
+                     SelectedItem="{Binding SelectedWefaxReceivedImage}"
+                     MinHeight="260">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:WefaxImageItem">
                   <StackPanel Spacing="2" Margin="0,2">
@@ -42,14 +75,193 @@
         </ScrollViewer>
       </Border>
 
-      <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
-        <Grid RowDefinitions="*,Auto,Auto">
-          <Border Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
-            <Image Source="{Binding WefaxSelectedReceivedBitmap}" Stretch="Uniform" />
-          </Border>
-          <TextBlock Grid.Row="1" Text="{Binding WefaxImageStatus}" Margin="0,10,0,0" Foreground="#AAB1C7" />
-          <TextBlock Grid.Row="2" Text="{Binding WefaxSelectedReceivedPath}" Margin="0,6,0,0" Foreground="#7F879B" TextWrapping="Wrap" />
-        </Grid>
+      <Grid Grid.Column="1" RowDefinitions="*,Auto,260" RowSpacing="10">
+        <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Grid RowDefinitions="Auto,*">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+              <StackPanel>
+                <TextBlock Text="Live Image" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding WefaxImageStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+              </StackPanel>
+              <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Start RX" Command="{Binding StartWefaxReceiveCommand}" Margin="0,0,8,0" />
+                <Button Content="Start Now" Command="{Binding StartWefaxNowCommand}" Margin="0,0,8,0" />
+                <Button Content="Stop" Command="{Binding StopWefaxReceiveCommand}" Margin="0,0,8,0" />
+                <Button Content="Reset" Command="{Binding ResetWefaxSessionCommand}" />
+              </WrapPanel>
+            </Grid>
+            <Border Grid.Row="1" Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+              <Grid>
+                <Image Source="{Binding WefaxPreviewBitmap}"
+                       Stretch="Uniform"
+                       IsVisible="{Binding WefaxHasPreview}" />
+                <TextBlock Text="No live WeFAX image yet. Use Start RX before the broadcast, or Start Now if the chart is already underway."
+                           Foreground="#6F778A"
+                           TextWrapping="Wrap"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding WefaxShowPlaceholder}" />
+              </Grid>
+            </Border>
+          </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
+            <Grid Grid.Row="0" ColumnDefinitions="80,*" ColumnSpacing="10">
+              <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
+              <TextBlock Grid.Column="1" Text="{Binding WefaxRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+            </Grid>
+            <Grid Grid.Row="1" ColumnDefinitions="80,*" ColumnSpacing="10">
+              <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
+              <TextBlock Grid.Column="1" Text="{Binding WefaxSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+            </Grid>
+          </Grid>
+        </Border>
+
+        <Border Grid.Row="2" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Grid RowDefinitions="Auto,*">
+            <TextBlock Grid.Row="0" Text="Selected Archive Image" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <Grid Grid.Row="1" ColumnDefinitions="*,220" ColumnSpacing="10">
+              <Border Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="8">
+                <Image Source="{Binding WefaxSelectedReceivedBitmap}" Stretch="Uniform" />
+              </Border>
+              <TextBlock Grid.Column="1"
+                         Text="{Binding WefaxSelectedReceivedPath}"
+                         Foreground="#7F879B"
+                         TextWrapping="Wrap" />
+            </Grid>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <Border Grid.Column="2" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="12">
+            <TextBlock Text="Receive Controls" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="Recommended setup: Medium filter, center 1900 Hz, shift 800 Hz. Use Offset for wrapping and Slant for diagonal drift."
+                       Foreground="#AAB1C7"
+                       TextWrapping="Wrap" />
+
+            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Station Setup" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <Grid ColumnDefinitions="86,*" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding WefaxModeOptions}" SelectedItem="{Binding WefaxSelectedMode}" />
+                </Grid>
+                <Grid ColumnDefinitions="86,*" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Frequency" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding WefaxFrequencyOptions}" SelectedItem="{Binding WefaxSelectedFrequency}" />
+                </Grid>
+                <TextBlock Text="Mode chooses image width and lines-per-minute. Frequency tunes the radio to the published carrier offset for USB-D reception."
+                           Foreground="#8E97AC"
+                           TextWrapping="Wrap"
+                           FontSize="11" />
+              </StackPanel>
+            </Border>
+
+            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Audio Demod" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <Grid ColumnDefinitions="86,*,62" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Center" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <Slider Grid.Column="1" Minimum="1000" Maximum="2400" Value="{Binding WefaxCenterHz}" TickFrequency="50" />
+                  <TextBlock Grid.Column="2" Text="{Binding WefaxCenterHz, StringFormat={}{0} Hz}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="Center is the midpoint between black and white fax tones. Normal HF WEFAX is 1900 Hz."
+                           Foreground="#8E97AC"
+                           TextWrapping="Wrap"
+                           FontSize="11" />
+                <Grid ColumnDefinitions="86,*,62" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Shift" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <Slider Grid.Column="1" Minimum="750" Maximum="900" Value="{Binding WefaxShiftHz}" TickFrequency="10" />
+                  <TextBlock Grid.Column="2" Text="{Binding WefaxShiftHz, StringFormat={}{0} Hz}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="Shift is the black-to-white tone spacing. NOAA HF fax is normally 800 Hz; leave this alone unless testing odd sources."
+                           Foreground="#8E97AC"
+                           TextWrapping="Wrap"
+                           FontSize="11" />
+                <Grid ColumnDefinitions="86,*,90" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Filter" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding WefaxFilterOptions}" SelectedItem="{Binding WefaxSelectedFilter}" />
+                  <TextBlock Grid.Column="2" Text="Medium first" Foreground="#7F879B" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="Narrow rejects nearby noise but can soften detail. Wide keeps detail but lets more adjacent junk through."
+                           Foreground="#8E97AC"
+                           TextWrapping="Wrap"
+                           FontSize="11" />
+              </StackPanel>
+            </Border>
+
+            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Alignment" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <CheckBox Content="Live auto-align"
+                          IsChecked="{Binding WefaxAutoAlign}" />
+                <TextBlock Text="Auto-align uses detected phasing seams. Leave it off if map borders or text boxes pull the image sideways."
+                           Foreground="#8E97AC"
+                           TextWrapping="Wrap"
+                           FontSize="11" />
+                <Grid ColumnDefinitions="86,*,62" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Slant" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <Slider Grid.Column="1" Minimum="-200" Maximum="200" Value="{Binding WefaxManualSlant}" TickFrequency="10" />
+                  <TextBlock Grid.Column="2" Text="{Binding WefaxManualSlant}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="Manual slant corrects diagonal lean over the whole page. Use small nudges; positive and negative move opposite directions."
+                           Foreground="#8E97AC"
+                           TextWrapping="Wrap"
+                           FontSize="11" />
+                <Grid ColumnDefinitions="86,*,62" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Offset" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <Slider Grid.Column="1" Minimum="-1200" Maximum="1200" Value="{Binding WefaxManualOffset}" TickFrequency="25" />
+                  <TextBlock Grid.Column="2" Text="{Binding WefaxManualOffset}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="Manual offset rotates every row left/right. Use this when the chart is straight but the left edge wraps into the middle."
+                           Foreground="#8E97AC"
+                           TextWrapping="Wrap"
+                           FontSize="11" />
+                <Button Content="Apply Alignment To Preview" Command="{Binding ApplyWefaxManualSlantCommand}" HorizontalAlignment="Left" />
+                <Grid ColumnDefinitions="86,*,62" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Rows" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <Slider Grid.Column="1" Minimum="1000" Maximum="10000" Value="{Binding WefaxMaxRows}" TickFrequency="500" />
+                  <TextBlock Grid.Column="2" Text="{Binding WefaxMaxRows}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="Max rows is the safety stop for long captures. Larger values are useful for full charts; smaller values are handy for tests."
+                           Foreground="#8E97AC"
+                           TextWrapping="Wrap"
+                           FontSize="11" />
+              </StackPanel>
+            </Border>
+
+            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Image Cleanup" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <CheckBox Content="Noise cleanup" IsChecked="{Binding WefaxNoiseRemoval}" />
+                <Grid ColumnDefinitions="86,*,62" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Noise" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <Slider Grid.Column="1" Minimum="1" Maximum="96" Value="{Binding WefaxNoiseThreshold}" TickFrequency="4" />
+                  <TextBlock Grid.Column="2" Text="{Binding WefaxNoiseThreshold}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="Noise cleanup median-filters single speckles. Higher threshold changes fewer pixels and preserves more fine map detail."
+                           Foreground="#8E97AC"
+                           TextWrapping="Wrap"
+                           FontSize="11" />
+                <CheckBox Content="Invert black/white" IsChecked="{Binding WefaxInvertImage}" />
+                <CheckBox Content="Binary high-contrast output" IsChecked="{Binding WefaxBinaryImage}" />
+                <Grid ColumnDefinitions="86,*,62" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="Binary" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding WefaxBinaryThreshold}" TickFrequency="8" />
+                  <TextBlock Grid.Column="2" Text="{Binding WefaxBinaryThreshold}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="Binary mode boosts contrast but removes gray detail. Leave it off for normal map capture."
+                           Foreground="#8E97AC"
+                           TextWrapping="Wrap"
+                           FontSize="11" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
       </Border>
     </Grid>
   </Grid>

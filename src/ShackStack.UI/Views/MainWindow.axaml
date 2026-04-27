@@ -36,12 +36,12 @@
   <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
     <Border Grid.Row="0" Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="0,0,0,1" Padding="16,0" Height="42">
       <Grid ColumnDefinitions="Auto,*,Auto">
-        <TextBlock Grid.Column="0"
-                   Text="ShackStack"
-                   FontSize="15"
-                   FontWeight="SemiBold"
-                   Foreground="#7B8CDE"
-                   VerticalAlignment="Center" />
+        <Image Grid.Column="0"
+               Source="avares://ShackStack.Desktop/Assets/shackstack-wordmark.png"
+               Height="32"
+               Width="150"
+               Stretch="Uniform"
+               VerticalAlignment="Center" />
         <TextBlock Grid.Column="1"
                    Text="{Binding HeaderCallsign}"
                    FontSize="15"
@@ -234,7 +234,7 @@
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
                       <TextBlock Grid.Row="0" Text="Voice Operations" FontSize="18" FontWeight="SemiBold" />
                       <TextBlock Grid.Row="1"
-                                 Text="Voice now lives in its own desk so we have room for live monitor, POTA hunts, and logging without squeezing the session sidebar."
+                                 Text="Monitor levels, key PTT, work voice contacts, and keep logging close at hand."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
@@ -243,7 +243,7 @@
                           <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
                             <StackPanel Spacing="8">
                               <TextBlock Text="Voice Desk" FontSize="15" FontWeight="SemiBold" />
-                              <TextBlock Text="Open the desk for the roomy transmit, POTA, and logging workflow." Foreground="#AAB1C7" TextWrapping="Wrap" />
+                              <TextBlock Text="Open voice operating controls, POTA tools, and logging." Foreground="#AAB1C7" TextWrapping="Wrap" />
                             </StackPanel>
                             <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
                               <Button Content="Open Desk" Click="OnOpenVoiceDeskClicked" Margin="0,0,8,6" />
@@ -283,7 +283,7 @@
                         <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
                           <StackPanel Spacing="8">
                             <TextBlock Text="Quick PTT" FontSize="15" FontWeight="SemiBold" />
-                            <TextBlock Text="You can still key up here, but the desk gives us much more room for active hunts and logging." Foreground="#AAB1C7" TextWrapping="Wrap" />
+                            <TextBlock Text="Use this for a quick transmission without opening the full operating view." Foreground="#AAB1C7" TextWrapping="Wrap" />
                             <Border Background="#18202E"
                                     BorderBrush="#2A3550"
                                     BorderThickness="1"
@@ -308,202 +308,87 @@
 
                 <TabItem Header="CW" IsVisible="{Binding ShowCwPanel}">
                   <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
-                    <StackPanel Spacing="8">
-                      <TextBlock Text="CW Panel" FontSize="18" FontWeight="SemiBold" />
-
-                      <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
-                        <StackPanel Spacing="8">
-                          <TextBlock Text="CW Receive Test" FontSize="15" FontWeight="SemiBold" />
-                          <TextBlock Text="Use the live CW decoder in auto mode. The app now chooses the active engine for us, so we do not need to juggle legacy profile experiments here."
-                                    Foreground="#AAB1C7"
-                                    TextWrapping="Wrap" />
-                          <Grid ColumnDefinitions="70,140,Auto,Auto,Auto" ColumnSpacing="8">
-                            <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
-                            <Border Grid.Column="1"
-                                    Background="#10141C"
-                                    BorderBrush="#1E2128"
-                                    BorderThickness="1"
-                                    CornerRadius="4"
-                                    Padding="10,6">
-                              <TextBlock Text="{Binding CwDecoderProfile}"
-                                         Foreground="#DDE7FF"
-                                         VerticalAlignment="Center" />
-                            </Border>
-                            <Button Grid.Column="2" Content="Start RX" Command="{Binding StartCwDecoderCommand}" />
-                            <Button Grid.Column="3" Content="Stop RX" Command="{Binding StopCwDecoderCommand}" />
-                            <Button Grid.Column="4" Content="Reset" Command="{Binding ResetCwDecoderCommand}" />
-                          </Grid>
-
-                          <Grid ColumnDefinitions="88,*,88,*" ColumnSpacing="12">
+                    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+                      <TextBlock Grid.Row="0" Text="CW" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="1"
+                                 Text="Decode Morse, shape the receive filter, send macros, and log CW contacts."
+                                 Foreground="#AAB1C7"
+                                 TextWrapping="Wrap" />
+                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+                          <StackPanel Spacing="8">
+                            <TextBlock Text="CW Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="Tune the decoder, watch live copy, send keyer text, and log contacts."
+                                       Foreground="#AAB1C7"
+                                       TextWrapping="Wrap" />
+                          </StackPanel>
+                          <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
+                            <Button Content="Open CW Desk" Click="OnOpenCwDeskClicked" Margin="0,0,8,6" />
+                            <Button Content="Start RX" Command="{Binding StartCwDecoderCommand}" Margin="0,0,8,6" />
+                            <Button Content="Stop RX" Command="{Binding StopCwDecoderCommand}" Margin="0,0,8,6" />
+                          </WrapPanel>
+                          <Grid Grid.Row="2" ColumnDefinitions="76,*" ColumnSpacing="10">
                             <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
                             <TextBlock Grid.Column="1" Text="{Binding CwDecoderStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-                            <TextBlock Grid.Column="2" Text="Worker" Foreground="#7F879B" />
-                            <TextBlock Grid.Column="3" Text="{Binding CwDecoderWorker}" Foreground="#C4C8D8" TextWrapping="Wrap" />
                           </Grid>
-
-                          <Grid ColumnDefinitions="88,*,88,*" ColumnSpacing="12">
-                            <TextBlock Grid.Column="0" Text="Pitch Est" Foreground="#7F879B" />
+                          <Grid Grid.Row="3" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Worker" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding CwDecoderWorker}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                          </Grid>
+                          <Grid Grid.Row="4" ColumnDefinitions="76,*,76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Pitch" Foreground="#7F879B" />
                             <TextBlock Grid.Column="1" Text="{Binding CwEstimatedPitchDisplay}" Foreground="#C4C8D8" />
-                            <TextBlock Grid.Column="2" Text="WPM Est" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="2" Text="WPM" Foreground="#7F879B" />
                             <TextBlock Grid.Column="3" Text="{Binding CwEstimatedWpmDisplay}" Foreground="#C4C8D8" />
                           </Grid>
-
-                          <Grid ColumnDefinitions="88,*" ColumnSpacing="12">
-                            <TextBlock Grid.Column="0" Text="Confidence" Foreground="#7F879B" />
-                            <TextBlock Grid.Column="1" Text="{Binding CwDecoderConfidenceDisplay}" Foreground="#C4C8D8" />
-                          </Grid>
-
-                          <TextBlock Text="Decoded Text" FontSize="13" FontWeight="SemiBold" />
-                          <TextBox Text="{Binding CwDecodedText}"
-                                   AcceptsReturn="True"
-                                   IsReadOnly="True"
-                                   Height="130"
-                                   TextWrapping="Wrap" />
-                          <Button Content="Clear Decoded Text" Command="{Binding ClearCwDecodedTextCommand}" HorizontalAlignment="Left" />
-                        </StackPanel>
+                        </Grid>
                       </Border>
-
-                      <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
-                        <StackPanel Spacing="8">
-                          <TextBlock Text="Temporary CW Send Test" FontSize="15" FontWeight="SemiBold" />
-                          <Grid ColumnDefinitions="88,120,Auto" ColumnSpacing="12">
-                            <TextBlock Grid.Column="0" Text="Pitch" Foreground="#7F879B" VerticalAlignment="Center" />
-                            <NumericUpDown Grid.Column="1"
-                                           Minimum="300"
-                                           Maximum="900"
-                                           Increment="10"
-                                           Value="{Binding CwPitchHz}"
-                                           FormatString="F0"
-                                           Width="120"
-                                           HorizontalAlignment="Left" />
-                            <TextBlock Grid.Column="2" Text="Hz" Foreground="#C4C8D8" VerticalAlignment="Center" />
-                          </Grid>
-                          <Grid ColumnDefinitions="88,120,Auto" ColumnSpacing="12">
-                            <TextBlock Grid.Column="0" Text="Speed" Foreground="#7F879B" VerticalAlignment="Center" />
-                            <NumericUpDown Grid.Column="1"
-                                           Minimum="6"
-                                           Maximum="48"
-                                           Increment="1"
-                                           Value="{Binding CwWpm}"
-                                           FormatString="F0"
-                                           Width="120"
-                                           HorizontalAlignment="Left" />
-                            <TextBlock Grid.Column="2" Text="WPM" Foreground="#C4C8D8" VerticalAlignment="Center" />
-                          </Grid>
-                          <Button Content="Apply Rig CW Settings" Command="{Binding ApplyCwRigSettingsCommand}" HorizontalAlignment="Left" />
-                          <TextBlock Text="{Binding CwTxStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
-                          <TextBox Text="{Binding CwSendText}" AcceptsReturn="True" Height="110" Watermark="Type CW text to send with the rig keyer" />
-                          <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Content="Send" Command="{Binding QueueCwSendTextCommand}" />
-                            <Button Content="Stop" Command="{Binding StopCwSendCommand}" />
-                          </StackPanel>
-                        </StackPanel>
-                      </Border>
-                    </StackPanel>
+                    </Grid>
                   </Border>
                 </TabItem>
 
                 <TabItem Header="RTTY">
                   <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="RTTY Receive" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="RTTY" FontSize="18" FontWeight="SemiBold" />
                       <TextBlock Grid.Row="1"
-                                 Text="Use USB-D/LSB-D for IC-7300 audio RTTY, pick a shift/baud profile, and start receive."
+                                 Text="Copy Baudot RTTY with manual tuning, polarity control, and audio-center help."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
-                      <Grid Grid.Row="2" RowDefinitions="Auto,*" RowSpacing="8">
-                        <Border Grid.Row="0" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
+                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
                           <StackPanel Spacing="8">
-                            <CheckBox Content="Use tuned frequency"
-                                      IsChecked="{Binding RttyDecodeCurrentRadioFrequency}" />
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Profile" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <ComboBox Grid.Column="1"
-                                        ItemsSource="{Binding RttyProfileOptions}"
-                                        SelectedItem="{Binding RttySelectedProfile}"
-                                        HorizontalAlignment="Stretch" />
-                            </Grid>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Tune" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <AutoCompleteBox Grid.Column="1"
-                                               ItemsSource="{Binding RttyFrequencyOptions}"
-                                               Text="{Binding RttySelectedFrequency}"
-                                               FilterMode="Contains"
-                                               MinimumPrefixLength="0"
-                                               HorizontalAlignment="Stretch" />
-                            </Grid>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Audio Hz" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <TextBox Grid.Column="1"
-                                       Text="{Binding RttyAudioCenterHz}"
-                                       HorizontalAlignment="Stretch" />
-                            </Grid>
-                            <Border Background="#101827" BorderBrush="#263248" BorderThickness="1" CornerRadius="6" Padding="8">
-                              <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
-                                <TextBlock Grid.Row="0"
-                                           Text="{Binding RttyTuneHelperSuggestion}"
-                                           Foreground="#C4C8D8"
-                                           TextWrapping="Wrap" />
-                                <Button Grid.Row="1"
-                                        Content="Apply Tune Helper"
-                                        Command="{Binding ApplyRttyTuneHelperCommand}"
-                                        HorizontalAlignment="Left" />
-                              </Grid>
-                            </Border>
-                            <CheckBox Content="Reverse mark/space polarity"
-                                      IsChecked="{Binding RttyReversePolarity}" />
-                            <TextBlock Text="Leave Use tuned frequency checked for manual rig tuning. ShackStack will prefer USB-D/LSB-D for audio RTTY; native RTTY is for the rig's FSK/RTTY path. Audio Hz is the center between the tones; 1700 and 2210 are common starting points."
-                                      Foreground="#7F879B"
-                                      TextWrapping="Wrap" />
-                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                              <Button Content="Start RX" Command="{Binding StartRttyReceiveCommand}" Margin="0,0,8,6" />
-                              <Button Content="Stop RX" Command="{Binding StopRttyReceiveCommand}" Margin="0,0,8,6" />
-                              <Button Content="Reset" Command="{Binding ResetRttySessionCommand}" Margin="0,0,8,6" />
-                            </WrapPanel>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
-                              <TextBlock Grid.Column="1" Text="{Binding RttyRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-                            </Grid>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
-                              <TextBlock Grid.Column="1" Text="{Binding RttySessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-                            </Grid>
+                            <TextBlock Text="RTTY Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="Tune USB-D audio, adjust mark/space behavior, and read live copy."
+                                       Foreground="#AAB1C7"
+                                       TextWrapping="Wrap" />
                           </StackPanel>
-                        </Border>
-
-                        <Border Grid.Row="1" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
-                          <Grid RowDefinitions="Auto,*">
-                            <TextBlock Grid.Row="0"
-                                       Text="Decoded Text"
-                                       FontSize="15"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8" />
-                            <Grid Grid.Row="1" RowDefinitions="*,Auto" RowSpacing="8">
-                              <TextBox Grid.Row="0"
-                                       Text="{Binding RttyDecodedText}"
-                                       AcceptsReturn="True"
-                                       IsReadOnly="True"
-                                       TextWrapping="Wrap"
-                                       MinHeight="260" />
-                              <Button Grid.Row="1"
-                                      Content="Clear Decoded Text"
-                                      Command="{Binding ClearRttyDecodedTextCommand}"
-                                      HorizontalAlignment="Left" />
-                            </Grid>
+                          <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
+                            <Button Content="Open RTTY Desk" Click="OnOpenRttyDeskClicked" Margin="0,0,8,6" />
+                            <Button Content="Start RX" Command="{Binding StartRttyReceiveCommand}" Margin="0,0,8,6" />
+                            <Button Content="Stop RX" Command="{Binding StopRttyReceiveCommand}" Margin="0,0,8,6" />
+                          </WrapPanel>
+                          <Grid Grid.Row="2" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding RttyRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
                           </Grid>
-                        </Border>
-                      </Grid>
+                          <Grid Grid.Row="3" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding RttySessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                          </Grid>
+                        </Grid>
+                      </Border>
                     </Grid>
                   </Border>
                 </TabItem>
 
-                <TabItem Header="FT8/FT4">
+                <TabItem Header="Weak Signal">
                   <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
                       <TextBlock Grid.Row="0" Text="Weak-Signal Digital" FontSize="18" FontWeight="SemiBold" />
                       <TextBlock Grid.Row="1"
-                                 Text="FT8 and FT4 operate from the Weak-Signal Desk."
+                                 Text="Run FT8, FT4, WSPR, and JS8 with cycle timing, decode lists, and transmit staging."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
@@ -513,12 +398,13 @@
                             <TextBlock Text="Weak-Signal Desk"
                                        FontSize="15"
                                        FontWeight="SemiBold" />
-                            <TextBlock Text="Open Desk for the decode list, conversation rail, and send workflow."
+                            <TextBlock Text="Open weak-signal decode, QSO sequencing, and send controls."
                                        Foreground="#AAB1C7"
                                        TextWrapping="Wrap" />
                           </StackPanel>
                           <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
                             <Button Content="Open Desk" Click="OnOpenWsjtxDeskClicked" Margin="0,0,8,6" />
+                            <Button Content="Open JS8 Desk" Click="OnOpenJs8DeskClicked" Margin="0,0,8,6" />
                           </WrapPanel>
                           <Grid Grid.Row="2" ColumnDefinitions="72,*" ColumnSpacing="10">
                             <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
@@ -541,98 +427,60 @@
                 <TabItem Header="WeFAX">
                   <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="WeFAX Receive" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="WeFAX" FontSize="18" FontWeight="SemiBold" />
                       <TextBlock Grid.Row="1"
-                                 Text="Tune a broadcast, then use Start RX or Start Now if you joined late."
+                                 Text="Track weather-fax schedules and capture HF radiofax charts."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
-                      <Grid Grid.Row="2" RowDefinitions="Auto,*" RowSpacing="8">
-                        <Border Grid.Row="0" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
+                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
                           <StackPanel Spacing="8">
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <ComboBox Grid.Column="1"
-                                        ItemsSource="{Binding WefaxModeOptions}"
-                                        SelectedItem="{Binding WefaxSelectedMode}"
-                                        HorizontalAlignment="Stretch" />
-                            </Grid>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Freq" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <ComboBox Grid.Column="1"
-                                        ItemsSource="{Binding WefaxFrequencyOptions}"
-                                        SelectedItem="{Binding WefaxSelectedFrequency}"
-                                        HorizontalAlignment="Stretch" />
-                            </Grid>
-                            <Grid ColumnDefinitions="72,*,Auto" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Slant" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <Slider Grid.Column="1"
-                                      Minimum="-200"
-                                      Maximum="200"
-                                      Value="{Binding WefaxManualSlant}"
-                                      TickFrequency="25"
-                                      HorizontalAlignment="Stretch" />
-                              <Button Grid.Column="2" Content="Apply" Command="{Binding ApplyWefaxManualSlantCommand}" />
-                            </Grid>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Offset" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <Slider Grid.Column="1"
-                                      Minimum="-1200"
-                                      Maximum="1200"
-                                      Value="{Binding WefaxManualOffset}"
-                                      TickFrequency="50"
-                                      HorizontalAlignment="Stretch" />
-                            </Grid>
-                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                              <Button Content="Start RX" Command="{Binding StartWefaxReceiveCommand}" Margin="0,0,8,6" />
-                              <Button Content="Start Now" Command="{Binding StartWefaxNowCommand}" Margin="0,0,8,6" />
-                              <Button Content="Stop RX" Command="{Binding StopWefaxReceiveCommand}" Margin="0,0,8,6" />
-                              <Button Content="Reset" Command="{Binding ResetWefaxSessionCommand}" Margin="0,0,8,6" />
-                              <Button Content="Open Desk" Click="OnOpenWefaxDeskClicked" Margin="0,0,8,6" />
-                            </WrapPanel>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
-                              <TextBlock Grid.Column="1" Text="{Binding WefaxRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-                            </Grid>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
-                              <TextBlock Grid.Column="1" Text="{Binding WefaxSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-                            </Grid>
+                            <TextBlock Text="WeFAX Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="Receive charts, correct alignment, clean up images, and review the archive."
+                                       Foreground="#AAB1C7"
+                                       TextWrapping="Wrap" />
                           </StackPanel>
-                        </Border>
-
-                        <Border Grid.Row="1" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
-                          <Grid RowDefinitions="Auto,*">
-                            <TextBlock Grid.Row="0"
-                                       Text="Live Fax"
-                                       FontSize="15"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8" />
-                            <Border Grid.Row="1" Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10" MinHeight="300">
-                              <Grid RowDefinitions="*,Auto">
-                                <Image Source="{Binding WefaxPreviewBitmap}"
-                                       Stretch="Uniform"
-                                       HorizontalAlignment="Stretch"
-                                       VerticalAlignment="Stretch"
-                                       IsVisible="{Binding WefaxHasPreview}" />
-                                <TextBlock Text="No WeFAX image yet."
-                                           Foreground="#6F778A"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           TextAlignment="Center"
-                                           MaxWidth="360"
-                                           IsVisible="{Binding WefaxShowPlaceholder}" />
-                                <TextBlock Grid.Row="1"
-                                           Text="{Binding WefaxImageStatus}"
-                                           Foreground="#AAB1C7"
-                                           Margin="0,8,0,0"
-                                           HorizontalAlignment="Left" />
-                              </Grid>
-                            </Border>
+                          <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
+                            <Button Content="Open WeFAX Desk" Click="OnOpenWefaxDeskClicked" Margin="0,0,8,6" />
+                            <Button Content="Refresh Schedule" Command="{Binding RefreshWefaxScheduleCommand}" Margin="0,0,8,6" />
+                          </WrapPanel>
+                          <Grid Grid.Row="2" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding WefaxRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
                           </Grid>
-                        </Border>
-                      </Grid>
+                          <Grid Grid.Row="3" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Image" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding WefaxImageStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                          </Grid>
+                          <Border Grid.Row="4" Background="#111827" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="8">
+                            <Grid RowDefinitions="Auto,Auto,*" RowSpacing="6">
+                              <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                                <TextBlock Text="Broadcast Schedule" Foreground="#DDE7FF" FontWeight="SemiBold" />
+                                <TextBlock Grid.Column="1" Text="UTC" Foreground="#7F879B" FontSize="11" VerticalAlignment="Center" />
+                              </Grid>
+                              <TextBlock Grid.Row="1" Text="{Binding WefaxScheduleStatus}" Foreground="#8F9BB4" TextWrapping="Wrap" />
+                              <ListBox Grid.Row="2"
+                                       ItemsSource="{Binding WefaxScheduleItems}"
+                                       SelectedItem="{Binding SelectedWefaxScheduleItem}"
+                                       MinHeight="220"
+                                       MaxHeight="320">
+                                <ListBox.ItemTemplate>
+                                  <DataTemplate x:DataType="vm:WefaxScheduleItem">
+                                    <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="5" Padding="7" Margin="0,0,0,5">
+                                      <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding SummaryText}" Foreground="#E5ECFF" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding DetailText}" Foreground="#AAB1C7" FontSize="12" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding UntilText}" Foreground="#7CFFCA" FontSize="11" />
+                                      </StackPanel>
+                                    </Border>
+                                  </DataTemplate>
+                                </ListBox.ItemTemplate>
+                              </ListBox>
+                            </Grid>
+                          </Border>
+                        </Grid>
+                      </Border>
                     </Grid>
                   </Border>
                 </TabItem>
@@ -640,87 +488,78 @@
                 <TabItem Header="SSTV">
                   <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="SSTV Receive" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="SSTV" FontSize="18" FontWeight="SemiBold" />
                       <TextBlock Grid.Row="1"
-                                 Text="Tune a signal and start receive. Auto Detect is the normal path. Force Start is for when you joined late or your TX skipped past the VIS/preamble."
+                                 Text="Receive pictures, compose replies, add overlays, and transmit SSTV images."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
-                      <Grid Grid.Row="2" RowDefinitions="Auto,*" RowSpacing="8">
-                        <Border Grid.Row="0" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
+                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
                           <StackPanel Spacing="8">
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <ComboBox Grid.Column="1"
-                                        ItemsSource="{Binding SstvModeOptions}"
-                                        SelectedItem="{Binding SstvSelectedMode}"
-                                        HorizontalAlignment="Stretch" />
-                            </Grid>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Freq" Foreground="#7F879B" VerticalAlignment="Center" />
-                              <ComboBox Grid.Column="1"
-                                        ItemsSource="{Binding SstvFrequencyOptions}"
-                                        SelectedItem="{Binding SstvSelectedFrequency}"
-                                        HorizontalAlignment="Stretch" />
-                            </Grid>
-                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                              <Button Content="Fix Slant" Command="{Binding ApplySstvPostReceiveSlantCommand}" Margin="0,0,8,6" />
-                            </WrapPanel>
-                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                              <Button Content="Start RX" Command="{Binding StartSstvReceiveCommand}" Margin="0,0,8,6" />
-                              <Button Content="Force Start" Command="{Binding ForceStartSstvReceiveCommand}" Margin="0,0,8,6" />
-                              <Button Content="Stop RX" Command="{Binding StopSstvReceiveCommand}" Margin="0,0,8,6" />
-                              <Button Content="Reset" Command="{Binding ResetSstvSessionCommand}" Margin="0,0,8,6" />
-                              <Button Content="Open Desk" Click="OnOpenSstvDeskClicked" Margin="0,0,8,6" />
-                            </WrapPanel>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
-                              <TextBlock Grid.Column="1" Text="{Binding SstvRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-                            </Grid>
-                            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
-                              <TextBlock Grid.Column="1" Text="{Binding SstvSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-                            </Grid>
+                            <TextBlock Text="SSTV Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="Decode live images, manage received pictures, build replies, and send SSTV."
+                                       Foreground="#AAB1C7"
+                                       TextWrapping="Wrap" />
                           </StackPanel>
-                        </Border>
-
-                        <Border Grid.Row="1" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
-                          <Grid RowDefinitions="Auto,*">
-                            <TextBlock Grid.Row="0"
-                                       Text="Live Image"
-                                       FontSize="15"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8" />
-                            <Border Grid.Row="1" Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10" MinHeight="300">
-                              <Grid RowDefinitions="*,Auto">
-                                <Image Source="{Binding SstvPreviewBitmap}"
-                                       Stretch="Uniform"
-                                       HorizontalAlignment="Stretch"
-                                       VerticalAlignment="Stretch"
-                                       IsVisible="{Binding SstvHasPreview}" />
-                                <TextBlock Text="No SSTV image yet."
-                                           Foreground="#6F778A"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           TextAlignment="Center"
-                                           MaxWidth="360"
-                                           IsVisible="{Binding SstvShowPlaceholder}" />
-                                <TextBlock Grid.Row="1"
-                                           Text="{Binding SstvImageStatus}"
-                                           Foreground="#AAB1C7"
-                                           Margin="0,8,0,0"
-                                           HorizontalAlignment="Left" />
-                              </Grid>
-                            </Border>
+                          <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
+                            <Button Content="Open SSTV Desk" Click="OnOpenSstvDeskClicked" Margin="0,0,8,6" />
+                            <Button Content="Start RX" Command="{Binding StartSstvReceiveCommand}" Margin="0,0,8,6" />
+                            <Button Content="Stop RX" Command="{Binding StopSstvReceiveCommand}" Margin="0,0,8,6" />
+                          </WrapPanel>
+                          <Grid Grid.Row="2" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding SstvRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
                           </Grid>
-                        </Border>
-                      </Grid>
+                          <Grid Grid.Row="3" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding SstvSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                          </Grid>
+                          <Grid Grid.Row="4" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Image" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding SstvImageStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                          </Grid>
+                        </Grid>
+                      </Border>
                     </Grid>
                   </Border>
                 </TabItem>
 
                 <TabItem Header="Longwave">
+                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+                      <TextBlock Grid.Row="0" Text="Longwave" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="1"
+                                 Text="Manage contacts, logbooks, spots, and manual QSO entries."
+                                 Foreground="#AAB1C7"
+                                 TextWrapping="Wrap" />
+                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
+                          <StackPanel Spacing="8">
+                            <TextBlock Text="Longwave Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="Review contacts, manage logbooks, refresh spots, and enter QSOs."
+                                       Foreground="#AAB1C7"
+                                       TextWrapping="Wrap" />
+                          </StackPanel>
+                          <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
+                            <Button Content="Open Longwave Desk" Click="OnOpenLongwaveDeskClicked" Margin="0,0,8,6" />
+                            <Button Content="Refresh Spots" Command="{Binding RefreshLongwaveSpotsCommand}" Margin="0,0,8,6" />
+                          </WrapPanel>
+                          <Grid Grid.Row="2" ColumnDefinitions="82,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding LongwaveStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                          </Grid>
+                          <Grid Grid.Row="3" ColumnDefinitions="82,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Log" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding LongwaveLogStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                          </Grid>
+                        </Grid>
+                      </Border>
+                    </Grid>
+                  </Border>
+                </TabItem>
+
+                <TabItem Header="Longwave Legacy" IsVisible="False">
                   <Grid ColumnDefinitions="1.35*,1*" ColumnSpacing="12" Margin="0,8,0,0">
                     <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12">
                       <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
