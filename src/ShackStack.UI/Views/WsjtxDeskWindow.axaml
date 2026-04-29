@@ -31,7 +31,15 @@
 
           <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="10">
             <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*" RowSpacing="6">
-              <TextBlock Grid.Row="0" Text="Band Activity" FontSize="12.5" FontWeight="SemiBold" Foreground="#D9DCEA" />
+              <Grid Grid.Row="0" ColumnDefinitions="*,Auto,112" ColumnSpacing="6">
+                <TextBlock Grid.Column="0" Text="Band Activity" FontSize="12.5" FontWeight="SemiBold" Foreground="#D9DCEA" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="Show" Foreground="#6F778A" FontSize="10" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="2"
+                          ItemsSource="{Binding WsjtxBandActivityFilterOptions}"
+                          SelectedItem="{Binding SelectedWsjtxBandActivityFilter}"
+                          MinHeight="22"
+                          Padding="6,1" />
+              </Grid>
               <Grid Grid.Row="1" ColumnDefinitions="50,58,44,40,88,*" ColumnSpacing="5" Margin="0,1,0,2">
                 <TextBlock Grid.Column="0" Text="Time" Foreground="#6F778A" FontSize="10" />
                 <TextBlock Grid.Column="1" Text="Mode" Foreground="#6F778A" FontSize="10" />
@@ -41,7 +49,7 @@
                 <TextBlock Grid.Column="5" Text="Message" Foreground="#6F778A" FontSize="10" />
               </Grid>
               <Border Grid.Row="2" Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="6">
-                <ListBox ItemsSource="{Binding WsjtxMessages}"
+                <ListBox ItemsSource="{Binding FilteredWsjtxMessages}"
                          SelectedItem="{Binding SelectedWsjtxMessage}"
                          Background="Transparent"
                          BorderThickness="0">

@@ -82,6 +82,15 @@ public partial class MainWindowViewModel
     private ObservableCollection<WsjtxMessageItem> wsjtxMessages = [];
 
     [ObservableProperty]
+    private ObservableCollection<WsjtxMessageItem> filteredWsjtxMessages = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<string> wsjtxBandActivityFilterOptions = ["All", "CQ", "POTA", "DX"];
+
+    [ObservableProperty]
+    private string selectedWsjtxBandActivityFilter = "All";
+
+    [ObservableProperty]
     private ObservableCollection<WsjtxMessageItem> wsjtxRxFrequencyMessages = [];
 
     [ObservableProperty]
@@ -166,7 +175,7 @@ public partial class MainWindowViewModel
 
     private int _wsjtxLookupGeneration;
 
-    public bool WsjtxHasMessages => WsjtxMessages.Count > 0;
+    public bool WsjtxHasMessages => FilteredWsjtxMessages.Count > 0;
 
     public bool WsjtxHasRxFrequencyMessages => WsjtxRxFrequencyMessages.Count > 0;
 
@@ -491,6 +500,7 @@ public partial class MainWindowViewModel
         }
 
         WsjtxMessages.Clear();
+        FilteredWsjtxMessages.Clear();
         WsjtxRxFrequencyMessages.Clear();
         OnPropertyChanged(nameof(WsjtxHasMessages));
         OnPropertyChanged(nameof(WsjtxHasRxFrequencyMessages));
@@ -520,6 +530,7 @@ public partial class MainWindowViewModel
     private void ResetWsjtxSessionView(string modeLabel, string status)
     {
         WsjtxMessages.Clear();
+        FilteredWsjtxMessages.Clear();
         WsjtxRxFrequencyMessages.Clear();
         OnPropertyChanged(nameof(WsjtxHasMessages));
         OnPropertyChanged(nameof(WsjtxHasRxFrequencyMessages));
@@ -550,6 +561,7 @@ public partial class MainWindowViewModel
     private void ClearWsjtxMessages()
     {
         WsjtxMessages.Clear();
+        FilteredWsjtxMessages.Clear();
         WsjtxRxFrequencyMessages.Clear();
         SelectedWsjtxMessage = null;
         WsjtxRxAudioFrequencyHz = 1500;
@@ -1153,6 +1165,7 @@ public partial class MainWindowViewModel
             }
         }
 
+        RebuildFilteredWsjtxMessages();
         RebuildWsjtxRxFrequencyMessages();
         TrackWsjtxConversationMessage(incoming);
 
@@ -1276,6 +1289,7 @@ public partial class MainWindowViewModel
             }
         }
 
+        RebuildFilteredWsjtxMessages();
         RebuildWsjtxRxFrequencyMessages();
     }
 
@@ -1386,6 +1400,59 @@ public partial class MainWindowViewModel
         }
 
         OnPropertyChanged(nameof(WsjtxHasRxFrequencyMessages));
+    }
+
+    private void RebuildFilteredWsjtxMessages()
+    {
+        FilteredWsjtxMessages.Clear();
+        foreach (var item in WsjtxMessages)
+        {
+            if (ShouldShowWsjtxBandActivityMessage(item))
+            {
+                FilteredWsjtxMessages.Add(item);
+            }
+        }
+
+        OnPropertyChanged(nameof(WsjtxHasMessages));
+    }
+
+    private bool ShouldShowWsjtxBandActivityMessage(WsjtxMessageItem item)
+    {
+        if (item.IsOwnTransmit || IsWsjtxMessageDirectedToOperator(item))
+        {
+            return true;
+        }
+
+        var filter = SelectedWsjtxBandActivityFilter?.Trim();
+        if (string.IsNullOrWhiteSpace(filter) || string.Equals(filter, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var normalized = NormalizeWsjtxMessageText(item.MessageText);
+        return filter.ToUpperInvariant() switch
+        {
+            "CQ" => item.IsCq || normalized.StartsWith("CQ ", StringComparison.OrdinalIgnoreCase),
+            "POTA" => normalized.Contains(" POTA ", StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith("CQ POTA ", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith(" POTA", StringComparison.OrdinalIgnoreCase)
+                || normalized.Contains(" P2P ", StringComparison.OrdinalIgnoreCase),
+            "DX" => normalized.StartsWith("CQ DX ", StringComparison.OrdinalIgnoreCase)
+                || normalized.Contains(" CQ DX ", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith(" DX", StringComparison.OrdinalIgnoreCase),
+            _ => true,
+        };
+    }
+
+    private bool IsWsjtxMessageDirectedToOperator(WsjtxMessageItem item)
+    {
+        if (item.IsDirectedToMe)
+        {
+            return true;
+        }
+
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        return !string.IsNullOrWhiteSpace(myCall) && WsjtxMessageMentionsCall(item.MessageText, myCall);
     }
 
     private void HandleWsjtxAutoSequence(WsjtxDecodeMessage message)
@@ -2038,6 +2105,11 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(WsjtxSuggestedMessagePreview));
     }
 
+    partial void OnSelectedWsjtxBandActivityFilterChanged(string value)
+    {
+        RebuildFilteredWsjtxMessages();
+    }
+
     partial void OnWsjtxQueuedTransmitMessageChanged(WsjtxSuggestedMessageItem? value)
     {
         OnPropertyChanged(nameof(WsjtxQueuedTransmitPreview));
@@ -2094,6 +2166,7 @@ public partial class MainWindowViewModel
 
     partial void OnWsjtxOperatorCallsignChanged(string value)
     {
+        RebuildFilteredWsjtxMessages();
     }
 
     partial void OnWsjtxPreparedTransmitChanged(WsjtxPreparedTransmit? value)
