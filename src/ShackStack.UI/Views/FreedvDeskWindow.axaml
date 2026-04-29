@@ -162,24 +162,24 @@
           <TextBlock Grid.Row="0" Text="Live FreeDV State" FontSize="16" FontWeight="SemiBold" />
 
           <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="10">
-            <Border Grid.Column="0" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
+            <Border Grid.Column="0" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10" MinHeight="96">
               <StackPanel Spacing="4">
                 <TextBlock Text="Mode" Foreground="#7F879B" FontSize="11" />
                 <TextBlock Text="{Binding FreedvSelectedMode}" Foreground="#FFFFFF" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding FreedvSelectedFrequency}" Foreground="#8E97AC" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding FreedvSelectedFrequency}" Foreground="#8E97AC" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
               </StackPanel>
             </Border>
-            <Border Grid.Column="1" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
+            <Border Grid.Column="1" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10" MinHeight="96">
               <StackPanel Spacing="4">
                 <TextBlock Text="Signal" Foreground="#7F879B" FontSize="11" />
-                <TextBlock Text="{Binding FreedvSignalSummary}" Foreground="#77D8FF" FontFamily="Consolas" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding FreedvRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding FreedvSignalSummary}" Foreground="#77D8FF" FontFamily="Consolas" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" MinHeight="18" />
+                <TextBlock Text="{Binding FreedvRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" MinHeight="36" MaxHeight="36" TextTrimming="CharacterEllipsis" />
               </StackPanel>
             </Border>
-            <Border Grid.Column="2" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
+            <Border Grid.Column="2" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10" MinHeight="96">
               <StackPanel Spacing="4">
                 <TextBlock Text="RADE EOO" Foreground="#7F879B" FontSize="11" />
-                <TextBlock Text="{Binding FreedvLastRadeCallsign}" Foreground="#FFD166" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding FreedvLastRadeCallsign}" Foreground="#FFD166" FontSize="18" FontWeight="SemiBold" MinWidth="96" FontFamily="Consolas" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                 <TextBlock Text="Last decoded callsign" Foreground="#8E97AC" />
               </StackPanel>
             </Border>
@@ -187,7 +187,7 @@
 
           <Grid Grid.Row="2" ColumnDefinitions="92,*" ColumnSpacing="10">
             <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
-            <TextBlock Grid.Column="1" Text="{Binding FreedvSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" FontFamily="Consolas" />
+            <TextBlock Grid.Column="1" Text="{Binding FreedvSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" FontFamily="Consolas" MinHeight="36" MaxHeight="36" TextTrimming="CharacterEllipsis" />
           </Grid>
 
           <Border Grid.Row="3" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
