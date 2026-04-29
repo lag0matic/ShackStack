@@ -120,10 +120,12 @@ static bool RunRegressionSuite(string outputRoot, int sampleRate, int chunkSize)
     var results = new List<RegressionCaseResult>
     {
         RunRegressionNoiseRejectCase(regressionRoot, sampleRate, chunkSize),
-        RunRegressionDecodeCase("martin_1_clean_auto", "Martin 1", static audio => audio, regressionRoot, sampleRate, chunkSize),
+        RunRegressionDecodeCase("martin_1_qrn_34db_clock_plus50_auto", "Martin 1", audio => AddWhiteNoise(ApplySampleClockPpm(audio, 50.0), -34.0, seed: 4101), regressionRoot, sampleRate, chunkSize),
         RunRegressionDecodeCase("martin_2_qrn_30db_auto", "Martin 2", audio => AddWhiteNoise(audio, -30.0, seed: 4202), regressionRoot, sampleRate, chunkSize),
         RunRegressionDecodeCase("scottie_1_clock_75ppm_auto", "Scottie 1", audio => ApplySampleClockPpm(audio, 75.0), regressionRoot, sampleRate, chunkSize),
-        RunRegressionDecodeCase("robot_36_clean_auto", "Robot 36", static audio => audio, regressionRoot, sampleRate, chunkSize),
+        RunRegressionDecodeCase("scottie_2_qrn_32db_clock_minus50_auto", "Scottie 2", audio => AddWhiteNoise(ApplySampleClockPpm(audio, -50.0), -32.0, seed: 4302), regressionRoot, sampleRate, chunkSize),
+        RunRegressionDecodeCase("robot_36_qrn_34db_auto", "Robot 36", audio => AddWhiteNoise(audio, -34.0, seed: 4436), regressionRoot, sampleRate, chunkSize),
+        RunRegressionTxRoundTripCase("robot_36_tx_roundtrip_auto", "Robot 36", regressionRoot, sampleRate, chunkSize),
         RunRegressionDecodeCase("pd_120_clean_auto", "PD 120", static audio => audio, regressionRoot, sampleRate, chunkSize),
         RunRegressionForceStartCase("martin_1_force_late", "Martin 1", sampleRate * 5, regressionRoot, sampleRate, chunkSize),
     };
@@ -236,6 +238,77 @@ static RegressionCaseResult RunRegressionDecodeCase(
         Detail = comparison is null
             ? "no comparison image"
             : $"MAE {comparison.MeanAbsoluteError:0.00}, best corr {Math.Max(comparison.RedCorrelation, Math.Max(comparison.GreenCorrelation, comparison.BlueCorrelation)):0.000}"
+    };
+}
+
+static RegressionCaseResult RunRegressionTxRoundTripCase(
+    string caseName,
+    string modeName,
+    string outputRoot,
+    int sampleRate,
+    int chunkSize)
+{
+    if (!MmsstvModeCatalog.TryResolve(modeName, out var profile))
+    {
+        return RegressionCaseResult.Failed(caseName, modeName, $"profile not found: {modeName}");
+    }
+
+    var sourceImage = TestCardFactory.Create(profile.Width, profile.Height);
+    var sourcePath = Path.Combine(outputRoot, $"{caseName}_source.bmp");
+    NativeBitmapWriter.SaveRgb24(sourcePath, sourceImage, profile.Width, profile.Height);
+
+    var clipBuilder = new SstvTransmitClipBuilder(sampleRate);
+    var clip = clipBuilder.Build(profile.Name, sourceImage, profile.Width, profile.Height);
+    var txAudio = Pcm16ToFloatMono(clip.PcmBytes);
+    var wavPath = Path.Combine(outputRoot, $"{caseName}.wav");
+    WaveFileWriter.WriteMono16(wavPath, txAudio, sampleRate);
+
+    var visDetected = VisDetector.TryDetect(txAudio.ToList(), 0, allowLegacyPattern: false, out _, out var visProfile, resolveAllPlannedModes: true);
+    var result = DecodeRegressionAudio(caseName, "Auto Detect", txAudio, outputRoot, sampleRate, chunkSize);
+    ImageComparisonResult? comparison = null;
+    if (!string.IsNullOrWhiteSpace(result.LatestImagePath) && File.Exists(result.LatestImagePath))
+    {
+        try
+        {
+            comparison = ImageComparison.Measure(sourceImage, BitmapReader.LoadRgb24(result.LatestImagePath, profile.Width, profile.Height));
+        }
+        catch (IOException ex)
+        {
+            return result with
+            {
+                ExpectedMode = modeName,
+                Detail = $"tx round-trip image unreadable: {ex.Message}"
+            };
+        }
+        catch (InvalidDataException ex)
+        {
+            return result with
+            {
+                ExpectedMode = modeName,
+                Detail = $"tx round-trip image invalid: {ex.Message}"
+            };
+        }
+    }
+
+    var visMatches = visDetected && string.Equals(visProfile?.Name, modeName, StringComparison.OrdinalIgnoreCase);
+    var modeMatches = string.Equals(result.DetectedMode, modeName, StringComparison.OrdinalIgnoreCase);
+    var hasImage = !string.IsNullOrWhiteSpace(result.LatestImagePath) && File.Exists(result.LatestImagePath);
+    var imageLooksReasonable = comparison is not null
+        && comparison.MeanAbsoluteError < 90.0
+        && Math.Max(comparison.RedCorrelation, Math.Max(comparison.GreenCorrelation, comparison.BlueCorrelation)) > 0.35;
+    var passed = visMatches && modeMatches && hasImage && imageLooksReasonable;
+
+    return result with
+    {
+        Passed = passed,
+        ExpectedMode = modeName,
+        MeanAbsoluteError = comparison?.MeanAbsoluteError,
+        BestCorrelation = comparison is null
+            ? null
+            : Math.Max(comparison.RedCorrelation, Math.Max(comparison.GreenCorrelation, comparison.BlueCorrelation)),
+        Detail = comparison is null
+            ? $"VIS {(visDetected ? visProfile?.Name : "none")}; no comparison image"
+            : $"VIS {(visDetected ? visProfile?.Name : "none")}, MAE {comparison.MeanAbsoluteError:0.00}, best corr {Math.Max(comparison.RedCorrelation, Math.Max(comparison.GreenCorrelation, comparison.BlueCorrelation)):0.000}"
     };
 }
 
