@@ -27,7 +27,10 @@
     <Grid Grid.Row="1" ColumnDefinitions="1.35*,1*" ColumnSpacing="10">
       <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
         <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-          <TextBlock Grid.Row="0" Text="Logbook Browser" FontSize="16" FontWeight="SemiBold" />
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBlock Grid.Column="0" Text="Logbook Browser" FontSize="16" FontWeight="SemiBold" />
+            <Button Grid.Column="1" Content="Refresh Contacts" Command="{Binding RefreshLongwaveContactsNowCommand}" />
+          </Grid>
           <TextBlock Grid.Row="1" Text="{Binding LongwaveStatus}" Foreground="#7F879B" TextWrapping="Wrap" />
           <TabControl Grid.Row="2">
             <TabItem Header="Contacts">
@@ -47,25 +50,29 @@
                   <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:LongwaveRecentContactItem">
                       <Border Background="#0C1017" Padding="5,3" Margin="0" CornerRadius="2">
-                        <Grid ColumnDefinitions="56,50,82,96,*" ColumnSpacing="8" MinHeight="20">
+                        <Grid ColumnDefinitions="56,50,82,96,92,*" ColumnSpacing="8" MinHeight="20">
                           <TextBlock Grid.Column="0" Text="{Binding Band}" Foreground="#AAB1C7" FontSize="11" VerticalAlignment="Center" />
                           <TextBlock Grid.Column="1" Text="{Binding Mode}" Foreground="#AFC4FF" FontSize="11" VerticalAlignment="Center" />
                           <TextBlock Grid.Column="2" Text="{Binding FrequencyText}" Foreground="#C4C8D8" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                           <TextBlock Grid.Column="3" Text="{Binding TimeText}" Foreground="#7F879B" FontSize="10.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                          <TextBlock Grid.Column="4" Text="{Binding SummaryText}" Foreground="#E5ECFF" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                          <Border Grid.Column="4" Background="{Binding QrzUploadBackground}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding QrzUploadText}" Foreground="{Binding QrzUploadForeground}" FontSize="10" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                          </Border>
+                          <TextBlock Grid.Column="5" Text="{Binding SummaryText}" Foreground="#E5ECFF" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         </Grid>
                       </Border>
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>
                 <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                  <Button Content="Save Selected Changes" Command="{Binding UpdateSelectedLongwaveContactCommand}" IsVisible="{Binding IsEditingLongwaveContact}" MinWidth="150" />
                   <Button Content="Delete Selected Contact" Command="{Binding DeleteSelectedLongwaveContactCommand}" MinWidth="150" />
                 </StackPanel>
               </Grid>
             </TabItem>
 
             <TabItem Header="Logbooks">
-              <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+              <Grid RowDefinitions="Auto,*,Auto,Auto" RowSpacing="8">
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                   <TextBox Grid.Column="0" Text="{Binding LongwaveNewLogbookName}" Watermark="New logbook name" />
                   <Button Grid.Column="1" Content="Create" Command="{Binding CreateLongwaveLogbookCommand}" MinWidth="80" />
@@ -80,13 +87,36 @@
                   <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:LongwaveLogbookItem">
                       <Border Background="#0C1017" Padding="5,3" Margin="0" CornerRadius="2">
-                        <TextBlock Text="{Binding DisplayText}" Foreground="#E5ECFF" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        <Grid RowDefinitions="Auto,Auto">
+                          <TextBlock Grid.Row="0" Text="{Binding DisplayText}" Foreground="#E5ECFF" FontSize="12" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Grid.Row="1" Text="{Binding DetailText}" Foreground="#7F879B" FontSize="10" TextTrimming="CharacterEllipsis" />
+                        </Grid>
                       </Border>
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>
-                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
-                  <Button Content="Delete Selected Logbook" Command="{Binding DeleteSelectedLongwaveLogbookCommand}" MinWidth="150" />
+                <Border Grid.Row="2" Background="#0C1017" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="8">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="Selected Logbook" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                    <Grid ColumnDefinitions="*,130" ColumnSpacing="8">
+                      <TextBox Grid.Column="0" Text="{Binding LongwaveSelectedLogbookName}" Watermark="Logbook name" />
+                      <TextBox Grid.Column="1" Text="{Binding LongwaveSelectedLogbookOperatorCallsign}" Watermark="Operator" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,130" ColumnSpacing="8">
+                      <TextBox Grid.Column="0" Text="{Binding LongwaveSelectedLogbookParkReference}" Watermark="Park reference, optional" />
+                      <TextBox Grid.Column="1" Text="{Binding LongwaveSelectedLogbookActivationDate}" Watermark="yyyyMMdd" />
+                    </Grid>
+                    <TextBox Text="{Binding LongwaveSelectedLogbookNotes}" Watermark="Notes" />
+                    <Button Content="Save Logbook Details" Command="{Binding UpdateSelectedLongwaveLogbookCommand}" HorizontalAlignment="Left" />
+                  </StackPanel>
+                </Border>
+                <StackPanel Grid.Row="3" Spacing="6">
+                  <TextBlock Text="{Binding LongwaveSelectedLogbookQrzUploadSummary}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Export ADIF" Command="{Binding ExportSelectedLongwaveLogbookAdifCommand}" MinWidth="100" />
+                    <Button Content="Upload Pending to QRZ" Command="{Binding UploadSelectedLongwaveLogbookToQrzCommand}" MinWidth="150" />
+                    <Button Content="Delete Selected Logbook" Command="{Binding DeleteSelectedLongwaveLogbookCommand}" MinWidth="150" />
+                  </StackPanel>
                 </StackPanel>
               </Grid>
             </TabItem>
@@ -97,9 +127,13 @@
       <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
           <StackPanel Spacing="10">
-            <TextBlock Text="Manual Log Entry" FontSize="16" FontWeight="SemiBold" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBlock Grid.Column="0" Text="Contact Editor" FontSize="16" FontWeight="SemiBold" />
+              <Button Grid.Column="1" Content="New Contact" Command="{Binding NewLongwaveContactCommand}" />
+            </Grid>
+            <TextBlock Text="{Binding LongwaveContactEditorSummary}" Foreground="#7F879B" TextWrapping="Wrap" />
             <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
-            <Grid ColumnDefinitions="84,*" ColumnSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+            <Grid ColumnDefinitions="84,*" ColumnSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
               <TextBlock Grid.Row="0" Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
               <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding LongwaveLogbooks}" SelectedItem="{Binding SelectedLongwaveLogbook}">
                 <ComboBox.ItemTemplate>
@@ -110,27 +144,46 @@
               </ComboBox>
               <TextBlock Grid.Row="1" Grid.Column="0" Text="Operator" Foreground="#7F879B" VerticalAlignment="Center" />
               <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LongwaveLogOperatorCallsign}" />
-              <TextBlock Grid.Row="2" Grid.Column="0" Text="Callsign" Foreground="#7F879B" VerticalAlignment="Center" />
-              <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding LongwaveLogCallsign}" />
-              <TextBlock Grid.Row="3" Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
-              <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding LongwaveLogMode}" />
-              <TextBlock Grid.Row="4" Grid.Column="0" Text="Band" Foreground="#7F879B" VerticalAlignment="Center" />
-              <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding LongwaveLogBand}" />
-              <TextBlock Grid.Row="5" Grid.Column="0" Text="Freq kHz" Foreground="#7F879B" VerticalAlignment="Center" />
-              <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding LongwaveLogFrequencyKhz}" />
-              <TextBlock Grid.Row="6" Grid.Column="0" Text="RST S/R" Foreground="#7F879B" VerticalAlignment="Center" />
-              <Grid Grid.Row="6" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="8">
+              <TextBlock Grid.Row="2" Grid.Column="0" Text="Date/UTC" Foreground="#7F879B" VerticalAlignment="Center" />
+              <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="8">
+                <TextBox Grid.Column="0" Text="{Binding LongwaveLogQsoDate}" Watermark="yyyyMMdd" />
+                <TextBox Grid.Column="1" Text="{Binding LongwaveLogTimeOn}" Watermark="HHmmss" />
+              </Grid>
+              <TextBlock Grid.Row="3" Grid.Column="0" Text="Callsign" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding LongwaveLogCallsign}" />
+              <TextBlock Grid.Row="4" Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding LongwaveLogMode}" />
+              <TextBlock Grid.Row="5" Grid.Column="0" Text="Band" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding LongwaveLogBand}" />
+              <TextBlock Grid.Row="6" Grid.Column="0" Text="Freq kHz" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding LongwaveLogFrequencyKhz}" />
+              <TextBlock Grid.Row="7" Grid.Column="0" Text="RST S/R" Foreground="#7F879B" VerticalAlignment="Center" />
+              <Grid Grid.Row="7" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="8">
                 <TextBox Grid.Column="0" Text="{Binding LongwaveLogRstSent}" />
                 <TextBox Grid.Column="1" Text="{Binding LongwaveLogRstReceived}" />
               </Grid>
-              <TextBlock Grid.Row="7" Grid.Column="0" Text="Park" Foreground="#7F879B" VerticalAlignment="Center" />
-              <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding LongwaveLogParkReference}" />
-              <TextBlock Grid.Row="8" Grid.Column="0" Text="Grid" Foreground="#7F879B" VerticalAlignment="Center" />
-              <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding LongwaveLogGridSquare}" />
+              <TextBlock Grid.Row="8" Grid.Column="0" Text="Park" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding LongwaveLogParkReference}" />
+              <TextBlock Grid.Row="9" Grid.Column="0" Text="Grid" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding LongwaveLogGridSquare}" />
+              <TextBlock Grid.Row="10" Grid.Column="0" Text="Name" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Row="10" Grid.Column="1" Text="{Binding LongwaveLogName}" />
+              <TextBlock Grid.Row="11" Grid.Column="0" Text="QTH" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Row="11" Grid.Column="1" Text="{Binding LongwaveLogQth}" />
+              <TextBlock Grid.Row="12" Grid.Column="0" Text="County" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Row="12" Grid.Column="1" Text="{Binding LongwaveLogCounty}" />
+              <TextBlock Grid.Row="13" Grid.Column="0" Text="State" Foreground="#7F879B" VerticalAlignment="Center" />
+              <TextBox Grid.Row="13" Grid.Column="1" Text="{Binding LongwaveLogState}" />
+              <TextBlock Grid.Row="14" Grid.Column="0" Text="Country/DXCC" Foreground="#7F879B" VerticalAlignment="Center" />
+              <Grid Grid.Row="14" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="8">
+                <TextBox Grid.Column="0" Text="{Binding LongwaveLogCountry}" />
+                <TextBox Grid.Column="1" Text="{Binding LongwaveLogDxcc}" />
+              </Grid>
             </Grid>
             <StackPanel Orientation="Horizontal" Spacing="8">
               <Button Content="Use Rig For Log" Command="{Binding UseRigForLongwaveLogCommand}" MinWidth="120" />
               <Button Content="Log This QSO" Command="{Binding LogCurrentQsoCommand}" MinWidth="108" />
+              <Button Content="Save Changes" Command="{Binding UpdateSelectedLongwaveContactCommand}" IsVisible="{Binding IsEditingLongwaveContact}" MinWidth="108" />
             </StackPanel>
           </StackPanel>
         </ScrollViewer>

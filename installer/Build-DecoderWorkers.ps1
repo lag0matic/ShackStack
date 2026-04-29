@@ -19,6 +19,8 @@ $workers = @(
 
 $gplWsjtxProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplWsjtx\ShackStack.DecoderHost.GplWsjtx.csproj"
 $gplRttyProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplFldigiRtty\ShackStack.DecoderHost.GplFldigiRtty.csproj"
+$gplPskProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplFldigiPsk\ShackStack.DecoderHost.GplFldigiPsk.csproj"
+$gplFreedvProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplCodec2Freedv\ShackStack.DecoderHost.GplCodec2Freedv.csproj"
 $nativeSstvProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.Sstv\ShackStack.DecoderHost.Sstv.csproj"
 
 New-Item -ItemType Directory -Force -Path $distRoot | Out-Null
@@ -28,11 +30,14 @@ New-Item -ItemType Directory -Force -Path $specRoot | Out-Null
 $targetsToClean = @(
     "cw_sidecar_worker",
     "rtty_sidecar_worker",
+    "psk_sidecar_worker",
+    "freedv_codec2_sidecar",
     "wefax_sidecar_worker",
     "wsjtx_sidecar_worker",
     "wsjtx_gpl_sidecar",
     "sstv_native_sidecar",
-    "sstv_sidecar_worker"
+    "sstv_sidecar_worker",
+    "ggmorse"
 )
 
 foreach ($target in $targetsToClean) {
@@ -94,6 +99,54 @@ if (Test-Path $gplRttyProject) {
         -r win-x64 `
         --self-contained false `
         -o $rttyDist
+}
+
+if (Test-Path $gplPskProject) {
+    $pskDist = Join-Path $distRoot "psk_sidecar_worker"
+    & dotnet publish $gplPskProject `
+        -c Release `
+        -r win-x64 `
+        --self-contained false `
+        -o $pskDist
+}
+
+if (Test-Path $gplFreedvProject) {
+    $freedvDist = Join-Path $distRoot "freedv_codec2_sidecar"
+    & dotnet publish $gplFreedvProject `
+        -c Release `
+        -r win-x64 `
+        --self-contained false `
+        -o $freedvDist
+
+    $codec2BuildSrc = Join-Path $repoRoot ".tmp-codec2-mingw-build\src"
+    if (Test-Path $codec2BuildSrc) {
+        foreach ($artifact in @("libcodec2.dll", "freedv_rx.exe", "freedv_tx.exe")) {
+            $artifactPath = Join-Path $codec2BuildSrc $artifact
+            if (Test-Path $artifactPath) {
+                Copy-Item -Force $artifactPath (Join-Path $freedvDist $artifact)
+            }
+        }
+
+        foreach ($runtimeDll in @("libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll")) {
+            $runtimePath = Join-Path "C:\msys64\ucrt64\bin" $runtimeDll
+            if (Test-Path $runtimePath) {
+                Copy-Item -Force $runtimePath (Join-Path $freedvDist $runtimeDll)
+            }
+        }
+    }
+
+    $radeBuildSrc = Get-ChildItem -Path $repoRoot -Directory -Filter ".tmp-radae-nopy-build*" -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName "src" } |
+        Where-Object { Test-Path (Join-Path $_ "librade.dll") } |
+        Select-Object -First 1
+    if ($radeBuildSrc -and (Test-Path $radeBuildSrc)) {
+        foreach ($artifact in @("librade.dll", "lpcnet_demo.exe")) {
+            $artifactPath = Join-Path $radeBuildSrc $artifact
+            if (Test-Path $artifactPath) {
+                Copy-Item -Force $artifactPath (Join-Path $freedvDist $artifact)
+            }
+        }
+    }
 }
 
 if (Test-Path $nativeSstvProject) {

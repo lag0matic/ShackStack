@@ -20,6 +20,8 @@ public sealed record LongwaveContact(
     string? Country,
     string? State,
     string? Dxcc,
+    string? QrzUploadStatus,
+    string? QrzUploadDate,
     double? Latitude,
     double? Longitude,
     string? SourceSpotId

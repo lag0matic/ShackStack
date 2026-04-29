@@ -150,6 +150,18 @@ internal static class BundledDecoderWorkerLocator
             projectFile = "ShackStack.DecoderHost.GplFldigiRtty.csproj";
             executableName = "ShackStack.DecoderHost.GplFldigiRtty.exe";
         }
+        else if (string.Equals(workerBaseName, "psk_sidecar_worker", StringComparison.OrdinalIgnoreCase))
+        {
+            projectDirectory = Path.Combine(repoRoot, "src", "ShackStack.DecoderHost.GplFldigiPsk");
+            projectFile = "ShackStack.DecoderHost.GplFldigiPsk.csproj";
+            executableName = "ShackStack.DecoderHost.GplFldigiPsk.exe";
+        }
+        else if (string.Equals(workerBaseName, "freedv_codec2_sidecar", StringComparison.OrdinalIgnoreCase))
+        {
+            projectDirectory = Path.Combine(repoRoot, "src", "ShackStack.DecoderHost.GplCodec2Freedv");
+            projectFile = "ShackStack.DecoderHost.GplCodec2Freedv.csproj";
+            executableName = "ShackStack.DecoderHost.GplCodec2Freedv.exe";
+        }
         else if (string.Equals(workerBaseName, "sstv_native_sidecar", StringComparison.OrdinalIgnoreCase))
         {
             projectDirectory = Path.Combine(repoRoot, "src", "ShackStack.DecoderHost.Sstv");
@@ -203,6 +215,10 @@ internal static class BundledDecoderWorkerLocator
             ? "ShackStack.DecoderHost.GplWsjtx.exe"
             : string.Equals(workerBaseName, "rtty_sidecar_worker", StringComparison.OrdinalIgnoreCase)
                 ? "ShackStack.DecoderHost.GplFldigiRtty.exe"
+            : string.Equals(workerBaseName, "psk_sidecar_worker", StringComparison.OrdinalIgnoreCase)
+                ? "ShackStack.DecoderHost.GplFldigiPsk.exe"
+            : string.Equals(workerBaseName, "freedv_codec2_sidecar", StringComparison.OrdinalIgnoreCase)
+                ? "ShackStack.DecoderHost.GplCodec2Freedv.exe"
             : string.Equals(workerBaseName, "sstv_native_sidecar", StringComparison.OrdinalIgnoreCase)
                 ? "ShackStack.DecoderHost.Sstv.exe"
             : $"{workerBaseName}.exe";

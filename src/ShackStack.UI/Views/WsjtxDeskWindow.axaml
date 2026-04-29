@@ -32,12 +32,12 @@
           <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="10">
             <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*" RowSpacing="6">
               <TextBlock Grid.Row="0" Text="Band Activity" FontSize="12.5" FontWeight="SemiBold" Foreground="#D9DCEA" />
-              <Grid Grid.Row="1" ColumnDefinitions="50,44,40,40,56,*" ColumnSpacing="5" Margin="0,1,0,2">
+              <Grid Grid.Row="1" ColumnDefinitions="50,58,44,40,88,*" ColumnSpacing="5" Margin="0,1,0,2">
                 <TextBlock Grid.Column="0" Text="Time" Foreground="#6F778A" FontSize="10" />
                 <TextBlock Grid.Column="1" Text="Mode" Foreground="#6F778A" FontSize="10" />
                 <TextBlock Grid.Column="2" Text="SNR" Foreground="#6F778A" FontSize="10" />
                 <TextBlock Grid.Column="3" Text="DT" Foreground="#6F778A" FontSize="10" />
-                <TextBlock Grid.Column="4" Text="Hz" Foreground="#6F778A" FontSize="10" />
+                <TextBlock Grid.Column="4" Text="Frequency" Foreground="#6F778A" FontSize="10" />
                 <TextBlock Grid.Column="5" Text="Message" Foreground="#6F778A" FontSize="10" />
               </Grid>
               <Border Grid.Row="2" Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="6">
@@ -62,7 +62,7 @@
                   <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:WsjtxMessageItem">
                       <Border Background="{Binding RowBackground}" CornerRadius="2" Padding="4,0" Margin="0,0,0,1">
-                        <Grid ColumnDefinitions="50,44,40,40,56,*" ColumnSpacing="5" MinHeight="15">
+                        <Grid ColumnDefinitions="50,58,44,40,88,*" ColumnSpacing="5" MinHeight="15">
                           <TextBlock Grid.Column="0" Text="{Binding TimeText}" Foreground="{Binding MetaBrush}" VerticalAlignment="Center" FontSize="10" />
                           <Border Grid.Column="1" Background="{Binding BadgeBackground}" CornerRadius="999" Padding="3,0" HorizontalAlignment="Left" VerticalAlignment="Center">
                             <TextBlock Text="{Binding BadgeText}" Foreground="{Binding BadgeForeground}" FontSize="8" FontWeight="SemiBold" />
@@ -81,12 +81,12 @@
 
             <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*" RowSpacing="6">
               <TextBlock Grid.Row="0" Text="{Binding WsjtxRxFrequencyTitle}" FontSize="12.5" FontWeight="SemiBold" Foreground="#D9DCEA" />
-              <Grid Grid.Row="1" ColumnDefinitions="50,44,40,40,56,*" ColumnSpacing="5" Margin="0,1,0,2">
+              <Grid Grid.Row="1" ColumnDefinitions="50,58,44,40,88,*" ColumnSpacing="5" Margin="0,1,0,2">
                 <TextBlock Grid.Column="0" Text="Time" Foreground="#6F778A" FontSize="10" />
                 <TextBlock Grid.Column="1" Text="Mode" Foreground="#6F778A" FontSize="10" />
                 <TextBlock Grid.Column="2" Text="SNR" Foreground="#6F778A" FontSize="10" />
                 <TextBlock Grid.Column="3" Text="DT" Foreground="#6F778A" FontSize="10" />
-                <TextBlock Grid.Column="4" Text="Hz" Foreground="#6F778A" FontSize="10" />
+                <TextBlock Grid.Column="4" Text="Frequency" Foreground="#6F778A" FontSize="10" />
                 <TextBlock Grid.Column="5" Text="Message" Foreground="#6F778A" FontSize="10" />
               </Grid>
               <Border Grid.Row="2" Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="6">
@@ -111,7 +111,7 @@
                   <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:WsjtxMessageItem">
                       <Border Background="{Binding RowBackground}" CornerRadius="2" Padding="4,0" Margin="0,0,0,1">
-                        <Grid ColumnDefinitions="50,44,40,40,56,*" ColumnSpacing="5" MinHeight="15">
+                        <Grid ColumnDefinitions="50,58,44,40,88,*" ColumnSpacing="5" MinHeight="15">
                           <TextBlock Grid.Column="0" Text="{Binding TimeText}" Foreground="{Binding MetaBrush}" VerticalAlignment="Center" FontSize="10" />
                           <Border Grid.Column="1" Background="{Binding BadgeBackground}" CornerRadius="999" Padding="3,0" HorizontalAlignment="Left" VerticalAlignment="Center">
                             <TextBlock Text="{Binding BadgeText}" Foreground="{Binding BadgeForeground}" FontSize="8" FontWeight="SemiBold" />
@@ -152,82 +152,75 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Spacing="10">
             <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
-              <StackPanel Spacing="8">
-            <TextBlock Text="Session Control" FontSize="16" FontWeight="SemiBold" />
-            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
-              <ComboBox Grid.Column="1" ItemsSource="{Binding WsjtxModeOptions}" SelectedItem="{Binding WsjtxSelectedMode}" />
-            </Grid>
-            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Freq" Foreground="#7F879B" VerticalAlignment="Center" />
-              <ComboBox Grid.Column="1" ItemsSource="{Binding WsjtxFrequencyOptions}" SelectedItem="{Binding WsjtxSelectedFrequency}" />
-            </Grid>
-            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left" IsVisible="{Binding WsjtxSelectedModeSupportsQso}">
-                <CheckBox IsChecked="{Binding WsjtxAutoSequenceEnabled}" Content="Auto Sequence" Margin="0,0,14,6" />
-            </WrapPanel>
-            <Grid ColumnDefinitions="72,*" ColumnSpacing="10" IsVisible="{Binding WsjtxSelectedModeSupportsQso}">
-              <TextBlock Grid.Column="0" Text="Replies" Foreground="#7F879B" VerticalAlignment="Center" />
-              <ComboBox Grid.Column="1"
-                        ItemsSource="{Binding WsjtxReplyAutomationModeOptions}"
-                        SelectedItem="{Binding SelectedWsjtxReplyAutomationMode}">
-                <ComboBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:WsjtxReplyAutomationModeItem">
-                    <TextBlock Text="{Binding Label}" />
-                  </DataTemplate>
-                </ComboBox.ItemTemplate>
-              </ComboBox>
-            </Grid>
-            <TextBlock Text="{Binding WsjtxReplyAutomationSummary}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" IsVisible="{Binding WsjtxSelectedModeSupportsQso}" />
-            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
-              <Button Content="Start RX" Command="{Binding StartWsjtxReceiveCommand}" Margin="0,0,8,6" />
-              <Button Content="Stop RX" Command="{Binding StopWsjtxReceiveCommand}" Margin="0,0,8,6" />
-              <Button Content="Reset" Command="{Binding ResetWsjtxSessionCommand}" Margin="0,0,8,6" />
-            </WrapPanel>
-            <TextBlock Text="Operator" FontSize="16" FontWeight="SemiBold" />
-            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="1" Text="{Binding WsjtxOperatorCallsign}" Foreground="#C4C8D8" />
-            </Grid>
-            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Grid" Foreground="#7F879B" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="1" Text="{Binding WsjtxOperatorGridSquare}" Foreground="#C4C8D8" />
-            </Grid>
-            <TextBlock Text="Current QSO" FontSize="16" FontWeight="SemiBold" IsVisible="{Binding WsjtxSelectedModeSupportsQso}" />
-            <Grid ColumnDefinitions="72,*" ColumnSpacing="10" IsVisible="{Binding WsjtxSelectedModeSupportsQso}">
-              <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="1" Text="{Binding WsjtxCurrentQsoCallsign}" Foreground="#E9F3FF" FontWeight="SemiBold" />
-            </Grid>
-            <Grid ColumnDefinitions="72,*" ColumnSpacing="10" IsVisible="{Binding WsjtxSelectedModeSupportsQso}">
-              <TextBlock Grid.Column="0" Text="QRZ" Foreground="#7F879B" VerticalAlignment="Top" />
-              <StackPanel Grid.Column="1" Spacing="3">
-                <TextBlock Text="{Binding WsjtxCurrentQsoLookupSummary}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding WsjtxCurrentQsoLookupDetails}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
-              </StackPanel>
-            </Grid>
-            <TextBlock Text="Longwave Log" FontSize="16" FontWeight="SemiBold" />
-            <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
-            <Grid ColumnDefinitions="72,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
-              <ComboBox Grid.Column="1"
-                        ItemsSource="{Binding LongwaveLogbooks}"
-                        SelectedItem="{Binding SelectedLongwaveLogbook}">
-                <ComboBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:LongwaveLogbookItem">
-                    <TextBlock Text="{Binding DisplayText}" />
-                  </DataTemplate>
-                </ComboBox.ItemTemplate>
-              </ComboBox>
-            </Grid>
-            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
-              <Button Content="Use Selected For Log"
-                      Command="{Binding UseSelectedWsjtxForLongwaveLogCommand}"
-                      Margin="0,0,8,0"
-                      Padding="10,4" />
-              <Button Content="Log Selected QSO"
-                      Command="{Binding LogSelectedWsjtxQsoCommand}"
-                      Padding="10,4" />
-            </WrapPanel>
-              </StackPanel>
+              <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Session Control" FontSize="16" FontWeight="SemiBold" />
+                  <WrapPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="Start RX" Command="{Binding StartWsjtxReceiveCommand}" Margin="0,0,6,0" Padding="8,3" />
+                    <Button Content="Stop RX" Command="{Binding StopWsjtxReceiveCommand}" Margin="0,0,6,0" Padding="8,3" />
+                    <Button Content="Reset" Command="{Binding ResetWsjtxSessionCommand}" Margin="0,0,6,0" Padding="8,3" />
+                    <Button Content="Test Alert" Command="{Binding InjectWsjtxDirectedTestDecodeCommand}" Padding="8,3" />
+                  </WrapPanel>
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,96,Auto,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" FontSize="10.5" />
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding WsjtxModeOptions}" SelectedItem="{Binding WsjtxSelectedMode}" />
+                  <TextBlock Grid.Column="2" Text="Freq" Foreground="#7F879B" VerticalAlignment="Center" FontSize="10.5" />
+                  <ComboBox Grid.Column="3" ItemsSource="{Binding WsjtxFrequencyOptions}" SelectedItem="{Binding WsjtxSelectedFrequency}" />
+                </Grid>
+
+                <Grid Grid.Row="2" ColumnDefinitions="Auto,150,Auto,*" ColumnSpacing="8" IsVisible="{Binding WsjtxSelectedModeSupportsQso}">
+                  <CheckBox Grid.Column="0" IsChecked="{Binding WsjtxAutoSequenceEnabled}" Content="Auto Seq" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1"
+                            ItemsSource="{Binding WsjtxReplyAutomationModeOptions}"
+                            SelectedItem="{Binding SelectedWsjtxReplyAutomationMode}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:WsjtxReplyAutomationModeItem">
+                        <TextBlock Text="{Binding Label}" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <TextBlock Grid.Column="2" Text="Op" Foreground="#7F879B" VerticalAlignment="Center" FontSize="10.5" />
+                  <TextBlock Grid.Column="3" Text="{Binding WsjtxOperatorCallsign}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                </Grid>
+
+                <Border Grid.Row="3" Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="8" IsVisible="{Binding WsjtxSelectedModeSupportsQso}">
+                  <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" RowSpacing="7">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="1">
+                      <TextBlock Text="QSO" Foreground="#7F879B" FontSize="10.5" />
+                      <TextBlock Text="{Binding WsjtxCurrentQsoCallsign}" Foreground="#E9F3FF" FontWeight="SemiBold" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Spacing="1">
+                      <TextBlock Text="{Binding WsjtxCurrentQsoLookupSummary}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding WsjtxCurrentQsoLookupDetails}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10" />
+                    </StackPanel>
+                    <ComboBox Grid.Row="0"
+                              Grid.Column="2"
+                              MinWidth="120"
+                              ItemsSource="{Binding LongwaveLogbooks}"
+                              SelectedItem="{Binding SelectedLongwaveLogbook}">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LongwaveLogbookItem">
+                          <TextBlock Text="{Binding DisplayText}" />
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Grid.Row="0"
+                            Grid.Column="3"
+                            Content="Log This Contact"
+                            Command="{Binding LogSelectedWsjtxQsoCommand}"
+                            Padding="9,4"
+                            VerticalAlignment="Center" />
+                    <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" Background="#101827" BorderBrush="#283044" BorderThickness="1" CornerRadius="5" Padding="7,5">
+                      <StackPanel Spacing="2">
+                        <TextBlock Text="{Binding WsjtxLongwaveLogPreview}" Foreground="#E9F3FF" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding WsjtxLongwaveLogDetail}" Foreground="#8E97AC" FontSize="10.5" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </Border>
+                  </Grid>
+                </Border>
+              </Grid>
             </Border>
 
             <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10" IsVisible="{Binding WsjtxSelectedModeSupportsQso}">
@@ -269,35 +262,28 @@
                 </ListBox.ItemTemplate>
               </ListBox>
             </Border>
-            <Grid Grid.Row="2" RowDefinitions="Auto,Auto" RowSpacing="6">
-              <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="{Binding WsjtxRxTrackStatus}" Foreground="#8E97AC" VerticalAlignment="Center" TextWrapping="Wrap" FontSize="10.5" />
-                <Button Grid.Column="1" Content="Track This Offset" Command="{Binding TrackSelectedWsjtxOffsetCommand}" Padding="10,4" />
-                <Button Grid.Column="2" Content="Reset Track" Command="{Binding ResetWsjtxRxFrequencyTrackCommand}" Padding="10,4" />
-              </Grid>
-              <Grid Grid.Row="1" ColumnDefinitions="*,74,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
-                <StackPanel Grid.Column="0" Spacing="1">
-                  <TextBlock Text="{Binding WsjtxTxFrequencyTitle}" Foreground="#C4C8D8" FontSize="11" />
-                  <TextBlock Text="{Binding WsjtxTxTrackStatus}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
-                </StackPanel>
-                <TextBox Grid.Column="1" Text="{Binding WsjtxTxAudioFrequencyHz}" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" MinWidth="68" />
-                <CheckBox Grid.Column="2" IsChecked="{Binding WsjtxHoldTxFrequency}" Content="Hold TX Freq" VerticalAlignment="Center" FontSize="10.5" />
-                <Button Grid.Column="3" Content="-100" Command="{Binding NudgeWsjtxTxOffsetDown100Command}" Padding="8,4" />
-                <Button Grid.Column="4" Content="-50" Command="{Binding NudgeWsjtxTxOffsetDown50Command}" Padding="8,4" />
-                <Button Grid.Column="5" Content="+50" Command="{Binding NudgeWsjtxTxOffsetUp50Command}" Padding="8,4" />
-                <Button Grid.Column="6" Content="+100" Command="{Binding NudgeWsjtxTxOffsetUp100Command}" Padding="8,4" />
-                <Button Grid.Column="7" Content="TX = RX" Command="{Binding SyncWsjtxTxToRxCommand}" Padding="10,4" />
-              </Grid>
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto,Auto,70,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="7">
+              <TextBlock Grid.Column="0" Text="{Binding WsjtxTxTrackStatus}" Foreground="#8E97AC" VerticalAlignment="Center" TextWrapping="Wrap" FontSize="10.5" />
+              <Button Grid.Column="1" Content="Track This Offset" Command="{Binding TrackSelectedWsjtxOffsetCommand}" Padding="8,4" />
+              <Button Grid.Column="2" Content="Reset Track" Command="{Binding ResetWsjtxRxFrequencyTrackCommand}" Padding="8,4" />
+              <TextBlock Grid.Column="3" Text="TX Hz" Foreground="#7F879B" VerticalAlignment="Center" FontSize="10.5" />
+              <TextBox Grid.Column="4" Text="{Binding WsjtxTxAudioFrequencyHz}" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" MinWidth="62" />
+              <CheckBox Grid.Column="5" IsChecked="{Binding WsjtxHoldTxFrequency}" Content="Hold" VerticalAlignment="Center" FontSize="10.5" />
+              <Button Grid.Column="6" Content="-100" Command="{Binding NudgeWsjtxTxOffsetDown100Command}" Padding="7,4" />
+              <Button Grid.Column="7" Content="-50" Command="{Binding NudgeWsjtxTxOffsetDown50Command}" Padding="7,4" />
+              <Button Grid.Column="8" Content="+50" Command="{Binding NudgeWsjtxTxOffsetUp50Command}" Padding="7,4" />
+              <Button Grid.Column="9" Content="+100" Command="{Binding NudgeWsjtxTxOffsetUp100Command}" Padding="7,4" />
+              <Button Grid.Column="10" Content="TX=RX" Command="{Binding SyncWsjtxTxToRxCommand}" Padding="8,4" />
             </Grid>
             <TextBlock Grid.Row="3" Text="QSO Rail" FontSize="15" FontWeight="SemiBold" />
             <Border Grid.Row="4" Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="8">
-              <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="6">
-                <TextBlock Grid.Row="0" Text="{Binding WsjtxQsoRailSummary}" Foreground="#C4C8D8" TextWrapping="Wrap" FontSize="10.5" />
-                <TextBlock Grid.Row="1" Text="{Binding WsjtxActiveSessionSummary}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
-                <TextBlock Grid.Row="2" Text="{Binding WsjtxTransmitPlanSummary}" Foreground="#AFC4FF" TextWrapping="Wrap" FontSize="10.5" />
-                <TextBlock Grid.Row="3" Text="{Binding WsjtxQueuedTransmitPreview}" Foreground="#C4C8D8" TextWrapping="Wrap" FontSize="11" />
-                <Grid Grid.Row="4" ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                  <TextBlock Grid.Column="0" Text="TX Message" Foreground="#8E97AC" VerticalAlignment="Center" FontSize="10.5" />
+              <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                  <TextBlock Grid.Column="0" Text="{Binding WsjtxQsoRailSummary}" Foreground="#C4C8D8" TextWrapping="Wrap" FontSize="10.5" />
+                  <TextBlock Grid.Column="1" Text="{Binding WsjtxTransmitArmSummary}" Foreground="#F0D58A" TextWrapping="Wrap" FontSize="10.5" />
+                </Grid>
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Send" Foreground="#8E97AC" VerticalAlignment="Center" FontSize="10.5" />
                   <TextBox Grid.Column="1"
                            Text="{Binding WsjtxManualTransmitText, UpdateSourceTrigger=PropertyChanged}"
                            Watermark="Select a suggestion or type an exact FT8 message"
@@ -306,25 +292,20 @@
                            FontSize="13"
                            HorizontalContentAlignment="Center" />
                 </Grid>
-                <StackPanel Grid.Row="5" Spacing="6">
-                  <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                    <Button Content="Stage CQ" Command="{Binding StageWsjtxCqCommand}" Margin="0,0,8,0" Padding="10,4" />
-                    <Button Content="Use Suggestion" Command="{Binding StageSelectedWsjtxSuggestedMessageCommand}" Margin="0,0,8,0" Padding="10,4" />
-                    <Button Content="Prepare + Arm" Command="{Binding SendNextWsjtxMessageCommand}" Margin="0,0,8,0" Padding="10,4" />
-                    <Button Content="Disarm" Command="{Binding DisarmWsjtxTransmitCommand}" Margin="0,0,8,0" Padding="10,4" />
-                    <Button Content="Clear QSO" Command="{Binding ClearWsjtxQueuedMessageCommand}" Padding="10,4" />
-                  </WrapPanel>
-                  <TextBlock Text="{Binding WsjtxTransmitArmSummary}" Foreground="#F0D58A" TextWrapping="Wrap" FontSize="10.5" />
-                  <TextBlock Text="{Binding WsjtxPreparedTransmitSummary}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
-                </StackPanel>
+                <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="8">
+                  <Button Grid.Column="0" Content="Prepare Typed/Staged + Arm" Command="{Binding SendNextWsjtxMessageCommand}" Padding="10,4" />
+                  <Button Grid.Column="1" Content="Disarm" Command="{Binding DisarmWsjtxTransmitCommand}" Padding="10,4" />
+                  <Button Grid.Column="2" Content="Clear QSO" Command="{Binding ClearWsjtxQueuedMessageCommand}" Padding="10,4" />
+                  <TextBlock Grid.Column="3" Text="{Binding WsjtxPreparedTransmitSummary}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" VerticalAlignment="Center" />
+                </Grid>
               </Grid>
             </Border>
-            <TextBlock Grid.Row="5" Text="Suggested Messages" FontSize="15" FontWeight="SemiBold" />
+            <TextBlock Grid.Row="5" Text="TX Templates" FontSize="15" FontWeight="SemiBold" />
             <Grid Grid.Row="6">
               <ListBox Grid.Row="0"
                        ItemsSource="{Binding WsjtxSuggestedMessages}"
                        SelectedItem="{Binding SelectedWsjtxSuggestedMessage}"
-                       MaxHeight="96"
+                       MaxHeight="220"
                        Background="#080B12"
                        BorderBrush="#1E2128"
                        BorderThickness="1">
@@ -338,12 +319,25 @@
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:WsjtxSuggestedMessageItem">
                     <Border Padding="6,3" Margin="0,0,0,1" Background="Transparent">
-                      <Grid ColumnDefinitions="78,*" ColumnSpacing="8">
+                      <Grid ColumnDefinitions="70,*,Auto,Auto" ColumnSpacing="8">
                         <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="#AFC4FF" FontSize="10.5" FontWeight="SemiBold" VerticalAlignment="Top" />
                         <StackPanel Grid.Column="1" Spacing="1">
                           <TextBlock Text="{Binding Intent}" Foreground="#8E97AC" FontSize="9.5" TextWrapping="Wrap" />
-                          <TextBlock Text="{Binding MessageText}" Foreground="#C4C8D8" FontSize="10.5" TextWrapping="Wrap" />
+                          <TextBlock Text="{Binding MessageText}" Foreground="#E9F3FF" FontFamily="Consolas" FontSize="11.5" TextWrapping="Wrap" />
                         </StackPanel>
+                        <Button Grid.Column="2"
+                                Content="Stage"
+                                Command="{Binding $parent[Window].DataContext.StageWsjtxSuggestedMessageCommand}"
+                                CommandParameter="{Binding}"
+                                Padding="8,3"
+                                Margin="0,0,4,0"
+                                VerticalAlignment="Center" />
+                        <Button Grid.Column="3"
+                                Content="Arm This"
+                                Command="{Binding $parent[Window].DataContext.PrepareAndArmWsjtxSuggestedMessageCommand}"
+                                CommandParameter="{Binding}"
+                                Padding="8,3"
+                                VerticalAlignment="Center" />
                       </Grid>
                     </Border>
                   </DataTemplate>

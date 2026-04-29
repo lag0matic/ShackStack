@@ -104,6 +104,11 @@ public static class WsjtxModeCatalog
         return labels.Length > 0 ? labels : FrequencyPresets.Select(preset => preset.DisplayLabel).Distinct().ToArray();
     }
 
-    public static string GetDefaultFrequencyLabel(string modeLabel) =>
-        GetFrequencyLabels(modeLabel).FirstOrDefault() ?? "20m FT8 14.074 MHz USB-D";
+    public static string GetDefaultFrequencyLabel(string modeLabel)
+    {
+        var labels = GetFrequencyLabels(modeLabel);
+        return labels.FirstOrDefault(label => label.StartsWith("20m ", StringComparison.OrdinalIgnoreCase))
+            ?? labels.FirstOrDefault()
+            ?? "20m FT8 14.074 MHz USB-D";
+    }
 }

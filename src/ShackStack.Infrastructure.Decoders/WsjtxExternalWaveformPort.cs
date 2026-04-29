@@ -120,7 +120,7 @@ internal sealed class WsjtxExternalWaveformPort
         {
             return new WsjtxPreparedTransmitResult(
                 false,
-                $"{modeLabel} TX waveform generation is not wired yet through the installed WSJT-X tools",
+                $"{modeLabel} TX waveform generation is not available through the installed WSJT-X tools",
                 null,
                 null);
         }

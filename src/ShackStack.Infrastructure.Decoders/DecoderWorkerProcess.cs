@@ -13,6 +13,7 @@ internal sealed class DecoderWorkerProcess : IDisposable
     private StreamWriter? _stdin;
     private Task? _stdoutTask;
     private Task? _stderrTask;
+    private int _disposed;
 
     public DecoderWorkerProcess(DecoderWorkerLaunch launch)
     {
@@ -31,6 +32,8 @@ internal sealed class DecoderWorkerProcess : IDisposable
         Action onExited,
         CancellationToken ct)
     {
+        ObjectDisposedException.ThrowIf(_disposed != 0, this);
+
         if (!_launch.Exists || IsStarted)
         {
             return Task.CompletedTask;
@@ -54,6 +57,11 @@ internal sealed class DecoderWorkerProcess : IDisposable
 
     public async Task SendJsonAsync<T>(T payload, CancellationToken ct)
     {
+        if (_disposed != 0)
+        {
+            return;
+        }
+
         if (_stdin is null)
         {
             return;
@@ -87,6 +95,11 @@ internal sealed class DecoderWorkerProcess : IDisposable
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         DecoderHostProcessCleanup.Shutdown(_process, _stdin, _stdoutTask, _stderrTask, _writeGate);
         _writeGate.Dispose();
     }

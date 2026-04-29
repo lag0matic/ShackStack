@@ -29,18 +29,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ILongwaveService, LongwaveService>();
         services.AddSingleton<IClockDisciplineService, SystemClockDisciplineService>();
         services.AddSingleton<ICwDecoderHost>(provider =>
-        {
-            var audio = provider.GetRequiredService<IAudioService>();
-            var useGgmorse = string.Equals(
-                Environment.GetEnvironmentVariable("SHACKSTACK_CW_GGMORSE"),
-                "1",
-                StringComparison.OrdinalIgnoreCase);
-
-            return useGgmorse
-                ? new GgmorseCwDecoderHost(audio)
-                : new PythonCwDecoderHost(audio);
-        });
+            new PythonCwDecoderHost(provider.GetRequiredService<IAudioService>()));
         services.AddSingleton<IRttyDecoderHost, FldigiRttyDecoderHost>();
+        services.AddSingleton<IKeyboardModeDecoderHost, FldigiPskDecoderHost>();
+        services.AddSingleton<IFreedvDigitalVoiceHost, Codec2FreedvDigitalVoiceHost>();
         services.AddSingleton<ISstvDecoderHost>(provider =>
         {
             var audio = provider.GetRequiredService<IAudioService>();
@@ -71,6 +63,8 @@ public static class ServiceCollectionExtensions
             var interopService = provider.GetRequiredService<IInteropService>();
             var cwDecoderHost = provider.GetRequiredService<ICwDecoderHost>();
             var rttyDecoderHost = provider.GetRequiredService<IRttyDecoderHost>();
+            var keyboardModeDecoderHost = provider.GetRequiredService<IKeyboardModeDecoderHost>();
+            var freedvDigitalVoiceHost = provider.GetRequiredService<IFreedvDigitalVoiceHost>();
             var sstvDecoderHost = provider.GetRequiredService<ISstvDecoderHost>();
             var sstvTransmitService = provider.GetRequiredService<ISstvTransmitService>();
             var wefaxDecoderHost = provider.GetRequiredService<IWefaxDecoderHost>();
@@ -88,6 +82,8 @@ public static class ServiceCollectionExtensions
                 interopService,
                 cwDecoderHost,
                 rttyDecoderHost,
+                keyboardModeDecoderHost,
+                freedvDigitalVoiceHost,
                 sstvDecoderHost,
                 sstvTransmitService,
                 wefaxDecoderHost,

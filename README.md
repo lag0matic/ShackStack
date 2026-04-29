@@ -42,11 +42,11 @@ The 1.0 release is published from `main`. Older cleanup and beta branches remain
 
 ## In Progress / Rough Edges
 
-- CW decode remains experimental. The Python adaptive path is still the practical default; the `ggmorse` native bridge exists as a work-in-progress path but is not the dependable default.
+- CW decode remains experimental. The Python adaptive worker is the only current CW RX path; old `ggmorse` bridge work has been removed to keep the surface honest.
 - FT8/FT4 auto-sequencing and auto-logging should still be watched carefully during real QSOs.
 - RTTY decode depends heavily on signal quality, polarity, passband placement, shift, and baud. Manual tuning is part of the workflow.
 - JS8 TX supports the current short Varicode/Huffman text path and live heartbeat/reply use. Richer JS8Call message packing can still be expanded.
-- WSPR is present as a weak-signal monitor target and frequency preset set, but WSPR TX/QSO automation is not part of 1.0.
+- WSPR receive is wired as a weak-signal monitor path using the bundled WSJT-X `wsprd.exe`; WSPR TX/QSO automation is not part of 1.0.
 - Q65, FST4, FST4W, JT65, JT9, JT4, and MSK144 are scaffolded as weak-signal monitor modes, but they are not 1.0 headline-tested operator workflows.
 - SSTV AVT exists in the native workbench/harness path but is not a priority ham workflow for 1.0.
 - Installer/update flow is simple: self-contained `win-x64` publish wrapped by Inno Setup. No auto-updater yet.
@@ -110,7 +110,6 @@ publish\ShackStack-Setup-v1.0.exe
 - `src/ShackStack.DecoderHost.GplFldigiRtty`: GPL RTTY sidecar using fldigi-derived receive logic.
 - `src/ShackStack.DecoderHost.Sstv`: native SSTV sidecar with MMSSTV-shaped RX/TX implementation.
 - `src/ShackStack.DecoderWorkers.Python`: remaining Python worker sources for CW, WeFAX, and legacy/support workers.
-- `vendor/ggmorse`: vendored ggmorse source used by the experimental native CW path.
 - `installer`: Inno Setup packaging and worker-build scripts.
 - `docs`: release notes, deployment notes, and implementation/porting notes.
 
@@ -125,7 +124,6 @@ Important upstream/license areas:
 - fldigi-derived RTTY receive logic is GPL-family work.
 - MMSSTV-derived SSTV receive/transmit behavior is GPL/LGPL-family work based on the upstream MMSSTV source and notes.
 - `py_wefax` inspired portions of the WeFAX receive DSP path; keep attribution to the upstream project when distributing source or binaries.
-- `ggmorse` is MIT licensed. Its copyright/license notice must remain with vendored or redistributed copies.
 - Avalonia, NAudio, CommunityToolkit.Mvvm, Microsoft.Extensions.DependencyInjection, SkiaSharp, and other NuGet/runtime dependencies retain their own upstream licenses.
 - Bundled Python worker environments include third-party Python packages; their licenses must be preserved in binary distributions.
 - Bundled WSJT/JS8 runtime folders may include Qt, FFTW, Hamlib, PortAudio, Boost, libusb, MinGW runtime libraries, and related dependencies; keep their license files/notices with redistributed binaries.

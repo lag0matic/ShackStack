@@ -204,6 +204,42 @@
             </StackPanel>
           </Border>
 
+          <Border Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="8" Padding="10">
+            <StackPanel Spacing="8">
+              <TextBlock Text="JS8 / Longwave Log" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="Select a real directed/contact decode first. Heartbeats are useful for propagation, but should not be auto-logged."
+                         Foreground="#AAB1C7"
+                         TextWrapping="Wrap"
+                         FontSize="11" />
+              <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+              <Grid ColumnDefinitions="76,*" ColumnSpacing="8">
+                <TextBlock Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding LongwaveLogbooks}" SelectedItem="{Binding SelectedLongwaveLogbook}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LongwaveLogbookItem">
+                      <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </Grid>
+              <Grid ColumnDefinitions="76,*" ColumnSpacing="8">
+                <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" Text="{Binding LongwaveLogCallsign}" Watermark="Worked station" />
+              </Grid>
+              <Grid ColumnDefinitions="76,*,*" ColumnSpacing="8">
+                <TextBlock Grid.Column="0" Text="SNR S/R" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" Text="{Binding LongwaveLogRstSent}" />
+                <TextBox Grid.Column="2" Text="{Binding LongwaveLogRstReceived}" />
+              </Grid>
+              <WrapPanel Orientation="Horizontal">
+                <Button Content="Use Selected" Command="{Binding UseSelectedJs8ForLongwaveLogCommand}" Margin="0,0,8,6" Padding="10,4" />
+                <Button Content="Log QSO" Command="{Binding LogCurrentQsoCommand}" IsVisible="{Binding IsCreatingLongwaveContact}" Margin="0,0,8,6" Padding="10,4" />
+                <Button Content="Save" Command="{Binding UpdateSelectedLongwaveContactCommand}" IsVisible="{Binding IsEditingLongwaveContact}" Margin="0,0,8,6" Padding="10,4" />
+                <Button Content="New" Command="{Binding NewLongwaveContactCommand}" Margin="0,0,8,6" Padding="10,4" />
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+
           <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
             <Grid RowDefinitions="Auto,*" RowSpacing="6">
               <TextBlock Grid.Row="0" Text="Quick Messages" FontSize="16" FontWeight="SemiBold" />

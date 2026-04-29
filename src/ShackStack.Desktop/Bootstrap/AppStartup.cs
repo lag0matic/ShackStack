@@ -68,7 +68,7 @@ public sealed class AppStartup(
         }
         catch
         {
-            // Fake FLRig should not prevent the main app from starting or the radio from connecting.
+            // External FLRig compatibility should not prevent the main app from starting or the radio from connecting.
         }
     }
 

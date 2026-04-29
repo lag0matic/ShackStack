@@ -5,8 +5,13 @@ internal sealed class NativeSstvReceiver
     private const int WorkingSampleRate = SstvWorkingConfig.WorkingSampleRate;
     private const double MinAutoSyncProminence = 1.34;
     private const double MinConfiguredSyncProminence = 1.18;
+    private const double MinRobotVisSyncProminence = 1.08;
     private const double MinAutoSyncLeadRatio = 1.06;
     private const double MinMartin1LeadRatio = 1.03;
+    private const int MinAutoSyncStrongLines = 8;
+    private const int MinConfiguredSyncStrongLines = 7;
+    private const int MinVisFollowUpStrongLines = 2;
+    private const int MinRobotVisFollowUpStrongLines = 1;
     private const int SessionIdleSignalThreshold = 6;
     private const int SessionMissingSyncLineThreshold = 8;
     private const double MinChunkActivityForPendingVis = 0.010;
@@ -37,6 +42,7 @@ internal sealed class NativeSstvReceiver
     private int? _lastForcedStartSample;
     private int? _lastCatalogStartSample;
     private int? _pendingVisSearchOriginSample;
+    private bool _pendingVisFromBufferedDetector;
     private bool _configuredSessionStarted;
     private bool _manualForceStartPending;
     private bool _mmsstvRemoteSyncStart = true;
@@ -195,6 +201,7 @@ internal sealed class NativeSstvReceiver
         _lastForcedStartSample = null;
         _lastCatalogStartSample = null;
         _pendingVisSearchOriginSample = null;
+        _pendingVisFromBufferedDetector = false;
         _configuredSessionStarted = false;
         _session = null;
         _lastCompletedSession = null;
@@ -321,7 +328,9 @@ internal sealed class NativeSstvReceiver
         }
 
         var shouldRunMmsstvSyncScanner =
-            (_mmsstvRemoteSyncStart && _session is null && _pendingVisProfile is null)
+            (_mmsstvRemoteSyncStart
+                && _session is null
+                && (_pendingVisProfile is null || IsMmsstvAcquisitionActive()))
             || (_mmsstvRemoteSyncStart && _session is not null && IsMmsstvRxUnlocked() && _mmsstvSyncRestart);
         if (shouldRunMmsstvSyncScanner)
         {
@@ -491,13 +500,17 @@ internal sealed class NativeSstvReceiver
             case MmsstvDemodState.EarlySyncEvent.VisResolvedMode:
                 if (MmsstvModeCatalog.Profiles.FirstOrDefault(p => p.Id == result.ModeId) is { } profile)
                 {
+                    _pendingVisFromBufferedDetector = false;
                     if (ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase)
-                        && TryResolveBufferedDirectVis(out var directProfile)
-                        && directProfile.Id != profile.Id)
+                        && TryResolveBufferedDirectVis(out var directProfile))
                     {
-                        profile = directProfile;
-                        _demodState.VisData = profile.VisCode;
-                        _demodState.NextMode = (int)profile.Id;
+                        _pendingVisFromBufferedDetector = true;
+                        if (directProfile.Id != profile.Id)
+                        {
+                            profile = directProfile;
+                            _demodState.VisData = profile.VisCode;
+                            _demodState.NextMode = (int)profile.Id;
+                        }
                     }
 
                     _pendingVisProfile = profile;
@@ -513,6 +526,7 @@ internal sealed class NativeSstvReceiver
 
             case MmsstvDemodState.EarlySyncEvent.ApplyEnterForcedStart:
                 _syncStatus = $"1200 Hz confirm complete for {(_pendingVisProfile?.Name ?? _detectedMode)}";
+                TryConsumeForcedStart();
                 break;
 
             case MmsstvDemodState.EarlySyncEvent.ApplyEnterAvtWait:
@@ -567,6 +581,7 @@ internal sealed class NativeSstvReceiver
         _visSearchFrameIndex = Math.Max(_visSearchFrameIndex, nextFrameIndex);
         _pendingVisSearchOriginSample = nextFrameIndex * WorkingSampleRate * 10 / 1000;
         _pendingVisDetectedSample = _samples.Count;
+        _pendingVisFromBufferedDetector = true;
         profile = directProfile;
         return true;
     }
@@ -579,11 +594,37 @@ internal sealed class NativeSstvReceiver
             return;
         }
 
+        if (ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_pendingVisProfile is null)
+            {
+                _sessionOrigin = "interval-probe";
+                _lastSyncProminence = 0.0;
+                _syncStatus = $"Interval sync candidate {profile.Name}; waiting for VIS before auto-start";
+            }
+            else
+            {
+                _sessionOrigin = "vis";
+                _syncStatus = $"VIS detected for {_pendingVisProfile.Name}; confirming 1200 Hz sync";
+            }
+
+            return;
+        }
+
         if (UseMmsstvFullRxForSessionStart)
         {
-            if (_lastCatalogStartSample is int sourceStart)
+            var catalogResult = FindBestSyncStart(profile, _lastCatalogStartSample);
+            if (catalogResult is not null
+                && IsReliableSyncCandidate(catalogResult.Value, MinAutoSyncProminence, MinAutoSyncStrongLines)
+                && HasStrongActivityAround(catalogResult.Value.StartSample, profile))
             {
-                StartSession(sourceStart, profile, $"{status} {profile.Name}", origin, 0.0);
+                StartSession(catalogResult.Value.StartSample, profile, $"{status} {profile.Name}", origin, catalogResult.Value.Prominence);
+            }
+            else
+            {
+                _sessionOrigin = "interval-probe";
+                _lastSyncProminence = catalogResult?.Prominence ?? 0.0;
+                _syncStatus = $"Interval sync candidate {profile.Name} needs stronger line confirmation";
             }
 
             return;
@@ -595,7 +636,11 @@ internal sealed class NativeSstvReceiver
             return;
         }
 
-        StartSession(result.Value.StartSample, profile, $"{status} {profile.Name}", origin, result.Value.Prominence);
+        if (IsReliableSyncCandidate(result.Value, MinAutoSyncProminence, MinAutoSyncStrongLines)
+            && HasStrongActivityAround(result.Value.StartSample, profile))
+        {
+            StartSession(result.Value.StartSample, profile, $"{status} {profile.Name}", origin, result.Value.Prominence);
+        }
     }
 
     private void DetectVisIfPossible(out bool imageUpdated)
@@ -628,6 +673,7 @@ internal sealed class NativeSstvReceiver
         var visSearchOrigin = nextFrameIndex * WorkingSampleRate * 10 / 1000;
         _pendingVisSearchOriginSample = visSearchOrigin;
         _pendingVisDetectedSample = _samples.Count;
+        _pendingVisFromBufferedDetector = true;
 
         _demodState.SyncMode = MmsstvDemodSyncMode.DecodeVis;
         _demodState.VisData = profile.VisCode;
@@ -635,7 +681,8 @@ internal sealed class NativeSstvReceiver
 
         var result = FindBestSyncStart(profile, visSearchOrigin);
         if (result is not null
-            && result.Value.Prominence >= MinConfiguredSyncProminence)
+            && IsReliableVisFollowUpCandidate(result.Value, profile)
+            && HasStrongActivityAround(result.Value.StartSample, profile))
         {
             StartSession(result.Value.StartSample, profile, $"VIS + sync lock {profile.Name}", "vis+sync", result.Value.Prominence);
             imageUpdated = false;
@@ -643,6 +690,7 @@ internal sealed class NativeSstvReceiver
         else
         {
             _pendingVisProfile = profile;
+            _pendingVisFromBufferedDetector = true;
             _detectedMode = profile.Name;
             _sessionOrigin = "vis";
             _lastSyncProminence = result?.Prominence ?? 0.0;
@@ -655,7 +703,7 @@ internal sealed class NativeSstvReceiver
             else
             {
                 _demodState.BeginApplyNextMode(WorkingSampleRate);
-                _syncStatus = $"VIS detected for {profile.Name}; waiting for line sync";
+                _syncStatus = $"VIS detected for {profile.Name}; confirming 1200 Hz sync";
             }
         }
     }
@@ -714,7 +762,7 @@ internal sealed class NativeSstvReceiver
 
         var result = FindBestSyncStart(_pendingVisProfile, _pendingVisSearchOriginSample);
         if (result is not null
-            && result.Value.Prominence >= MinConfiguredSyncProminence
+            && IsReliableVisFollowUpCandidate(result.Value, _pendingVisProfile)
             && HasStrongActivityAround(result.Value.StartSample, _pendingVisProfile))
         {
             StartSession(
@@ -744,7 +792,7 @@ internal sealed class NativeSstvReceiver
         {
             _demodState.BeginApplyNextMode(WorkingSampleRate);
         }
-        _syncStatus = $"VIS detected for {_pendingVisProfile.Name}; waiting for line sync";
+        _syncStatus = $"VIS detected for {_pendingVisProfile.Name}; confirming 1200 Hz sync";
     }
 
     private void MaybeForceStartAuto()
@@ -810,7 +858,7 @@ internal sealed class NativeSstvReceiver
                 ? MinMartin1LeadRatio
                 : MinAutoSyncLeadRatio;
             var hasSeparation = runnerUp is null || best.Value.Prominence >= (runnerUp.Value.Prominence * requiredLeadRatio);
-            if (best.Value.Prominence >= MinAutoSyncProminence && hasActivity && hasSeparation)
+            if (IsReliableSyncCandidate(best.Value, MinAutoSyncProminence, MinAutoSyncStrongLines) && hasActivity && hasSeparation)
             {
                 StartSession(best.Value.StartSample, bestProfile, $"Auto sync lock {bestProfile.Name}", "auto-sync", best.Value.Prominence);
             }
@@ -822,7 +870,7 @@ internal sealed class NativeSstvReceiver
                     ? $"Possible {bestProfile.Name} sync seen without enough image activity; waiting for VIS or a stronger lock"
                     : !hasSeparation && runnerUpProfile is not null
                         ? $"Ambiguous sync candidate {bestProfile.Name} vs {runnerUpProfile.Name}; waiting for VIS or a clearer lock"
-                        : $"Weak sync candidate {bestProfile.Name} ({best.Value.Prominence:0.00}x); waiting for stronger lock";
+                        : $"Weak sync candidate {bestProfile.Name} ({best.Value.Prominence:0.00}x, {best.Value.StrongLineCount}/{best.Value.UsedLineCount} lines); waiting for stronger lock";
             }
         }
     }
@@ -854,7 +902,8 @@ internal sealed class NativeSstvReceiver
             return;
         }
 
-        if (result.Value.Prominence >= MinConfiguredSyncProminence)
+        if (IsReliableSyncCandidate(result.Value, MinConfiguredSyncProminence, MinConfiguredSyncStrongLines)
+            && HasStrongActivityAround(result.Value.StartSample, profile))
         {
             StartSession(result.Value.StartSample, profile, $"{profile.Name} sync lock", "configured-sync", result.Value.Prominence);
         }
@@ -863,7 +912,7 @@ internal sealed class NativeSstvReceiver
             _demodState.SyncMode = MmsstvDemodSyncMode.WaitingForSyncTrigger;
             _sessionOrigin = "configured-probe";
             _lastSyncProminence = result.Value.Prominence;
-            _syncStatus = $"Weak {profile.Name} sync candidate ({result.Value.Prominence:0.00}x); waiting for stronger lock";
+            _syncStatus = $"Weak {profile.Name} sync candidate ({result.Value.Prominence:0.00}x, {result.Value.StrongLineCount}/{result.Value.UsedLineCount} lines); waiting for stronger lock";
         }
     }
 
@@ -959,6 +1008,14 @@ internal sealed class NativeSstvReceiver
             return;
         }
 
+        if (_pendingVisProfile is not null && (int)_pendingVisProfile.Id != _demodState.NextMode)
+        {
+            _demodState.NextMode = (int)_pendingVisProfile.Id;
+            _demodState.BeginApplyNextMode(WorkingSampleRate);
+            _syncStatus = $"VIS detected for {_pendingVisProfile.Name}; ignoring conflicting sync candidate";
+            return;
+        }
+
         SstvModeProfile? profile = null;
         if (_pendingVisProfile is not null && (int)_pendingVisProfile.Id == _demodState.NextMode)
         {
@@ -1001,7 +1058,54 @@ internal sealed class NativeSstvReceiver
 
         if (UseMmsstvFullRxForSessionStart)
         {
-            if (_lastForcedStartSample is int sourceStart)
+            if (_pendingVisProfile is not null && !_pendingVisFromBufferedDetector)
+            {
+                var visResult = FindBestSyncStart(profile, _pendingVisSearchOriginSample);
+                if (visResult is null
+                    || !IsReliableVisFollowUpCandidate(visResult.Value, profile)
+                    || !HasStrongActivityAround(visResult.Value.StartSample, profile))
+                {
+                    var pendingName = _pendingVisProfile.Name;
+                    ClearPendingVis();
+                    _syncStatus = $"Rejected weak VIS follow-up for {pendingName}; listening for VIS / sync tones";
+                    return;
+                }
+
+                StartSession(
+                    visResult.Value.StartSample,
+                    profile,
+                    $"VIS + sync lock {profile.Name}",
+                    "vis+sync",
+                    visResult.Value.Prominence);
+                return;
+            }
+
+            SyncCandidate? reliableStart = null;
+            if (_pendingVisProfile is null
+                && ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryFindReliableAutoForcedStart(profile, out var resolvedReliableStart))
+                {
+                    _demodState.ResetToAutoStart();
+                    _syncStatus = $"Auto start rejected weak {profile.Name} confirmation; listening for VIS / sync tones";
+                    return;
+                }
+
+                reliableStart = resolvedReliableStart;
+            }
+
+            if (_pendingVisProfile is null
+                && ConfiguredMode.Equals("Auto Detect", StringComparison.OrdinalIgnoreCase)
+                && reliableStart is { } autoStart)
+            {
+                StartSession(
+                    autoStart.StartSample,
+                    profile,
+                    $"Forced start {profile.Name}",
+                    "forced-start",
+                    autoStart.Prominence);
+            }
+            else if (_lastForcedStartSample is int sourceStart)
             {
                 StartSession(
                     sourceStart,
@@ -1081,11 +1185,14 @@ internal sealed class NativeSstvReceiver
         int? bestStart = null;
         var bestScore = -1.0;
         var bestProminence = 0.0;
+        var bestUsedLineCount = 0;
+        var bestStrongLineCount = 0;
         for (var candidate = searchOrigin; candidate < searchLimit; candidate += candidateStep)
         {
             var score = 0.0;
             var compare = 0.0;
             var used = 0;
+            var strongLineCount = 0;
             for (var lineIndex = 0; lineIndex < 10; lineIndex++)
             {
                 var pos = candidate + (lineIndex * lineSamples);
@@ -1096,11 +1203,14 @@ internal sealed class NativeSstvReceiver
                 }
 
                 var block = span.Slice(syncPos, syncSamples);
-                var toneBank = _demodState.SyncToneBank;
-                score += SstvAudioMath.TonePower(block, WorkingSampleRate, toneBank.Tone1200Hz);
-                compare += SstvAudioMath.TonePower(block, WorkingSampleRate, toneBank.Tone1080Hz);
-                compare += SstvAudioMath.TonePower(block, WorkingSampleRate, toneBank.Tone1320Hz);
-                compare += SstvAudioMath.TonePower(block, WorkingSampleRate, toneBank.Tone1900Hz);
+                MeasureAcquisitionSyncPower(block, out var lineSyncPower, out var lineComparePower);
+                score += lineSyncPower;
+                compare += lineComparePower;
+                if ((lineSyncPower / Math.Max(1e-9, lineComparePower / 3.0)) >= MinSessionSyncProminence)
+                {
+                    strongLineCount++;
+                }
+
                 used++;
             }
 
@@ -1116,6 +1226,8 @@ internal sealed class NativeSstvReceiver
                 bestScore = normalized;
                 bestProminence = prominence;
                 bestStart = candidate;
+                bestUsedLineCount = used;
+                bestStrongLineCount = strongLineCount;
             }
         }
 
@@ -1124,7 +1236,54 @@ internal sealed class NativeSstvReceiver
             return null;
         }
 
-        return new SyncCandidate(bestStart.Value, bestScore, bestProminence);
+        return new SyncCandidate(bestStart.Value, bestScore, bestProminence, bestUsedLineCount, bestStrongLineCount);
+    }
+
+    private static bool IsReliableSyncCandidate(SyncCandidate candidate, double minProminence, int minStrongLines)
+        => candidate.Prominence >= minProminence
+            && candidate.UsedLineCount >= minStrongLines
+            && candidate.StrongLineCount >= minStrongLines;
+
+    private static bool IsRobotMode(SstvModeProfile profile)
+        => profile.Id is SstvModeId.Robot36 or SstvModeId.Robot24 or SstvModeId.Robot72;
+
+    private static bool IsReliableVisFollowUpCandidate(SyncCandidate candidate, SstvModeProfile profile)
+        => IsReliableSyncCandidate(
+            candidate,
+            IsRobotMode(profile) ? MinRobotVisSyncProminence : MinConfiguredSyncProminence,
+            IsRobotMode(profile) ? MinRobotVisFollowUpStrongLines : MinVisFollowUpStrongLines);
+
+    private void MeasureAcquisitionSyncPower(ReadOnlySpan<float> block, out double syncPower, out double comparePower)
+    {
+        var toneBank = _demodState.SyncToneBank;
+        syncPower = MaxTonePower3(block, toneBank.Tone1200Hz - 45.0, toneBank.Tone1200Hz, toneBank.Tone1200Hz + 45.0);
+        comparePower =
+            MaxTonePower3(block, toneBank.Tone1080Hz - 45.0, toneBank.Tone1080Hz, toneBank.Tone1080Hz + 45.0) +
+            MaxTonePower3(block, toneBank.Tone1320Hz - 45.0, toneBank.Tone1320Hz, toneBank.Tone1320Hz + 45.0) +
+            MaxTonePower3(block, toneBank.Tone1900Hz - 45.0, toneBank.Tone1900Hz, toneBank.Tone1900Hz + 45.0);
+    }
+
+    private static double MaxTonePower3(ReadOnlySpan<float> block, double frequency1, double frequency2, double frequency3) =>
+        Math.Max(
+            SstvAudioMath.TonePower(block, WorkingSampleRate, frequency2),
+            Math.Max(
+                frequency1 <= 0.0 ? 0.0 : SstvAudioMath.TonePower(block, WorkingSampleRate, frequency1),
+                frequency3 <= 0.0 ? 0.0 : SstvAudioMath.TonePower(block, WorkingSampleRate, frequency3)));
+
+    private bool TryFindReliableAutoForcedStart(SstvModeProfile profile, out SyncCandidate candidate)
+    {
+        var result = FindBestSyncStart(profile, _lastForcedStartSample ?? _pendingVisSearchOriginSample);
+        if (result is not null
+            && IsReliableSyncCandidate(result.Value, MinAutoSyncProminence, MinAutoSyncStrongLines)
+            && HasStrongActivityAround(result.Value.StartSample, profile))
+        {
+            candidate = result.Value;
+            return true;
+        }
+
+        candidate = default;
+        _lastSyncProminence = result?.Prominence ?? 0.0;
+        return false;
     }
 
     private void StartSession(int startSample, SstvModeProfile profile, string status, string origin, double prominence)
@@ -1151,6 +1310,7 @@ internal sealed class NativeSstvReceiver
         _manualForceStartPending = false;
         _pendingVisProfile = null;
         _pendingVisSearchOriginSample = null;
+        _pendingVisFromBufferedDetector = false;
         _lastForcedStartSample = null;
         _lastCatalogStartSample = null;
         _latestImagePath = _session.ImagePath;
@@ -1304,6 +1464,7 @@ internal sealed class NativeSstvReceiver
         _pendingVisProfile = null;
         _pendingVisSearchOriginSample = null;
         _pendingVisDetectedSample = null;
+        _pendingVisFromBufferedDetector = false;
         _demodState.ResetToAutoStart();
     }
 
@@ -1467,5 +1628,10 @@ internal sealed class NativeSstvReceiver
         return sum / samples.Length;
     }
 
-    private readonly record struct SyncCandidate(int StartSample, double Score, double Prominence);
+    private readonly record struct SyncCandidate(
+        int StartSample,
+        double Score,
+        double Prominence,
+        int UsedLineCount,
+        int StrongLineCount);
 }

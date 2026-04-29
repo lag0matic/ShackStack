@@ -11,5 +11,7 @@ public sealed record AudioSettings(
     int MicGainPercent = 100,
     int VoiceCompressionPercent = 0,
     bool MicMonitorEnabled = false,
-    int MicMonitorPercent = 50
+    int MicMonitorPercent = 50,
+    string FreedvMonitorDeviceId = "",
+    int FreedvMonitorVolumePercent = 75
 );

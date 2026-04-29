@@ -10,6 +10,7 @@ internal sealed class DecoderAudioPump : IDisposable
     private readonly Channel<AudioBuffer> _audioQueue;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _pumpTask;
+    private int _disposed;
 
     public DecoderAudioPump(Func<AudioBuffer, CancellationToken, Task> sendAsync, Func<bool> isRunning, int capacity = 2)
     {
@@ -26,6 +27,11 @@ internal sealed class DecoderAudioPump : IDisposable
 
     public void Enqueue(AudioBuffer buffer)
     {
+        if (_disposed != 0)
+        {
+            return;
+        }
+
         if (!_isRunning())
         {
             return;
@@ -57,6 +63,11 @@ internal sealed class DecoderAudioPump : IDisposable
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         _audioQueue.Writer.TryComplete();
         _cts.Cancel();
         try

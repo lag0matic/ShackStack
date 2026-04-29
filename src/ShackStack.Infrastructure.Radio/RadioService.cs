@@ -832,8 +832,17 @@ public sealed class RadioService : IRadioService, IDisposable
             {
                 while (!_smeterCts.IsCancellationRequested)
                 {
-                    await Task.Delay(75, _smeterCts.Token).ConfigureAwait(false);
-                    await PollSmeterAsync(_smeterCts.Token).ConfigureAwait(false);
+                    await Task.Delay(150, _smeterCts.Token).ConfigureAwait(false);
+                    try
+                    {
+                        await PollSmeterAsync(_smeterCts.Token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or IOException)
+                    {
+                        // The IC-7300 occasionally drops a meter query while other CI-V
+                        // control traffic is active. Keep the live meter running instead
+                        // of letting one missed response permanently kill the poll loop.
+                    }
                 }
             }
             catch (OperationCanceledException)

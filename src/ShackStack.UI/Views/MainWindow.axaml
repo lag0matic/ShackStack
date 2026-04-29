@@ -265,17 +265,17 @@
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                               <TextBlock Grid.Column="0" Text="RX" Foreground="#7F879B" VerticalAlignment="Center" />
                               <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding RxLevelPercent}" Height="10" />
-                              <TextBlock Grid.Column="2" Text="{Binding RxLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                              <TextBlock Grid.Column="2" Text="{Binding RxLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
                             </Grid>
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                               <TextBlock Grid.Column="0" Text="Mic" Foreground="#7F879B" VerticalAlignment="Center" />
                               <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MicLevelPercent}" Height="10" />
-                              <TextBlock Grid.Column="2" Text="{Binding MicLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                              <TextBlock Grid.Column="2" Text="{Binding MicLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
                             </Grid>
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                               <TextBlock Grid.Column="0" Text="TX" Foreground="#7F879B" VerticalAlignment="Center" />
                               <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding TxLevelPercent}" Height="10" />
-                              <TextBlock Grid.Column="2" Text="{Binding TxLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                              <TextBlock Grid.Column="2" Text="{Binding TxLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
                             </Grid>
                           </StackPanel>
                         </Border>
@@ -302,6 +302,46 @@
                           </StackPanel>
                         </Border>
                       </Grid>
+                    </Grid>
+                  </Border>
+                </TabItem>
+
+                <TabItem Header="Digital Voice">
+                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+                      <TextBlock Grid.Row="0" Text="FreeDV" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="1"
+                                 Text="HF digital voice using the official Codec2/FreeDV runtime."
+                                 Foreground="#AAB1C7"
+                                 TextWrapping="Wrap" />
+
+                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+                          <StackPanel Spacing="8">
+                            <TextBlock Text="FreeDV Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="Open digital voice controls, Codec2 runtime status, and RX/TX prep."
+                                       Foreground="#AAB1C7"
+                                       TextWrapping="Wrap" />
+                          </StackPanel>
+                          <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
+                            <Button Content="Open FreeDV Desk" Click="OnOpenFreedvDeskClicked" Margin="0,0,8,6" />
+                            <Button Content="Start RX" Command="{Binding StartFreedvReceiveCommand}" Margin="0,0,8,6" />
+                            <Button Content="Stop RX" Command="{Binding StopFreedvReceiveCommand}" Margin="0,0,8,6" />
+                          </WrapPanel>
+                          <Grid Grid.Row="2" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding FreedvRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                          </Grid>
+                          <Grid Grid.Row="3" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Runtime" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding FreedvRuntimeStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                          </Grid>
+                          <Grid Grid.Row="4" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding FreedvSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" FontFamily="Consolas" />
+                          </Grid>
+                        </Grid>
+                      </Border>
                     </Grid>
                   </Border>
                 </TabItem>
@@ -375,7 +415,43 @@
                           </Grid>
                           <Grid Grid.Row="3" ColumnDefinitions="76,*" ColumnSpacing="10">
                             <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
-                            <TextBlock Grid.Column="1" Text="{Binding RttySessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="1" Text="{Binding RttySessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" FontFamily="Consolas" />
+                          </Grid>
+                        </Grid>
+                      </Border>
+                    </Grid>
+                  </Border>
+                </TabItem>
+
+                <TabItem Header="Keyboard">
+                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
+                      <TextBlock Grid.Row="0" Text="Keyboard Modes" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="1"
+                                 Text="PSK31/63 receive with fldigi-derived filtering, DCD, Varicode, and AFC tracking."
+                                 Foreground="#AAB1C7"
+                                 TextWrapping="Wrap" />
+
+                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
+                          <StackPanel Spacing="8">
+                            <TextBlock Text="Keyboard Modes Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="Open PSK copy, audio-center tuning, reverse polarity, and live text."
+                                       Foreground="#AAB1C7"
+                                       TextWrapping="Wrap" />
+                          </StackPanel>
+                          <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
+                            <Button Content="Open Keyboard Desk" Click="OnOpenKeyboardModesDeskClicked" Margin="0,0,8,6" />
+                            <Button Content="Start RX" Command="{Binding StartKeyboardReceiveCommand}" Margin="0,0,8,6" />
+                            <Button Content="Stop RX" Command="{Binding StopKeyboardReceiveCommand}" Margin="0,0,8,6" />
+                          </WrapPanel>
+                          <Grid Grid.Row="2" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding KeyboardRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                          </Grid>
+                          <Grid Grid.Row="3" ColumnDefinitions="76,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
+                            <TextBlock Grid.Column="1" Text="{Binding KeyboardSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" FontFamily="Consolas" />
                           </Grid>
                         </Grid>
                       </Border>
@@ -513,7 +589,7 @@
                           </Grid>
                           <Grid Grid.Row="3" ColumnDefinitions="76,*" ColumnSpacing="10">
                             <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
-                            <TextBlock Grid.Column="1" Text="{Binding SstvSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="1" Text="{Binding SstvSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" FontFamily="Consolas" />
                           </Grid>
                           <Grid Grid.Row="4" ColumnDefinitions="76,*" ColumnSpacing="10">
                             <TextBlock Grid.Column="0" Text="Image" Foreground="#7F879B" />
@@ -559,181 +635,6 @@
                   </Border>
                 </TabItem>
 
-                <TabItem Header="Longwave Legacy" IsVisible="False">
-                  <Grid ColumnDefinitions="1.35*,1*" ColumnSpacing="12" Margin="0,8,0,0">
-                    <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12">
-                      <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                          <StackPanel Grid.Column="0" Spacing="2">
-                            <TextBlock Text="Longwave" FontSize="18" FontWeight="SemiBold" />
-                            <TextBlock Text="Contacts, logbooks, and logging tools." Foreground="#AAB1C7" TextWrapping="Wrap" />
-                          </StackPanel>
-                          <Button Grid.Column="1"
-                                  Content="Refresh"
-                                  Command="{Binding RefreshLongwaveSpotsCommand}"
-                                  MinWidth="88"
-                                  HorizontalAlignment="Right" />
-                        </Grid>
-
-                        <TextBlock Grid.Row="1" Text="{Binding LongwaveStatus}" Foreground="#7F879B" TextWrapping="Wrap" />
-
-                        <TabControl Grid.Row="2">
-                          <TabItem Header="Contacts">
-                            <Grid RowDefinitions="*,Auto" RowSpacing="8">
-                              <ListBox ItemsSource="{Binding LongwaveRecentContacts}"
-                                       SelectedItem="{Binding SelectedLongwaveRecentContact}"
-                                       Background="#0C1017"
-                                       BorderBrush="#1E2128"
-                                       BorderThickness="1"
-                                       MinHeight="220">
-                                <ListBox.Styles>
-                                  <Style Selector="ListBoxItem">
-                                    <Setter Property="Padding" Value="0" />
-                                    <Setter Property="Margin" Value="0" />
-                                    <Setter Property="MinHeight" Value="0" />
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="BorderThickness" Value="0" />
-                                  </Style>
-                                  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                                    <Setter Property="Background" Value="Transparent" />
-                                  </Style>
-                                  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                                    <Setter Property="Background" Value="Transparent" />
-                                  </Style>
-                                </ListBox.Styles>
-                                <ListBox.ItemTemplate>
-                                  <DataTemplate x:DataType="vm:LongwaveRecentContactItem">
-                                    <Border Background="#0C1017" Padding="3,0" Margin="0" CornerRadius="2">
-                                      <Grid ColumnDefinitions="44,36,66,84,*" ColumnSpacing="4" MinHeight="16">
-                                        <TextBlock Grid.Column="0" Text="{Binding Band}" Foreground="#AAB1C7" FontSize="10.5" VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Mode}" Foreground="#AFC4FF" FontSize="10.5" VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="2" Text="{Binding FrequencyText}" Foreground="#C4C8D8" FontSize="10.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Grid.Column="3" Text="{Binding TimeText}" Foreground="#7F879B" FontSize="9.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Grid.Column="4" Text="{Binding SummaryText}" Foreground="#E5ECFF" FontSize="10.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                      </Grid>
-                                    </Border>
-                                  </DataTemplate>
-                                </ListBox.ItemTemplate>
-                              </ListBox>
-
-                              <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
-                                <Button Content="Delete Contact"
-                                        Command="{Binding DeleteSelectedLongwaveContactCommand}"
-                                        MinWidth="112" />
-                              </StackPanel>
-                            </Grid>
-                          </TabItem>
-
-                          <TabItem Header="Logbooks">
-                            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
-                              <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <TextBox Grid.Column="0"
-                                         Text="{Binding LongwaveNewLogbookName}"
-                                         Watermark="New logbook name" />
-                                <Button Grid.Column="1"
-                                        Content="Create"
-                                        Command="{Binding CreateLongwaveLogbookCommand}"
-                                        MinWidth="80" />
-                              </Grid>
-
-                              <ListBox Grid.Row="1"
-                                       ItemsSource="{Binding LongwaveLogbooks}"
-                                       SelectedItem="{Binding SelectedLongwaveLogbook}"
-                                       Background="#0C1017"
-                                       BorderBrush="#1E2128"
-                                       BorderThickness="1"
-                                       MinHeight="220">
-                                <ListBox.Styles>
-                                  <Style Selector="ListBoxItem">
-                                    <Setter Property="Padding" Value="0" />
-                                    <Setter Property="Margin" Value="0" />
-                                    <Setter Property="MinHeight" Value="0" />
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="BorderThickness" Value="0" />
-                                  </Style>
-                                  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                                    <Setter Property="Background" Value="Transparent" />
-                                  </Style>
-                                  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                                    <Setter Property="Background" Value="Transparent" />
-                                  </Style>
-                                </ListBox.Styles>
-                                <ListBox.ItemTemplate>
-                                  <DataTemplate x:DataType="vm:LongwaveLogbookItem">
-                                    <Border Background="#0C1017" Padding="3,1" Margin="0" CornerRadius="2">
-                                      <TextBlock Text="{Binding DisplayText}" Foreground="#E5ECFF" FontSize="11" TextTrimming="CharacterEllipsis" />
-                                    </Border>
-                                  </DataTemplate>
-                                </ListBox.ItemTemplate>
-                              </ListBox>
-
-                              <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
-                                <Button Content="Delete Logbook"
-                                        Command="{Binding DeleteSelectedLongwaveLogbookCommand}"
-                                        MinWidth="112" />
-                              </StackPanel>
-                            </Grid>
-                          </TabItem>
-                        </TabControl>
-                      </Grid>
-                    </Border>
-
-                    <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12">
-                      <StackPanel Spacing="8">
-                        <TextBlock Text="Manual Logging" FontSize="18" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
-                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
-                          <TextBlock Grid.Row="0" Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
-                          <ComboBox Grid.Row="0" Grid.Column="1"
-                                    ItemsSource="{Binding LongwaveLogbooks}"
-                                    SelectedItem="{Binding SelectedLongwaveLogbook}">
-                            <ComboBox.ItemTemplate>
-                              <DataTemplate x:DataType="vm:LongwaveLogbookItem">
-                                <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
-                              </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                          </ComboBox>
-
-                          <TextBlock Grid.Row="1" Grid.Column="0" Text="Operator" Foreground="#7F879B" VerticalAlignment="Center" />
-                          <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LongwaveLogOperatorCallsign}" />
-
-                          <TextBlock Grid.Row="2" Grid.Column="0" Text="Callsign" Foreground="#7F879B" VerticalAlignment="Center" />
-                          <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding LongwaveLogCallsign}" />
-
-                          <TextBlock Grid.Row="3" Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
-                          <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding LongwaveLogMode}" />
-
-                          <TextBlock Grid.Row="4" Grid.Column="0" Text="Band" Foreground="#7F879B" VerticalAlignment="Center" />
-                          <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding LongwaveLogBand}" />
-
-                          <TextBlock Grid.Row="5" Grid.Column="0" Text="Freq kHz" Foreground="#7F879B" VerticalAlignment="Center" />
-                          <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding LongwaveLogFrequencyKhz}" />
-
-                          <TextBlock Grid.Row="6" Grid.Column="0" Text="RST S/R" Foreground="#7F879B" VerticalAlignment="Center" />
-                          <Grid Grid.Row="6" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="8">
-                            <TextBox Grid.Column="0" Text="{Binding LongwaveLogRstSent}" />
-                            <TextBox Grid.Column="1" Text="{Binding LongwaveLogRstReceived}" />
-                          </Grid>
-
-                          <TextBlock Grid.Row="7" Grid.Column="0" Text="Park" Foreground="#7F879B" VerticalAlignment="Center" />
-                          <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding LongwaveLogParkReference}" />
-
-                          <TextBlock Grid.Row="8" Grid.Column="0" Text="Grid" Foreground="#7F879B" VerticalAlignment="Center" />
-                          <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding LongwaveLogGridSquare}" />
-                        </Grid>
-
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                          <Button Content="Use Rig For Log"
-                                  Command="{Binding UseRigForLongwaveLogCommand}"
-                                  MinWidth="112" />
-                          <Button Content="Log This QSO"
-                                  Command="{Binding LogCurrentQsoCommand}"
-                                  MinWidth="108" />
-                        </StackPanel>
-                      </StackPanel>
-                    </Border>
-                  </Grid>
-                </TabItem>
               </TabControl>
             </StackPanel>
           </ScrollViewer>
@@ -873,7 +774,7 @@
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6" Margin="0,-2,0,0">
               <TextBlock Grid.Column="0" Text="Vol" Foreground="#7F879B" FontSize="10" VerticalAlignment="Center" />
               <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MonitorVolumePercent}" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="2" Text="{Binding MonitorVolumePercent, StringFormat={}{0}%}" Foreground="#7F879B" FontSize="10" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Text="{Binding MonitorVolumePercent, StringFormat={}{0}%}" Foreground="#7F879B" FontSize="10" VerticalAlignment="Center" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
             </Grid>
           </StackPanel>
           <StackPanel Grid.Column="1" Spacing="3" Margin="0,0,8,0">
@@ -881,7 +782,16 @@
             <ProgressBar Minimum="0" Maximum="100" Value="{Binding TxLevelPercent}" Height="8" />
           </StackPanel>
           <StackPanel Grid.Column="2" Spacing="3" Margin="0,0,8,0">
-            <TextBlock Text="S-METER" Foreground="#666E84" FontSize="10" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" Text="S-METER" Foreground="#666E84" FontSize="10" />
+              <TextBlock Grid.Column="1"
+                         Text="{Binding SmeterDisplay}"
+                         Foreground="#DDE7FF"
+                         FontSize="10"
+                         FontFamily="Consolas"
+                         MinWidth="28"
+                         TextAlignment="Right" />
+            </Grid>
             <Border Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="6,4">
               <Grid RowDefinitions="Auto,Auto">
                 <ItemsControl ItemsSource="{Binding SmeterSegmentBrushes}">
@@ -1027,6 +937,18 @@
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
+          <TextBlock Text="FreeDV Speech Output" Foreground="#7F879B" />
+          <ComboBox ItemsSource="{Binding OutputDeviceOptions}" SelectedItem="{Binding SelectedFreedvMonitorDevice}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding FriendlyName}" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <TextBlock Text="{Binding FreedvMonitorDeviceDisplay, StringFormat=FreeDV decoded speech: {0}}"
+                     Foreground="#8F9BB4"
+                     TextWrapping="Wrap"
+                     FontSize="11" />
           <Button Content="Refresh Devices" Command="{Binding RefreshAudioDevicesCommand}" MinWidth="132" HorizontalAlignment="Left" />
         </StackPanel>
       </Border>
@@ -1038,12 +960,15 @@
             <CheckBox IsChecked="{Binding SettingsBandConditionsEnabled}" Content="Enable band conditions panel" />
           <CheckBox IsChecked="{Binding SettingsShowExperimentalCw}" Content="Show experimental CW panel" />
           <Separator />
-          <TextBlock Text="Fake FLRig" FontSize="15" FontWeight="SemiBold" />
+          <TextBlock Text="External FLRig Compatibility" FontSize="15" FontWeight="SemiBold" />
+          <TextBlock Text="Expose ShackStack as an FLRig-compatible endpoint for external apps such as HAMRS or a remote Longwave client. Leave this off for normal home operation."
+                     Foreground="#8F9BB4"
+                     TextWrapping="Wrap" />
+          <CheckBox IsChecked="{Binding SettingsFlrigEnabled}" Content="Enable FLRig compatibility server" />
           <TextBlock Text="FLRig host" Foreground="#7F879B" />
           <TextBox Text="{Binding SettingsFlrigHost}" />
           <TextBlock Text="FLRig port" Foreground="#7F879B" />
           <TextBox Text="{Binding SettingsFlrigPort}" />
-          <CheckBox IsChecked="{Binding SettingsFlrigEnabled}" Content="Enable fake FLRig server" />
           <TextBlock Text="{Binding SettingsStatusMessage}" Foreground="#AAB1C7" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="8">
               <Button Content="Save" Command="{Binding SaveSettingsCommand}" MinWidth="96" />
@@ -1130,7 +1055,7 @@
       <Border Grid.Column="2" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12">
         <StackPanel Spacing="8">
           <TextBlock Text="Interop And Conditions" FontSize="18" FontWeight="SemiBold" />
-          <TextBlock Text="Fake FLRig status and the band-conditions background service."
+          <TextBlock Text="External FLRig compatibility status and the band-conditions background service."
                      TextWrapping="Wrap"
                      Foreground="#AAB1C7" />
           <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
@@ -1157,7 +1082,11 @@
     <Border Grid.Row="6" Background="#080A0D" BorderBrush="#1E2128" BorderThickness="0,1,0,0" Padding="12,8">
       <Grid ColumnDefinitions="*,Auto">
         <Border Grid.Column="0" />
-        <TextBlock Grid.Column="1" Text="{Binding FlrigEndpoint, StringFormat=FLRig: {0}}" Foreground="#5C6272" FontSize="11" />
+        <TextBlock Grid.Column="1"
+                   Text="{Binding FlrigEndpoint, StringFormat=FLRig compatibility: {0}}"
+                   IsVisible="{Binding SettingsFlrigEnabled}"
+                   Foreground="#5C6272"
+                   FontSize="11" />
       </Grid>
     </Border>
   </Grid>

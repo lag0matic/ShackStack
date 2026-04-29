@@ -11,8 +11,10 @@ public partial class MainWindow : Window
     private bool _isClosing;
     private SstvDeskWindow? _sstvDeskWindow;
     private VoiceDeskWindow? _voiceDeskWindow;
+    private FreedvDeskWindow? _freedvDeskWindow;
     private CwDeskWindow? _cwDeskWindow;
     private RttyDeskWindow? _rttyDeskWindow;
+    private KeyboardModesDeskWindow? _keyboardModesDeskWindow;
     private WefaxDeskWindow? _wefaxDeskWindow;
     private WsjtxDeskWindow? _wsjtxDeskWindow;
     private Js8DeskWindow? _js8DeskWindow;
@@ -123,6 +125,8 @@ public partial class MainWindow : Window
 
     private void OnOpenSstvDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        EnsureLongwaveDataLoaded();
+
         if (_sstvDeskWindow is { IsVisible: true })
         {
             _sstvDeskWindow.Activate();
@@ -139,6 +143,8 @@ public partial class MainWindow : Window
 
     private void OnOpenVoiceDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        EnsureLongwaveDataLoaded();
+
         if (_voiceDeskWindow is { IsVisible: true })
         {
             _voiceDeskWindow.Activate();
@@ -153,8 +159,26 @@ public partial class MainWindow : Window
         _voiceDeskWindow.Show(this);
     }
 
+    private void OnOpenFreedvDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_freedvDeskWindow is { IsVisible: true })
+        {
+            _freedvDeskWindow.Activate();
+            return;
+        }
+
+        _freedvDeskWindow = new FreedvDeskWindow
+        {
+            DataContext = DataContext,
+        };
+        _freedvDeskWindow.Closed += (_, _) => _freedvDeskWindow = null;
+        _freedvDeskWindow.Show(this);
+    }
+
     private void OnOpenCwDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        EnsureLongwaveDataLoaded();
+
         if (_cwDeskWindow is { IsVisible: true })
         {
             _cwDeskWindow.Activate();
@@ -185,6 +209,22 @@ public partial class MainWindow : Window
         _rttyDeskWindow.Show(this);
     }
 
+    private void OnOpenKeyboardModesDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_keyboardModesDeskWindow is { IsVisible: true })
+        {
+            _keyboardModesDeskWindow.Activate();
+            return;
+        }
+
+        _keyboardModesDeskWindow = new KeyboardModesDeskWindow
+        {
+            DataContext = DataContext,
+        };
+        _keyboardModesDeskWindow.Closed += (_, _) => _keyboardModesDeskWindow = null;
+        _keyboardModesDeskWindow.Show(this);
+    }
+
     private void OnOpenWefaxDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_wefaxDeskWindow is { IsVisible: true })
@@ -203,6 +243,8 @@ public partial class MainWindow : Window
 
     private void OnOpenWsjtxDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        EnsureLongwaveDataLoaded();
+
         if (_wsjtxDeskWindow is { IsVisible: true })
         {
             _wsjtxDeskWindow.Activate();
@@ -222,6 +264,7 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel vm)
         {
             vm.ActivateJs8Desk();
+            _ = vm.EnsureLongwaveDataLoadedAsync();
         }
 
         if (_js8DeskWindow is { IsVisible: true })
@@ -240,6 +283,8 @@ public partial class MainWindow : Window
 
     private void OnOpenLongwaveDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        EnsureLongwaveDataLoaded();
+
         if (_longwaveDeskWindow is { IsVisible: true })
         {
             _longwaveDeskWindow.Activate();
@@ -252,6 +297,14 @@ public partial class MainWindow : Window
         };
         _longwaveDeskWindow.Closed += (_, _) => _longwaveDeskWindow = null;
         _longwaveDeskWindow.Show(this);
+    }
+
+    private void EnsureLongwaveDataLoaded()
+    {
+        if (DataContext is MainWindowViewModel vm)
+        {
+            _ = vm.EnsureLongwaveDataLoadedAsync();
+        }
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)
@@ -280,8 +333,10 @@ public partial class MainWindow : Window
     {
         CloseDeskWindow(_sstvDeskWindow);
         CloseDeskWindow(_voiceDeskWindow);
+        CloseDeskWindow(_freedvDeskWindow);
         CloseDeskWindow(_cwDeskWindow);
         CloseDeskWindow(_rttyDeskWindow);
+        CloseDeskWindow(_keyboardModesDeskWindow);
         CloseDeskWindow(_wefaxDeskWindow);
         CloseDeskWindow(_wsjtxDeskWindow);
         CloseDeskWindow(_js8DeskWindow);
@@ -289,8 +344,10 @@ public partial class MainWindow : Window
 
         _sstvDeskWindow = null;
         _voiceDeskWindow = null;
+        _freedvDeskWindow = null;
         _cwDeskWindow = null;
         _rttyDeskWindow = null;
+        _keyboardModesDeskWindow = null;
         _wefaxDeskWindow = null;
         _wsjtxDeskWindow = null;
         _js8DeskWindow = null;

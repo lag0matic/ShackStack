@@ -3,12 +3,21 @@ obj/
 .vs/
 !src/ShackStack.Desktop/js8call-tools/
 !src/ShackStack.Desktop/js8call-tools/**
+!src/ShackStack.Desktop/wsjtx-tools/
+!src/ShackStack.Desktop/wsjtx-tools/**
 
 publish/
 tests/
 docs/*
 !docs/DEPLOYMENT_NOTES.md
+!docs/DIGITAL_MODE_ROADMAP.md
+!docs/FREEDV_PORT_NOTES.md
+!docs/CURRENT_FEATURE_STATUS_2026-04-27.md
+!docs/DIGITAL_WEAK_MODE_STATUS_2026-04-27.md
+!docs/NEXT_STEPS_AND_TECH_DEBT_2026-04-27.md
+!docs/PROJECT_TRACKING_INDEX.md
 !docs/RELEASE_1.0_NOTES.md
+!docs/SSTV_REGRESSION_HARNESS.md
 src/ShackStack.Desktop/DecoderWorkers/
 src/ShackStack.DecoderWorkers.Python/.pyinstaller/
 

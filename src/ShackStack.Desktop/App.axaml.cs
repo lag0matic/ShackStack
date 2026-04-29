@@ -121,9 +121,19 @@ public partial class App : Application
 
         try
         {
+            DisposeMainWindowViewModel();
+        }
+        catch
+        {
+            // Best-effort shutdown only.
+        }
+
+        try
+        {
+            using var shutdownCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
             _startup?.StopServicesAsync(
                 _appContext ?? new ShackStack.Desktop.Bootstrap.AppContext(),
-                CancellationToken.None).GetAwaiter().GetResult();
+                shutdownCts.Token).GetAwaiter().GetResult();
         }
         catch
         {
@@ -135,6 +145,20 @@ public partial class App : Application
             _services = null;
             _startup = null;
             _appContext = null;
+        }
+    }
+
+    private void DisposeMainWindowViewModel()
+    {
+        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            return;
+        }
+
+        if (desktop.MainWindow?.DataContext is IDisposable disposable)
+        {
+            disposable.Dispose();
+            desktop.MainWindow.DataContext = null;
         }
     }
 }

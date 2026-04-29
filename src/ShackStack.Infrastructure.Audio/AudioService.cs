@@ -13,6 +13,7 @@ public sealed class AudioService : IAudioService, IDisposable
     private readonly WindowsAudioDeviceCatalog _deviceCatalog = new();
     private readonly AudioDeviceNotificationMonitor _notificationMonitor = new();
     private readonly SimpleSubject<AudioBuffer> _receiveStream = new();
+    private readonly SimpleSubject<AudioBuffer> _micStream = new();
     private readonly SimpleSubject<AudioLevels> _levelStream = new();
     private readonly object _sync = new();
     private WasapiCapture? _rxCapture;
@@ -23,7 +24,12 @@ public sealed class AudioService : IAudioService, IDisposable
     private BufferedWaveProvider? _txBuffer;
     private WasapiOut? _micMonitorPlayback;
     private BufferedWaveProvider? _micMonitorBuffer;
+    private WasapiOut? _decodedMonitorPlayback;
+    private BufferedWaveProvider? _decodedMonitorBuffer;
+    private WaveFormat? _decodedMonitorFormat;
+    private string? _decodedMonitorDeviceId;
     private float _monitorVolume = 0.75f;
+    private float _decodedMonitorVolume = 0.75f;
     private float _micGain = 1.0f;
     private float _voiceCompression = 0.0f;
     private bool _micMonitorEnabled;
@@ -39,6 +45,8 @@ public sealed class AudioService : IAudioService, IDisposable
 
     public IObservable<AudioBuffer> ReceiveStream => _receiveStream;
 
+    public IObservable<AudioBuffer> MicStream => _micStream;
+
     public IObservable<AudioLevels> LevelStream => _levelStream;
 
     public Task<IReadOnlyList<AudioDeviceInfo>> GetDevicesAsync(CancellationToken ct) =>
@@ -46,46 +54,62 @@ public sealed class AudioService : IAudioService, IDisposable
 
     public Task StartReceiveAsync(AudioRoute route, CancellationToken ct)
     {
+        StartReceiveCore(route, monitorRawAudio: true, ct);
+        return Task.CompletedTask;
+    }
+
+    public Task StartReceiveCaptureAsync(AudioRoute route, CancellationToken ct)
+    {
+        StartReceiveCore(route, monitorRawAudio: false, ct);
+        return Task.CompletedTask;
+    }
+
+    private void StartReceiveCore(AudioRoute route, bool monitorRawAudio, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
         lock (_sync)
         {
-            StopReceiveLocked();
+            ct.ThrowIfCancellationRequested();
 
             if (string.IsNullOrWhiteSpace(route.RxDeviceId))
             {
                 throw new InvalidOperationException("RX audio device is not configured.");
             }
 
-            if (string.IsNullOrWhiteSpace(route.MonitorDeviceId))
+            if (monitorRawAudio && string.IsNullOrWhiteSpace(route.MonitorDeviceId))
             {
                 throw new InvalidOperationException("Monitor audio device is not configured.");
             }
 
-            var inputDevice = _enumerator.GetDevice(route.RxDeviceId);
-            var outputDevice = _enumerator.GetDevice(route.MonitorDeviceId);
-
-            _rxCapture = new WasapiCapture(inputDevice);
-            _rxBuffer = new BufferedWaveProvider(_rxCapture.WaveFormat)
+            if (_rxCapture is null)
             {
-                DiscardOnBufferOverflow = true,
-            };
-            _rxPlayback = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, 100);
-            _rxPlayback.Init(_rxBuffer);
+                var inputDevice = _enumerator.GetDevice(route.RxDeviceId);
+                _rxCapture = new WasapiCapture(inputDevice);
+                _rxCapture.DataAvailable += OnReceiveCaptureDataAvailable;
+                _rxCapture.RecordingStopped += OnReceiveCaptureStopped;
+                _rxCapture.StartRecording();
+            }
 
-            _rxCapture.DataAvailable += OnReceiveCaptureDataAvailable;
-            _rxCapture.RecordingStopped += OnReceiveCaptureStopped;
-
-            _rxPlayback.Play();
-            _rxCapture.StartRecording();
+            if (monitorRawAudio && (_rxPlayback is null || _rxBuffer is null))
+            {
+                var outputDevice = _enumerator.GetDevice(route.MonitorDeviceId);
+                _rxBuffer = new BufferedWaveProvider(_rxCapture.WaveFormat)
+                {
+                    DiscardOnBufferOverflow = true,
+                };
+                _rxPlayback = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, 100);
+                _rxPlayback.Init(_rxBuffer);
+                _rxPlayback.Play();
+            }
         }
-
-        return Task.CompletedTask;
     }
 
     public Task StopReceiveAsync(CancellationToken ct)
     {
         lock (_sync)
         {
-            StopReceiveLocked();
+            StopReceiveLocked(stopDecodedMonitor: true);
         }
 
         return Task.CompletedTask;
@@ -174,6 +198,100 @@ public sealed class AudioService : IAudioService, IDisposable
         return Task.CompletedTask;
     }
 
+    public Task StartMicCaptureAsync(AudioRoute route, CancellationToken ct)
+    {
+        lock (_sync)
+        {
+            StopTransmitLocked();
+
+            if (string.IsNullOrWhiteSpace(route.MicDeviceId))
+            {
+                throw new InvalidOperationException("Microphone audio device is not configured.");
+            }
+
+            var micDevice = _enumerator.GetDevice(route.MicDeviceId);
+            _micCapture = new WasapiCapture(micDevice);
+
+            if (_micMonitorEnabled && !string.IsNullOrWhiteSpace(route.MonitorDeviceId))
+            {
+                var monitorDevice = _enumerator.GetDevice(route.MonitorDeviceId);
+                _micMonitorBuffer = new BufferedWaveProvider(_micCapture.WaveFormat)
+                {
+                    DiscardOnBufferOverflow = true,
+                };
+                _micMonitorPlayback = new WasapiOut(monitorDevice, AudioClientShareMode.Shared, false, 80);
+                _micMonitorPlayback.Init(_micMonitorBuffer);
+                _micMonitorPlayback.Play();
+            }
+
+            _micCapture.DataAvailable += OnMicCaptureDataAvailable;
+            _micCapture.RecordingStopped += OnMicCaptureStopped;
+            _micCapture.StartRecording();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task PlayTransmitPcmAsync(AudioRoute route, Pcm16AudioClip clip, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(route.TxDeviceId))
+        {
+            throw new InvalidOperationException("TX audio device is not configured.");
+        }
+
+        if (clip.PcmBytes.Length == 0 || clip.SampleRate <= 0 || clip.Channels <= 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        lock (_sync)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var format = new WaveFormat(clip.SampleRate, 16, clip.Channels);
+            var needsNewPlayback = _txPlayback is null
+                || _txBuffer is null
+                || _txBuffer.WaveFormat.SampleRate != format.SampleRate
+                || _txBuffer.WaveFormat.Channels != format.Channels
+                || _txBuffer.WaveFormat.BitsPerSample != format.BitsPerSample;
+
+            if (needsNewPlayback)
+            {
+                if (_txPlayback is not null)
+                {
+                    try
+                    {
+                        _txPlayback.Stop();
+                    }
+                    catch
+                    {
+                    }
+
+                    _txPlayback.Dispose();
+                    _txPlayback = null;
+                }
+
+                var txDevice = _enumerator.GetDevice(route.TxDeviceId);
+                _txBuffer = new BufferedWaveProvider(format)
+                {
+                    BufferDuration = TimeSpan.FromSeconds(2),
+                    DiscardOnBufferOverflow = true,
+                };
+                _txPlayback = new WasapiOut(txDevice, AudioClientShareMode.Shared, false, 80);
+                _txPlayback.Init(_txBuffer);
+                _txPlayback.Play();
+            }
+
+            _txBuffer!.AddSamples(clip.PcmBytes, 0, clip.PcmBytes.Length);
+            _txLevel = EstimatePcm16Peak(clip.PcmBytes);
+            PublishLevelsLocked();
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task StopTransmitAsync(CancellationToken ct)
     {
         lock (_sync)
@@ -184,11 +302,77 @@ public sealed class AudioService : IAudioService, IDisposable
         return Task.CompletedTask;
     }
 
+    public Task PlayMonitorPcmAsync(AudioRoute route, Pcm16AudioClip clip, CancellationToken ct)
+    {
+        return PlayDecodedMonitorPcmAsync(route, clip, ct);
+    }
+
+    public Task PlayDecodedMonitorPcmAsync(AudioRoute route, Pcm16AudioClip clip, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(route.MonitorDeviceId))
+        {
+            throw new InvalidOperationException("Monitor audio device is not configured.");
+        }
+
+        if (clip.PcmBytes.Length == 0 || clip.SampleRate <= 0 || clip.Channels <= 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        lock (_sync)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var format = new WaveFormat(clip.SampleRate, 16, clip.Channels);
+            var needsNewPlayback = _decodedMonitorPlayback is null
+                || _decodedMonitorBuffer is null
+                || _decodedMonitorFormat is null
+                || !string.Equals(_decodedMonitorDeviceId, route.MonitorDeviceId, StringComparison.Ordinal)
+                || _decodedMonitorFormat.SampleRate != format.SampleRate
+                || _decodedMonitorFormat.Channels != format.Channels
+                || _decodedMonitorFormat.BitsPerSample != format.BitsPerSample;
+
+            if (needsNewPlayback)
+            {
+                StopDecodedMonitorLocked();
+
+                var outputDevice = _enumerator.GetDevice(route.MonitorDeviceId);
+                _decodedMonitorFormat = format;
+                _decodedMonitorDeviceId = route.MonitorDeviceId;
+                _decodedMonitorBuffer = new BufferedWaveProvider(format)
+                {
+                    BufferDuration = TimeSpan.FromSeconds(2),
+                    DiscardOnBufferOverflow = true,
+                };
+                _decodedMonitorPlayback = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, 80);
+                _decodedMonitorPlayback.Init(_decodedMonitorBuffer);
+                _decodedMonitorPlayback.Play();
+            }
+
+            var monitorBuffer = ApplyMonitorVolume(clip.PcmBytes, clip.PcmBytes.Length, format, _decodedMonitorVolume);
+            _decodedMonitorBuffer!.AddSamples(monitorBuffer, 0, monitorBuffer.Length);
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task SetMonitorVolumeAsync(float volume, CancellationToken ct)
     {
         lock (_sync)
         {
             _monitorVolume = Math.Clamp(volume, 0f, 1f);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task SetDecodedMonitorVolumeAsync(float volume, CancellationToken ct)
+    {
+        lock (_sync)
+        {
+            _decodedMonitorVolume = Math.Clamp(volume, 0f, 1f);
         }
 
         return Task.CompletedTask;
@@ -238,13 +422,16 @@ public sealed class AudioService : IAudioService, IDisposable
             monitorVolume = _monitorVolume;
         }
 
-        if (buffer is null || capture is null || e.BytesRecorded <= 0)
+        if (capture is null || e.BytesRecorded <= 0)
         {
             return;
         }
 
-        var monitorBuffer = ApplyMonitorVolume(e.Buffer, e.BytesRecorded, capture.WaveFormat, monitorVolume);
-        buffer.AddSamples(monitorBuffer, 0, monitorBuffer.Length);
+        if (buffer is not null)
+        {
+            var monitorBuffer = ApplyMonitorVolume(e.Buffer, e.BytesRecorded, capture.WaveFormat, monitorVolume);
+            buffer.AddSamples(monitorBuffer, 0, monitorBuffer.Length);
+        }
 
         var samples = ConvertToFloatSamples(e.Buffer, e.BytesRecorded, capture.WaveFormat);
         if (samples.Length == 0)
@@ -266,7 +453,7 @@ public sealed class AudioService : IAudioService, IDisposable
     {
         lock (_sync)
         {
-            StopReceiveLocked();
+            StopReceiveLocked(stopDecodedMonitor: false);
         }
     }
 
@@ -291,7 +478,7 @@ public sealed class AudioService : IAudioService, IDisposable
             micMonitorEnabled = _micMonitorEnabled;
         }
 
-        if (txBuffer is null || micCapture is null || e.BytesRecorded <= 0)
+        if (micCapture is null || e.BytesRecorded <= 0)
         {
             return;
         }
@@ -307,7 +494,12 @@ public sealed class AudioService : IAudioService, IDisposable
         var txPeak = processed.Max(static s => MathF.Abs(s));
         var txBytes = ConvertFloatSamplesToBytes(processed, micCapture.WaveFormat);
 
-        txBuffer.AddSamples(txBytes, 0, txBytes.Length);
+        if (txBuffer is not null)
+        {
+            txBuffer.AddSamples(txBytes, 0, txBytes.Length);
+        }
+
+        _micStream.OnNext(new AudioBuffer(processed, micCapture.WaveFormat.SampleRate, micCapture.WaveFormat.Channels));
 
         if (micMonitorEnabled && micMonitorBuffer is not null)
         {
@@ -331,8 +523,13 @@ public sealed class AudioService : IAudioService, IDisposable
         }
     }
 
-    private void StopReceiveLocked()
+    private void StopReceiveLocked(bool stopDecodedMonitor)
     {
+        if (stopDecodedMonitor)
+        {
+            StopDecodedMonitorLocked();
+        }
+
         if (_rxCapture is not null)
         {
             _rxCapture.DataAvailable -= OnReceiveCaptureDataAvailable;
@@ -367,6 +564,27 @@ public sealed class AudioService : IAudioService, IDisposable
         _rxBuffer = null;
         _rxLevel = 0f;
         PublishLevelsLocked();
+    }
+
+    private void StopDecodedMonitorLocked()
+    {
+        if (_decodedMonitorPlayback is not null)
+        {
+            try
+            {
+                _decodedMonitorPlayback.Stop();
+            }
+            catch
+            {
+            }
+
+            _decodedMonitorPlayback.Dispose();
+            _decodedMonitorPlayback = null;
+        }
+
+        _decodedMonitorBuffer = null;
+        _decodedMonitorFormat = null;
+        _decodedMonitorDeviceId = null;
     }
 
     private void StopTransmitLocked()
@@ -492,6 +710,18 @@ public sealed class AudioService : IAudioService, IDisposable
         return fallback;
     }
 
+    private static float EstimatePcm16Peak(byte[] bytes)
+    {
+        var peak = 0f;
+        for (var i = 0; i + 1 < bytes.Length; i += 2)
+        {
+            var sample = BitConverter.ToInt16(bytes, i);
+            peak = MathF.Max(peak, MathF.Abs(sample / 32768f));
+        }
+
+        return peak;
+    }
+
     private static float[] ProcessMicSamples(float[] samples, float gain, float compression)
     {
         var processed = new float[samples.Length];
@@ -561,7 +791,7 @@ public sealed class AudioService : IAudioService, IDisposable
     {
         lock (_sync)
         {
-            StopReceiveLocked();
+            StopReceiveLocked(stopDecodedMonitor: true);
             StopTransmitLocked();
         }
 

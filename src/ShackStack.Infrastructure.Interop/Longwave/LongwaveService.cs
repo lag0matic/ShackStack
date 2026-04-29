@@ -84,6 +84,33 @@ public sealed class LongwaveService : ILongwaveService, IDisposable
         return ToLongwaveLogbook(created);
     }
 
+    public async Task<LongwaveLogbook> UpdateLogbookAsync(
+        LongwaveSettings settings,
+        string logbookId,
+        string name,
+        string operatorCallsign,
+        string? parkReference,
+        string? activationDate,
+        string? notes,
+        CancellationToken cancellationToken)
+    {
+        ValidateSettings(settings);
+        var payload = JsonSerializer.Serialize(new
+        {
+            name = name.Trim(),
+            operator_callsign = operatorCallsign.Trim().ToUpperInvariant(),
+            park_reference = string.IsNullOrWhiteSpace(parkReference) ? null : parkReference.Trim().ToUpperInvariant(),
+            activation_date = string.IsNullOrWhiteSpace(activationDate) ? null : activationDate.Trim(),
+            notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
+        });
+
+        using var request = CreateRequest(settings, HttpMethod.Patch, $"logbooks/{Uri.EscapeDataString(logbookId.Trim())}", payload);
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "Longwave logbook update failed").ConfigureAwait(false);
+        var updated = await ReadJsonAsync<LogbookResponse>(response, cancellationToken).ConfigureAwait(false);
+        return ToLongwaveLogbook(updated);
+    }
+
     public async Task DeleteLogbookAsync(LongwaveSettings settings, string logbookId, CancellationToken cancellationToken)
     {
         ValidateSettings(settings);
@@ -99,21 +126,31 @@ public sealed class LongwaveService : ILongwaveService, IDisposable
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, "Longwave POTA fetch failed").ConfigureAwait(false);
         var payload = await ReadJsonAsync<List<SpotResponse>>(response, cancellationToken).ConfigureAwait(false);
-        return payload
-            .Select(static spot => new LongwaveSpot(
-                spot.Id,
-                spot.Source,
-                spot.ActivatorCallsign.ToUpperInvariant(),
-                spot.ParkReference.ToUpperInvariant(),
-                spot.FrequencyKhz,
-                spot.Mode.ToUpperInvariant(),
-                spot.Band,
-                spot.Comments,
-                string.IsNullOrWhiteSpace(spot.SpotterCallsign) ? null : spot.SpotterCallsign.ToUpperInvariant(),
-                spot.SpottedAt,
-                spot.Latitude,
-                spot.Longitude))
-            .ToArray();
+        return payload.Select(ToLongwaveSpot).ToArray();
+    }
+
+    public async Task<LongwaveSpot> CreatePotaSpotAsync(
+        LongwaveSettings settings,
+        LongwavePotaSpotDraft draft,
+        CancellationToken cancellationToken)
+    {
+        ValidateSettings(settings);
+        var payload = JsonSerializer.Serialize(new
+        {
+            activator_callsign = draft.ActivatorCallsign.Trim().ToUpperInvariant(),
+            park_reference = draft.ParkReference.Trim().ToUpperInvariant(),
+            frequency_khz = draft.FrequencyKhz,
+            mode = draft.Mode.Trim().ToUpperInvariant(),
+            band = draft.Band.Trim(),
+            comments = string.IsNullOrWhiteSpace(draft.Comments) ? null : draft.Comments.Trim(),
+            spotter_callsign = string.IsNullOrWhiteSpace(draft.SpotterCallsign) ? null : draft.SpotterCallsign.Trim().ToUpperInvariant(),
+        });
+
+        using var request = CreateRequest(settings, HttpMethod.Post, "spots/pota", payload);
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "Longwave POTA spot post failed").ConfigureAwait(false);
+        var created = await ReadJsonAsync<SpotResponse>(response, cancellationToken).ConfigureAwait(false);
+        return ToLongwaveSpot(created);
     }
 
     public async Task<LongwaveCallsignLookup> LookupCallsignAsync(LongwaveSettings settings, string callsign, CancellationToken cancellationToken)
@@ -194,58 +231,27 @@ public sealed class LongwaveService : ILongwaveService, IDisposable
         CancellationToken cancellationToken)
     {
         ValidateSettings(settings);
-        var payload = JsonSerializer.Serialize(new
-        {
-            logbook_id = draft.LogbookId,
-            station_callsign = draft.StationCallsign.Trim().ToUpperInvariant(),
-            operator_callsign = draft.OperatorCallsign.Trim().ToUpperInvariant(),
-            qso_date = draft.QsoDate,
-            time_on = draft.TimeOn,
-            band = draft.Band,
-            mode = draft.Mode,
-            frequency_khz = draft.FrequencyKhz,
-            park_reference = string.IsNullOrWhiteSpace(draft.ParkReference) ? null : draft.ParkReference.Trim().ToUpperInvariant(),
-            rst_sent = string.IsNullOrWhiteSpace(draft.RstSent) ? null : draft.RstSent.Trim().ToUpperInvariant(),
-            rst_recvd = string.IsNullOrWhiteSpace(draft.RstReceived) ? null : draft.RstReceived.Trim().ToUpperInvariant(),
-            name = string.IsNullOrWhiteSpace(draft.Name) ? null : draft.Name.Trim(),
-            qth = string.IsNullOrWhiteSpace(draft.Qth) ? null : draft.Qth.Trim(),
-            county = string.IsNullOrWhiteSpace(draft.County) ? null : draft.County.Trim(),
-            grid_square = string.IsNullOrWhiteSpace(draft.GridSquare) ? null : draft.GridSquare.Trim().ToUpperInvariant(),
-            country = string.IsNullOrWhiteSpace(draft.Country) ? null : draft.Country.Trim(),
-            state = string.IsNullOrWhiteSpace(draft.State) ? null : draft.State.Trim().ToUpperInvariant(),
-            dxcc = string.IsNullOrWhiteSpace(draft.Dxcc) ? null : draft.Dxcc.Trim(),
-            lat = draft.Latitude,
-            lon = draft.Longitude,
-            source_spot_id = string.IsNullOrWhiteSpace(draft.SourceSpotId) ? null : draft.SourceSpotId.Trim(),
-        });
-
+        var payload = JsonSerializer.Serialize(BuildContactPayload(draft, includeLogbookId: true));
         using var request = CreateRequest(settings, HttpMethod.Post, "contacts", payload);
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, "Longwave contact create failed").ConfigureAwait(false);
         var created = await ReadJsonAsync<ContactResponse>(response, cancellationToken).ConfigureAwait(false);
-        return new LongwaveContact(
-            created.Id,
-            created.LogbookId,
-            created.StationCallsign.ToUpperInvariant(),
-            created.OperatorCallsign.ToUpperInvariant(),
-            created.QsoDate,
-            created.TimeOn,
-            created.Band,
-            created.Mode,
-            created.FrequencyKhz,
-            created.ParkReference,
-            created.RstSent,
-            created.RstReceived,
-            created.Name,
-            created.Qth,
-            created.County,
-            created.GridSquare,
-            created.Country,
-            created.State,
-            created.Dxcc,
-            created.Latitude,
-            created.Longitude,
-            created.SourceSpotId);
+        return ToLongwaveContact(created);
+    }
+
+    public async Task<LongwaveContact> UpdateContactAsync(
+        LongwaveSettings settings,
+        string contactId,
+        LongwaveContactDraft draft,
+        CancellationToken cancellationToken)
+    {
+        ValidateSettings(settings);
+        var payload = JsonSerializer.Serialize(BuildContactPayload(draft, includeLogbookId: false));
+        using var request = CreateRequest(settings, HttpMethod.Patch, $"contacts/{Uri.EscapeDataString(contactId.Trim())}", payload);
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "Longwave contact update failed").ConfigureAwait(false);
+        var updated = await ReadJsonAsync<ContactResponse>(response, cancellationToken).ConfigureAwait(false);
+        return ToLongwaveContact(updated);
     }
 
     public async Task DeleteContactAsync(LongwaveSettings settings, string contactId, CancellationToken cancellationToken)
@@ -254,6 +260,37 @@ public sealed class LongwaveService : ILongwaveService, IDisposable
         using var request = CreateRequest(settings, HttpMethod.Delete, $"contacts/{Uri.EscapeDataString(contactId.Trim())}");
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, "Longwave contact delete failed").ConfigureAwait(false);
+    }
+
+    public async Task<LongwaveQrzUploadResult> UploadLogbookToQrzAsync(
+        LongwaveSettings settings,
+        string logbookId,
+        CancellationToken cancellationToken)
+    {
+        ValidateSettings(settings);
+        var payload = JsonSerializer.Serialize(new
+        {
+            logbook_id = logbookId.Trim(),
+        });
+
+        using var request = CreateRequest(settings, HttpMethod.Post, "logs/qrz-upload", payload);
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "Longwave QRZ upload failed").ConfigureAwait(false);
+        var result = await ReadJsonAsync<QrzUploadResponse>(response, cancellationToken).ConfigureAwait(false);
+        return new LongwaveQrzUploadResult(result.LogbookId, result.Uploaded, result.Message);
+    }
+
+    public async Task<string> ExportLogbookAdifAsync(
+        LongwaveSettings settings,
+        string logbookId,
+        CancellationToken cancellationToken)
+    {
+        ValidateSettings(settings);
+        using var request = CreateRequest(settings, HttpMethod.Get, $"logs/{Uri.EscapeDataString(logbookId.Trim())}/adif");
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "Longwave ADIF export failed").ConfigureAwait(false);
+        var result = await ReadJsonAsync<AdifExportResponse>(response, cancellationToken).ConfigureAwait(false);
+        return result.Adif;
     }
 
     public void Dispose() => _httpClient.Dispose();
@@ -267,6 +304,21 @@ public sealed class LongwaveService : ILongwaveService, IDisposable
             response.ActivationDate,
             response.Notes,
             response.ContactCount);
+
+    private static LongwaveSpot ToLongwaveSpot(SpotResponse spot) =>
+        new(
+            spot.Id,
+            spot.Source,
+            spot.ActivatorCallsign.ToUpperInvariant(),
+            spot.ParkReference.ToUpperInvariant(),
+            spot.FrequencyKhz,
+            spot.Mode.ToUpperInvariant(),
+            spot.Band,
+            spot.Comments,
+            string.IsNullOrWhiteSpace(spot.SpotterCallsign) ? null : spot.SpotterCallsign.ToUpperInvariant(),
+            spot.SpottedAt,
+            spot.Latitude,
+            spot.Longitude);
 
     private static LongwaveContact ToLongwaveContact(ContactResponse created) =>
         new(
@@ -289,9 +341,61 @@ public sealed class LongwaveService : ILongwaveService, IDisposable
             created.Country,
             created.State,
             created.Dxcc,
+            created.QrzUploadStatus,
+            created.QrzUploadDate,
             created.Latitude,
             created.Longitude,
             created.SourceSpotId);
+
+    private static object BuildContactPayload(LongwaveContactDraft draft, bool includeLogbookId) =>
+        includeLogbookId
+            ? new
+            {
+                logbook_id = draft.LogbookId,
+                station_callsign = draft.StationCallsign.Trim().ToUpperInvariant(),
+                operator_callsign = draft.OperatorCallsign.Trim().ToUpperInvariant(),
+                qso_date = draft.QsoDate,
+                time_on = draft.TimeOn,
+                band = draft.Band,
+                mode = draft.Mode,
+                frequency_khz = draft.FrequencyKhz,
+                park_reference = string.IsNullOrWhiteSpace(draft.ParkReference) ? null : draft.ParkReference.Trim().ToUpperInvariant(),
+                rst_sent = string.IsNullOrWhiteSpace(draft.RstSent) ? null : draft.RstSent.Trim().ToUpperInvariant(),
+                rst_recvd = string.IsNullOrWhiteSpace(draft.RstReceived) ? null : draft.RstReceived.Trim().ToUpperInvariant(),
+                name = string.IsNullOrWhiteSpace(draft.Name) ? null : draft.Name.Trim(),
+                qth = string.IsNullOrWhiteSpace(draft.Qth) ? null : draft.Qth.Trim(),
+                county = string.IsNullOrWhiteSpace(draft.County) ? null : draft.County.Trim(),
+                grid_square = string.IsNullOrWhiteSpace(draft.GridSquare) ? null : draft.GridSquare.Trim().ToUpperInvariant(),
+                country = string.IsNullOrWhiteSpace(draft.Country) ? null : draft.Country.Trim(),
+                state = string.IsNullOrWhiteSpace(draft.State) ? null : draft.State.Trim().ToUpperInvariant(),
+                dxcc = string.IsNullOrWhiteSpace(draft.Dxcc) ? null : draft.Dxcc.Trim(),
+                lat = draft.Latitude,
+                lon = draft.Longitude,
+                source_spot_id = string.IsNullOrWhiteSpace(draft.SourceSpotId) ? null : draft.SourceSpotId.Trim(),
+            }
+            : new
+            {
+                station_callsign = draft.StationCallsign.Trim().ToUpperInvariant(),
+                operator_callsign = draft.OperatorCallsign.Trim().ToUpperInvariant(),
+                qso_date = draft.QsoDate,
+                time_on = draft.TimeOn,
+                band = draft.Band,
+                mode = draft.Mode,
+                frequency_khz = draft.FrequencyKhz,
+                park_reference = string.IsNullOrWhiteSpace(draft.ParkReference) ? null : draft.ParkReference.Trim().ToUpperInvariant(),
+                rst_sent = string.IsNullOrWhiteSpace(draft.RstSent) ? null : draft.RstSent.Trim().ToUpperInvariant(),
+                rst_recvd = string.IsNullOrWhiteSpace(draft.RstReceived) ? null : draft.RstReceived.Trim().ToUpperInvariant(),
+                name = string.IsNullOrWhiteSpace(draft.Name) ? null : draft.Name.Trim(),
+                qth = string.IsNullOrWhiteSpace(draft.Qth) ? null : draft.Qth.Trim(),
+                county = string.IsNullOrWhiteSpace(draft.County) ? null : draft.County.Trim(),
+                grid_square = string.IsNullOrWhiteSpace(draft.GridSquare) ? null : draft.GridSquare.Trim().ToUpperInvariant(),
+                country = string.IsNullOrWhiteSpace(draft.Country) ? null : draft.Country.Trim(),
+                state = string.IsNullOrWhiteSpace(draft.State) ? null : draft.State.Trim().ToUpperInvariant(),
+                dxcc = string.IsNullOrWhiteSpace(draft.Dxcc) ? null : draft.Dxcc.Trim(),
+                lat = draft.Latitude,
+                lon = draft.Longitude,
+                source_spot_id = string.IsNullOrWhiteSpace(draft.SourceSpotId) ? null : draft.SourceSpotId.Trim(),
+            };
 
     private static void ValidateSettings(LongwaveSettings settings)
     {
@@ -439,9 +543,19 @@ public sealed class LongwaveService : ILongwaveService, IDisposable
         [property: JsonPropertyName("country")] string? Country,
         [property: JsonPropertyName("state")] string? State,
         [property: JsonPropertyName("dxcc")] string? Dxcc,
+        [property: JsonPropertyName("qrz_upload_status")] string? QrzUploadStatus,
+        [property: JsonPropertyName("qrz_upload_date")] string? QrzUploadDate,
         [property: JsonPropertyName("lat")] double? Latitude,
         [property: JsonPropertyName("lon")] double? Longitude,
         [property: JsonPropertyName("source_spot_id")] string? SourceSpotId);
+
+    private sealed record QrzUploadResponse(
+        [property: JsonPropertyName("logbook_id")] string LogbookId,
+        [property: JsonPropertyName("uploaded")] bool Uploaded,
+        [property: JsonPropertyName("message")] string Message);
+
+    private sealed record AdifExportResponse(
+        [property: JsonPropertyName("adif")] string Adif);
 
     private sealed record CallsignLookupResponse(
         [property: JsonPropertyName("callsign")] string Callsign,

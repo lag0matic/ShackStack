@@ -33,7 +33,7 @@
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
           <StackPanel Spacing="10">
             <TextBlock Text="Receive Shaping" FontSize="16" FontWeight="SemiBold" />
-            <TextBlock Text="These controls mirror the fldigi-style receive helpers: find the tone, hold it with AFC, and constrain WPM tracking so junk does not run away with the decoder."
+            <TextBlock Text="These controls shape the current adaptive CW worker: find the tone, hold it with AFC, and constrain WPM tracking so junk does not run away with the decoder."
                        Foreground="#AAB1C7"
                        TextWrapping="Wrap" />
 
@@ -135,7 +135,7 @@
         </ScrollViewer>
       </Border>
 
-      <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" RowSpacing="10">
+      <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="10">
         <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
           <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
             <Grid Grid.Row="0" ColumnDefinitions="90,*,90,*,90,*" ColumnSpacing="10">
@@ -146,11 +146,9 @@
               <TextBlock Grid.Column="4" Text="WPM Est" Foreground="#7F879B" />
               <TextBlock Grid.Column="5" Text="{Binding CwEstimatedWpmDisplay}" Foreground="#C4C8D8" />
             </Grid>
-            <Grid Grid.Row="1" ColumnDefinitions="90,*,90,*" ColumnSpacing="10">
+            <Grid Grid.Row="1" ColumnDefinitions="90,*" ColumnSpacing="10">
               <TextBlock Grid.Column="0" Text="Confidence" Foreground="#7F879B" />
               <TextBlock Grid.Column="1" Text="{Binding CwDecoderConfidenceDisplay}" Foreground="#C4C8D8" />
-              <TextBlock Grid.Column="2" Text="Call" Foreground="#7F879B" />
-              <TextBlock Grid.Column="3" Text="{Binding CwDetectedCallsign}" Foreground="#DDE7FF" />
             </Grid>
           </Grid>
         </Border>
@@ -167,18 +165,6 @@
                      IsReadOnly="True"
                      TextWrapping="Wrap"
                      FontSize="15" />
-          </Grid>
-        </Border>
-
-        <Border Grid.Row="2" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
-          <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
-            <TextBlock Grid.Row="0" Text="Operator Assist" FontSize="15" FontWeight="SemiBold" />
-            <Grid Grid.Row="1" ColumnDefinitions="76,*,Auto" ColumnSpacing="8">
-              <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="1" Text="{Binding CwDetectedCallsign}" Foreground="#DDE7FF" VerticalAlignment="Center" />
-              <Button Grid.Column="2" Content="Use For Log" Command="{Binding UseDetectedCwCallForLogCommand}" />
-            </Grid>
-            <TextBlock Grid.Row="2" Text="{Binding CwOperatorHint}" Foreground="#AAB1C7" TextWrapping="Wrap" />
           </Grid>
         </Border>
       </Grid>
@@ -209,7 +195,7 @@
             <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
               <StackPanel Spacing="8">
                 <TextBlock Text="Quick Macros" FontWeight="SemiBold" Foreground="#DDE7FF" />
-                <TextBlock Text="Macros expand %mycall and %tocall from settings and decoded CW."
+                <TextBlock Text="Macros expand %mycall from settings and %tocall from the CW log callsign field."
                            Foreground="#8E97AC"
                            TextWrapping="Wrap"
                            FontSize="11" />
@@ -247,6 +233,19 @@
               <StackPanel Spacing="8">
                 <TextBlock Text="CW / Longwave Log" FontWeight="SemiBold" Foreground="#DDE7FF" />
                 <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding LongwaveQuickLogSummary}" Foreground="#E9F3FF" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="70,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1"
+                            ItemsSource="{Binding LongwaveLogbooks}"
+                            SelectedItem="{Binding SelectedLongwaveLogbook}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:LongwaveLogbookItem">
+                        <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                </Grid>
                 <Grid ColumnDefinitions="70,*" ColumnSpacing="8">
                   <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
                   <TextBox Grid.Column="1" Text="{Binding LongwaveLogCallsign}" Watermark="Worked station" />
@@ -265,7 +264,9 @@
                 </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <Button Content="Use Rig" Command="{Binding UseRigForCwLongwaveLogCommand}" />
-                  <Button Content="Log QSO" Command="{Binding LogCurrentQsoCommand}" />
+                  <Button Content="Log QSO" Command="{Binding LogCurrentQsoCommand}" IsVisible="{Binding IsCreatingLongwaveContact}" />
+                  <Button Content="Save" Command="{Binding UpdateSelectedLongwaveContactCommand}" IsVisible="{Binding IsEditingLongwaveContact}" />
+                  <Button Content="New" Command="{Binding NewLongwaveContactCommand}" />
                 </StackPanel>
               </StackPanel>
             </Border>

@@ -9,12 +9,12 @@ internal static class VisDetector
     private const double FreqVisStart = 1900.0;
     private const double DefaultToneShareThreshold = 0.45;
     private const double DefaultToneLeadThreshold = 1.20;
-    private const double StrictToneShareThreshold = 0.50;
-    private const double StrictToneLeadThreshold = 1.15;
+    private const double StrictToneShareThreshold = 0.55;
+    private const double StrictToneLeadThreshold = 1.35;
     private const double DefaultBitShareThreshold = 0.45;
     private const double DefaultBitLeadThreshold = 1.15;
-    private const double StrictBitShareThreshold = 0.20;
-    private const double StrictBitLeadThreshold = 1.00;
+    private const double StrictBitShareThreshold = 0.55;
+    private const double StrictBitLeadThreshold = 1.25;
     private static readonly int[] LegacyFrameMs = [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10];
     private static readonly int[] MmsstvFrameMs = [300, 10, 300, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30];
     private static readonly double?[] LegacyFrameTones = [FreqVisStart, FreqSync, null, null, null, null, null, null, null, null, FreqSync, null];

@@ -24,6 +24,12 @@ if (!string.IsNullOrWhiteSpace(inputRawF32))
     return 0;
 }
 
+if (args.Any(static arg => string.Equals(arg, "--regression", StringComparison.OrdinalIgnoreCase))
+    || string.Equals(Environment.GetEnvironmentVariable("SHACKSTACK_HARNESS_REGRESSION"), "1", StringComparison.Ordinal))
+{
+    return RunRegressionSuite(outputRoot, sampleRate, chunkSize) ? 0 : 1;
+}
+
 var toneCheck = new float[sampleRate / 20];
 double tonePhase = 0.0;
 for (var i = 0; i < toneCheck.Length; i++)
@@ -100,6 +106,236 @@ Console.WriteLine();
 RunAvtStateProbe(sampleRate);
 
 return 0;
+
+static bool RunRegressionSuite(string outputRoot, int sampleRate, int chunkSize)
+{
+    var regressionRoot = Path.Combine(outputRoot, "regression");
+    if (Directory.Exists(regressionRoot))
+    {
+        Directory.Delete(regressionRoot, recursive: true);
+    }
+
+    Directory.CreateDirectory(regressionRoot);
+
+    var results = new List<RegressionCaseResult>
+    {
+        RunRegressionNoiseRejectCase(regressionRoot, sampleRate, chunkSize),
+        RunRegressionDecodeCase("martin_1_clean_auto", "Martin 1", static audio => audio, regressionRoot, sampleRate, chunkSize),
+        RunRegressionDecodeCase("martin_2_qrn_30db_auto", "Martin 2", audio => AddWhiteNoise(audio, -30.0, seed: 4202), regressionRoot, sampleRate, chunkSize),
+        RunRegressionDecodeCase("scottie_1_clock_75ppm_auto", "Scottie 1", audio => ApplySampleClockPpm(audio, 75.0), regressionRoot, sampleRate, chunkSize),
+        RunRegressionDecodeCase("robot_36_clean_auto", "Robot 36", static audio => audio, regressionRoot, sampleRate, chunkSize),
+        RunRegressionDecodeCase("pd_120_clean_auto", "PD 120", static audio => audio, regressionRoot, sampleRate, chunkSize),
+        RunRegressionForceStartCase("martin_1_force_late", "Martin 1", sampleRate * 5, regressionRoot, sampleRate, chunkSize),
+    };
+
+    var summaryPath = Path.Combine(regressionRoot, "summary.txt");
+    File.WriteAllLines(summaryPath, results.Select(static result => result.ToSummaryLine()));
+
+    Console.WriteLine("=== SSTV regression suite ===");
+    foreach (var result in results)
+    {
+        Console.WriteLine(result.ToConsoleLine());
+    }
+
+    var passed = results.Count(static result => result.Passed);
+    Console.WriteLine($"Summary: {passed}/{results.Count} passed");
+    Console.WriteLine($"Artifacts: {regressionRoot}");
+    Console.WriteLine($"Summary file: {summaryPath}");
+    return passed == results.Count;
+}
+
+static RegressionCaseResult RunRegressionNoiseRejectCase(string outputRoot, int sampleRate, int chunkSize)
+{
+    const string caseName = "static_noise_reject";
+    var rng = new Random(7300);
+    var audio = new float[sampleRate * 30];
+    for (var i = 0; i < audio.Length; i++)
+    {
+        audio[i] = (float)(((rng.NextDouble() * 2.0) - 1.0) * 0.22);
+    }
+
+    var wavPath = Path.Combine(outputRoot, $"{caseName}.wav");
+    WaveFileWriter.WriteMono16(wavPath, audio, sampleRate);
+    var result = DecodeRegressionAudio(caseName, "Auto Detect", audio, outputRoot, sampleRate, chunkSize);
+    var passed = result.ImageUpdates == 0
+        && string.IsNullOrWhiteSpace(result.LatestImagePath)
+        && !result.SawReceiving;
+
+    return result with
+    {
+        Passed = passed,
+        ExpectedMode = "none",
+        Detail = passed
+            ? "noise stayed idle"
+            : $"noise false-started: mode={result.DetectedMode}, updates={result.ImageUpdates}, receiving={result.SawReceiving}"
+    };
+}
+
+static RegressionCaseResult RunRegressionDecodeCase(
+    string caseName,
+    string modeName,
+    Func<float[], float[]> transform,
+    string outputRoot,
+    int sampleRate,
+    int chunkSize)
+{
+    if (!MmsstvModeCatalog.TryResolve(modeName, out var profile))
+    {
+        return RegressionCaseResult.Failed(caseName, modeName, $"profile not found: {modeName}");
+    }
+
+    var sourceImage = TestCardFactory.Create(profile.Width, profile.Height);
+    var sourcePath = Path.Combine(outputRoot, $"{caseName}_source.bmp");
+    NativeBitmapWriter.SaveRgb24(sourcePath, sourceImage, profile.Width, profile.Height);
+
+    var audio = transform(SstvHarnessGenerator.GenerateAudio(sourceImage, profile, sampleRate));
+    var wavPath = Path.Combine(outputRoot, $"{caseName}.wav");
+    WaveFileWriter.WriteMono16(wavPath, audio, sampleRate);
+
+    var result = DecodeRegressionAudio(caseName, "Auto Detect", audio, outputRoot, sampleRate, chunkSize);
+    ImageComparisonResult? comparison = null;
+    if (!string.IsNullOrWhiteSpace(result.LatestImagePath) && File.Exists(result.LatestImagePath))
+    {
+        try
+        {
+            comparison = ImageComparison.Measure(sourceImage, BitmapReader.LoadRgb24(result.LatestImagePath, profile.Width, profile.Height));
+        }
+        catch (IOException ex)
+        {
+            return result with
+            {
+                ExpectedMode = modeName,
+                Detail = $"decode image unreadable: {ex.Message}"
+            };
+        }
+        catch (InvalidDataException ex)
+        {
+            return result with
+            {
+                ExpectedMode = modeName,
+                Detail = $"decode image invalid: {ex.Message}"
+            };
+        }
+    }
+
+    var modeMatches = string.Equals(result.DetectedMode, modeName, StringComparison.OrdinalIgnoreCase);
+    var hasImage = !string.IsNullOrWhiteSpace(result.LatestImagePath) && File.Exists(result.LatestImagePath);
+    var imageLooksReasonable = comparison is not null
+        && comparison.MeanAbsoluteError < 90.0
+        && Math.Max(comparison.RedCorrelation, Math.Max(comparison.GreenCorrelation, comparison.BlueCorrelation)) > 0.35;
+    var passed = modeMatches && hasImage && imageLooksReasonable;
+
+    return result with
+    {
+        Passed = passed,
+        ExpectedMode = modeName,
+        MeanAbsoluteError = comparison?.MeanAbsoluteError,
+        BestCorrelation = comparison is null
+            ? null
+            : Math.Max(comparison.RedCorrelation, Math.Max(comparison.GreenCorrelation, comparison.BlueCorrelation)),
+        Detail = comparison is null
+            ? "no comparison image"
+            : $"MAE {comparison.MeanAbsoluteError:0.00}, best corr {Math.Max(comparison.RedCorrelation, Math.Max(comparison.GreenCorrelation, comparison.BlueCorrelation)):0.000}"
+    };
+}
+
+static RegressionCaseResult RunRegressionForceStartCase(
+    string caseName,
+    string modeName,
+    int forceStartAtSample,
+    string outputRoot,
+    int sampleRate,
+    int chunkSize)
+{
+    if (!MmsstvModeCatalog.TryResolve(modeName, out var profile))
+    {
+        return RegressionCaseResult.Failed(caseName, modeName, $"profile not found: {modeName}");
+    }
+
+    var sourceImage = TestCardFactory.Create(profile.Width, profile.Height);
+    var audio = SstvHarnessGenerator.GenerateAudio(sourceImage, profile, sampleRate);
+    var wavPath = Path.Combine(outputRoot, $"{caseName}.wav");
+    WaveFileWriter.WriteMono16(wavPath, audio, sampleRate);
+
+    var result = DecodeRegressionAudio(caseName, modeName, audio, outputRoot, sampleRate, chunkSize, forceStartAtSample);
+    var passed = string.Equals(result.DetectedMode, modeName, StringComparison.OrdinalIgnoreCase)
+        && result.ImageUpdates > 0
+        && !string.IsNullOrWhiteSpace(result.LatestImagePath)
+        && File.Exists(result.LatestImagePath);
+
+    return result with
+    {
+        Passed = passed,
+        ExpectedMode = modeName,
+        Detail = passed
+            ? $"force-start decoded after {forceStartAtSample / (double)sampleRate:0.00}s"
+            : $"force-start failed: mode={result.DetectedMode}, updates={result.ImageUpdates}, image={result.LatestImagePath ?? "none"}"
+    };
+}
+
+static RegressionCaseResult DecodeRegressionAudio(
+    string caseName,
+    string configuredMode,
+    float[] audio,
+    string outputRoot,
+    int sampleRate,
+    int chunkSize,
+    int? forceStartAtSample = null)
+{
+    var receiver = new NativeSstvReceiver();
+    receiver.Configure(configuredMode, "regression", 0, 0);
+    receiver.Start();
+
+    var forceStarted = false;
+    var imageUpdates = 0;
+    var statuses = new List<string>();
+    for (var offset = 0; offset < audio.Length; offset += chunkSize)
+    {
+        if (!forceStarted && forceStartAtSample is int forceAt && offset >= forceAt)
+        {
+            statuses.Add($"{offset,8}: {receiver.ForceStartConfiguredMode()}");
+            forceStarted = true;
+        }
+
+        var count = Math.Min(chunkSize, audio.Length - offset);
+        var chunk = new float[count];
+        Array.Copy(audio, offset, chunk, 0, count);
+        var status = receiver.HandleAudio(chunk, out var imageUpdated);
+        if (imageUpdated)
+        {
+            imageUpdates++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            statuses.Add($"{offset,8}: {status}");
+        }
+    }
+
+    var logPath = Path.Combine(outputRoot, $"{caseName}.log");
+    File.WriteAllLines(logPath, statuses.Distinct());
+
+    string? copiedImagePath = null;
+    if (!string.IsNullOrWhiteSpace(receiver.LatestImagePath) && File.Exists(receiver.LatestImagePath))
+    {
+        copiedImagePath = Path.Combine(outputRoot, $"{caseName}_decoded.bmp");
+        File.Copy(receiver.LatestImagePath, copiedImagePath, overwrite: true);
+    }
+
+    return new RegressionCaseResult(
+        caseName,
+        ExpectedMode: configuredMode,
+        DetectedMode: receiver.DetectedMode,
+        Origin: receiver.SessionOrigin,
+        SyncStatus: receiver.SyncStatus,
+        SignalPercent: receiver.SignalLevelPercent,
+        ImageUpdates: imageUpdates,
+        SawReceiving: statuses.Any(static status => status.Contains("Receiving", StringComparison.OrdinalIgnoreCase)),
+        LatestImagePath: copiedImagePath,
+        LogPath: logPath,
+        Passed: false,
+        Detail: string.Empty);
+}
 
 static void RunMode(SstvModeProfile profile, string outputRoot, int sampleRate, int chunkSize)
 {
@@ -1273,3 +1509,56 @@ readonly record struct LifecycleScenarioResult(
     bool SawImageComplete,
     string? LatestImagePath,
     string ExpectedMode);
+
+readonly record struct RegressionCaseResult(
+    string Name,
+    string ExpectedMode,
+    string DetectedMode,
+    string Origin,
+    string SyncStatus,
+    int SignalPercent,
+    int ImageUpdates,
+    bool SawReceiving,
+    string? LatestImagePath,
+    string LogPath,
+    bool Passed,
+    string Detail,
+    double? MeanAbsoluteError = null,
+    double? BestCorrelation = null)
+{
+    public static RegressionCaseResult Failed(string name, string expectedMode, string detail)
+        => new(
+            name,
+            expectedMode,
+            DetectedMode: "none",
+            Origin: "none",
+            SyncStatus: "not run",
+            SignalPercent: 0,
+            ImageUpdates: 0,
+            SawReceiving: false,
+            LatestImagePath: null,
+            LogPath: string.Empty,
+            Passed: false,
+            Detail: detail);
+
+    public string ToConsoleLine()
+        => $"{(Passed ? "PASS" : "FAIL")} {Name}: expected {ExpectedMode}, detected {DetectedMode}, origin {Origin}, updates {ImageUpdates}, signal {SignalPercent}%, {Detail}";
+
+    public string ToSummaryLine()
+        => string.Join(
+            '\t',
+            Passed ? "PASS" : "FAIL",
+            Name,
+            ExpectedMode,
+            DetectedMode,
+            Origin,
+            SyncStatus,
+            SignalPercent.ToString(),
+            ImageUpdates.ToString(),
+            SawReceiving.ToString(),
+            MeanAbsoluteError?.ToString("0.00") ?? string.Empty,
+            BestCorrelation?.ToString("0.000") ?? string.Empty,
+            LatestImagePath ?? string.Empty,
+            LogPath,
+            Detail);
+}

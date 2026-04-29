@@ -12,6 +12,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
@@ -20,7 +21,10 @@ namespace ShackStack.UI.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
+    private const string SstvIdleSessionNotes = "ShackStack SSTV native sidecar  |  Signal  ---%  |  Mode Auto Detect  |  FSKID none";
+
     private static readonly TimeSpan RadioConnectUiTimeout = TimeSpan.FromSeconds(12);
+    private static readonly byte[] WsjtxDirectedAlertWave = CreateWsjtxDirectedAlertWave();
     private readonly DispatcherTimer _smeterUiTimer;
     private readonly DispatcherTimer _longwaveRefreshTimer;
     private readonly DispatcherTimer _wefaxScheduleTimer;
@@ -44,6 +48,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IInteropService? _interopService;
     private readonly ICwDecoderHost? _cwDecoderHost;
     private readonly IRttyDecoderHost? _rttyDecoderHost;
+    private readonly IKeyboardModeDecoderHost? _keyboardModeDecoderHost;
+    private readonly IFreedvDigitalVoiceHost? _freedvDigitalVoiceHost;
     private readonly ISstvDecoderHost? _sstvDecoderHost;
     private readonly ISstvTransmitService? _sstvTransmitService;
     private readonly IWefaxDecoderHost? _wefaxDecoderHost;
@@ -58,6 +64,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IDisposable? _cwDecodeSubscription;
     private readonly IDisposable? _rttyTelemetrySubscription;
     private readonly IDisposable? _rttyDecodeSubscription;
+    private readonly IDisposable? _keyboardModeTelemetrySubscription;
+    private readonly IDisposable? _keyboardModeDecodeSubscription;
+    private readonly IDisposable? _freedvTelemetrySubscription;
+    private readonly IDisposable? _freedvSpeechSubscription;
     private readonly IDisposable? _sstvTelemetrySubscription;
     private readonly IDisposable? _sstvImageSubscription;
     private readonly IDisposable? _wefaxTelemetrySubscription;
@@ -65,6 +75,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IDisposable? _wsjtxTelemetrySubscription;
     private readonly IDisposable? _wsjtxDecodeSubscription;
     private Pcm16AudioClip? _wsjtxPreparedTransmitClip;
+    private Pcm16AudioClip? _keyboardPreparedTransmitClip;
+    private string? _keyboardPreparedTransmitFingerprint;
     private Pcm16AudioClip? _sstvPreparedTransmitClip;
     private string? _sstvPreparedTransmitFingerprint;
     private string? _sstvPreparedTransmitMode;
@@ -74,6 +86,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private double _sstvPreparedTransmitDurationSeconds;
     private CancellationTokenSource? _sstvTxCts;
     private bool _wsjtxSlotSendInFlight;
+    private bool _keyboardTxSendInFlight;
     private bool _sstvTxSendInFlight;
     private WsjtxModeTelemetry? _lastWsjtxTelemetry;
     private DateTime _lastWsjtxDirectedAlertUtc = DateTime.MinValue;
@@ -81,6 +94,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly string _sstvReplyDirectory;
     private readonly string _sstvTemplateDirectory;
     private readonly string _sstvTxDirectory;
+    private readonly string _keyboardTxDirectory;
+    private readonly string _freedvDebugDirectory;
     private readonly string _wefaxReceivedDirectory;
     private bool _isUpdatingCwRigSettingsFromRadio;
     private bool _cwRigSettingsDirty;
@@ -105,6 +120,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         IInteropService? interopService = null,
         ICwDecoderHost? cwDecoderHost = null,
         IRttyDecoderHost? rttyDecoderHost = null,
+        IKeyboardModeDecoderHost? keyboardModeDecoderHost = null,
+        IFreedvDigitalVoiceHost? freedvDigitalVoiceHost = null,
         ISstvDecoderHost? sstvDecoderHost = null,
         ISstvTransmitService? sstvTransmitService = null,
         IWefaxDecoderHost? wefaxDecoderHost = null,
@@ -122,6 +139,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _interopService = interopService;
         _cwDecoderHost = cwDecoderHost;
         _rttyDecoderHost = rttyDecoderHost;
+        _keyboardModeDecoderHost = keyboardModeDecoderHost;
+        _freedvDigitalVoiceHost = freedvDigitalVoiceHost;
         _sstvDecoderHost = sstvDecoderHost;
         _sstvTransmitService = sstvTransmitService;
         _wefaxDecoderHost = wefaxDecoderHost;
@@ -130,11 +149,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _sstvReplyDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "sstv-reply");
         _sstvTemplateDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "sstv-templates");
         _sstvTxDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "sstv-tx");
+        _keyboardTxDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "keyboard-tx");
+        _freedvDebugDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "freedv-debug");
         _wefaxReceivedDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "wefax");
         Directory.CreateDirectory(_sstvReceivedDirectory);
         Directory.CreateDirectory(_sstvReplyDirectory);
         Directory.CreateDirectory(_sstvTemplateDirectory);
         Directory.CreateDirectory(_sstvTxDirectory);
+        Directory.CreateDirectory(_keyboardTxDirectory);
+        Directory.CreateDirectory(_freedvDebugDirectory);
         Directory.CreateDirectory(_wefaxReceivedDirectory);
         AttachSstvReplyLayoutChangeTracking(SstvReplyOverlayItems);
         AttachSstvReplyLayoutChangeTracking(SstvReplyImageOverlayItems);
@@ -172,6 +195,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SettingsFlrigHost = settings.Interop.FlrigHost;
         SettingsFlrigPort = settings.Interop.FlrigPort.ToString();
         MonitorVolumePercent = Math.Clamp(settings.Audio.MonitorVolumePercent, 0, 100);
+        FreedvSpeechVolumePercent = Math.Clamp(settings.Audio.FreedvMonitorVolumePercent, 0, 100);
         WaterfallFloorPercent = Math.Clamp(settings.Ui.WaterfallFloorPercent, 0, 95);
         WaterfallCeilingPercent = Math.Clamp(settings.Ui.WaterfallCeilingPercent, WaterfallFloorPercent + 1, 100);
         VoiceMicGainPercent = 50;
@@ -181,10 +205,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         VoiceRfPowerPercent = 100;
         CwPitchHz = 700;
         CwWpm = 20;
-        CwDecoderProfile = "Fldigi";
+        CwDecoderProfile = "Adaptive Python";
         _voiceRigSettingsDirty = false;
         _cwRigSettingsDirty = false;
         SettingsStatusMessage = "Settings loaded";
+        if (!string.IsNullOrWhiteSpace(SettingsCallsign))
+        {
+            KeyboardTransmitText = $"CQ CQ DE {SettingsCallsign} {SettingsCallsign} K";
+        }
+
         RebuildWsjtxSuggestedMessages();
         LoadSstvArchiveImages();
         LoadWefaxArchiveImages();
@@ -365,7 +394,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         ? chunk.Text
                         : $"{CwDecodedText}{chunk.Text}";
                     CwDecoderConfidenceDisplay = $"{chunk.Confidence:P0}";
-                    UpdateCwDetectedCallsign();
                 });
             }));
         }
@@ -377,7 +405,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 Dispatcher.UIThread.Post(() =>
                 {
                     RttyRxStatus = telemetry.Status;
-                    RttySessionNotes = $"{telemetry.ActiveWorker}  |  Signal {telemetry.SignalLevelPercent}%  |  Shift {telemetry.EstimatedShiftHz} Hz  |  Baud {telemetry.EstimatedBaud:0.##}";
+                    RttySessionNotes = $"{telemetry.ActiveWorker}  |  Signal {FormatTelemetryPercent(telemetry.SignalLevelPercent)}  |  Shift {telemetry.EstimatedShiftHz} Hz  |  Baud {telemetry.EstimatedBaud:0.##}";
                     if (telemetry.SuggestedAudioCenterHz > 0)
                     {
                         RttySuggestedAudioCenterHz = telemetry.SuggestedAudioCenterHz;
@@ -408,6 +436,69 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }));
         }
 
+        if (keyboardModeDecoderHost is not null)
+        {
+            _keyboardModeTelemetrySubscription = keyboardModeDecoderHost.TelemetryStream.Subscribe(new Observer<KeyboardModeDecoderTelemetry>(telemetry =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    KeyboardRxStatus = telemetry.Status;
+                    KeyboardSuggestedAudioCenterHz = telemetry.SuggestedAudioCenterHz > 0
+                        ? telemetry.SuggestedAudioCenterHz
+                        : telemetry.TrackedAudioCenterHz;
+                    KeyboardTuneHelperSuggestion =
+                        $"Tune helper: peak {telemetry.SuggestedAudioCenterHz:0} Hz ({telemetry.SuggestedAudioScoreDb:+0.0;-0.0;0.0} dB) | " +
+                        $"track {telemetry.TrackedAudioCenterHz:0.0} Hz | AFC {telemetry.FrequencyErrorHz:+0.00;-0.00;0.00} Hz | DCD {(telemetry.IsDcdOpen ? "open" : "closed")}.";
+                    KeyboardSessionNotes =
+                        $"{telemetry.ActiveWorker}  |  Signal {FormatTelemetryPercent(telemetry.SignalLevelPercent)}  |  Mode {telemetry.ModeLabel}  |  DCD {(telemetry.IsDcdOpen ? "open" : "closed")}";
+                });
+            }));
+
+            _keyboardModeDecodeSubscription = keyboardModeDecoderHost.DecodeStream.Subscribe(new Observer<KeyboardModeDecodeChunk>(chunk =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!string.IsNullOrEmpty(chunk.Text))
+                    {
+                        KeyboardDecodedText = $"{KeyboardDecodedText}{chunk.Text}";
+                    }
+                });
+            }));
+        }
+
+        if (freedvDigitalVoiceHost is not null)
+        {
+            _freedvTelemetrySubscription = freedvDigitalVoiceHost.TelemetryStream.Subscribe(new Observer<FreedvDigitalVoiceTelemetry>(telemetry =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    FreedvRxStatus = telemetry.Status;
+                    var radeCallsign = string.IsNullOrWhiteSpace(telemetry.RadeCallsign)
+                        ? string.Empty
+                        : $"  |  RADE call {telemetry.RadeCallsign}";
+                    FreedvSignalSummary =
+                        $"Signal {FormatTelemetryPercent(telemetry.SignalLevelPercent)}  |  " +
+                        $"Sync {FormatTelemetryPercent(telemetry.SyncPercent)}  |  " +
+                        $"SNR {telemetry.SnrDb:0.0} dB";
+                    if (!string.IsNullOrWhiteSpace(telemetry.RadeCallsign))
+                    {
+                        FreedvLastRadeCallsign = telemetry.RadeCallsign.Trim().ToUpperInvariant();
+                    }
+
+                    FreedvSessionNotes =
+                        $"{telemetry.ActiveWorker}  |  Signal {FormatTelemetryPercent(telemetry.SignalLevelPercent)}  |  Sync {FormatTelemetryPercent(telemetry.SyncPercent)}  |  SNR {telemetry.SnrDb:0.0} dB{radeCallsign}";
+                    FreedvRuntimeStatus = telemetry.IsCodec2RuntimeLoaded
+                        ? $"FreeDV runtime loaded  |  Speech {telemetry.SpeechSampleRate} Hz  |  Modem {telemetry.ModemSampleRate} Hz"
+                        : "FreeDV runtime missing. Bundle codec2.dll/libcodec2.dll or librade.dll, or set the runtime path override.";
+                });
+            }));
+
+            _freedvSpeechSubscription = freedvDigitalVoiceHost.SpeechStream.Subscribe(new Observer<Pcm16AudioClip>(clip =>
+            {
+                _ = PlayFreedvSpeechFrameAsync(clip);
+            }));
+        }
+
         if (sstvDecoderHost is not null)
         {
             _sstvTelemetrySubscription = sstvDecoderHost.TelemetryStream.Subscribe(new Observer<SstvDecoderTelemetry>(telemetry =>
@@ -423,7 +514,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     var fskId = string.IsNullOrWhiteSpace(SstvDecodedFskIdCallsign)
                         ? "FSKID none"
                         : $"FSKID {SstvDecodedFskIdCallsign}";
-                    SstvSessionNotes = $"{telemetry.ActiveWorker}  |  Signal {telemetry.SignalLevelPercent}%  |  Mode {telemetry.DetectedMode}  |  {fskId}";
+                    SstvSessionNotes = $"{telemetry.ActiveWorker}  |  Signal {FormatTelemetryPercent(telemetry.SignalLevelPercent)}  |  Mode {telemetry.DetectedMode}  |  {fskId}";
                 });
             }));
 
@@ -738,6 +829,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private int monitorVolumePercent = 75;
 
     [ObservableProperty]
+    private int freedvSpeechVolumePercent = 75;
+
+    [ObservableProperty]
     private string spectrumPathData = string.Empty;
 
     [ObservableProperty]
@@ -789,7 +883,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private bool settingsShowExperimentalCw;
 
     [ObservableProperty]
-    private bool settingsFlrigEnabled = true;
+    private bool settingsFlrigEnabled;
 
     [ObservableProperty]
     private string settingsFlrigHost = "127.0.0.1";
@@ -834,6 +928,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private AudioDeviceInfo? selectedMonitorDevice;
 
     [ObservableProperty]
+    private AudioDeviceInfo? selectedFreedvMonitorDevice;
+
+    [ObservableProperty]
     private string voiceRxDeviceDisplay = "Not configured";
 
     [ObservableProperty]
@@ -844,6 +941,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private string voiceMonitorDeviceDisplay = "Not configured";
+
+    [ObservableProperty]
+    private string freedvMonitorDeviceDisplay = "Not configured";
 
     [ObservableProperty]
     private string voiceTxStatus = "TX audio idle";
@@ -921,10 +1021,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string cwSelectedSpacing = "Normal";
 
     [ObservableProperty]
-    private string cwDecoderProfile = "Fldigi";
-
-    [ObservableProperty]
-    private IReadOnlyList<string> cwDecoderProfiles = ["Fldigi"];
+    private string cwDecoderProfile = "Adaptive Python";
 
     [ObservableProperty]
     private string cwDecoderStatus = "Ready";
@@ -943,15 +1040,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private string cwDecodedText = string.Empty;
-
-    [ObservableProperty]
-    private string cwDetectedCallsign = string.Empty;
-
-    [ObservableProperty]
-    private string cwOperatorHint = "No CW callsign detected yet.";
-
-    [ObservableProperty]
-    private IReadOnlyList<string> cwMacroLabels = ["CQ", "DE", "RST", "TU", "73", "POTA"];
 
     [ObservableProperty]
     private IReadOnlyList<string> rttyProfileOptions =
@@ -1001,6 +1089,110 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string rttyDecodedText = string.Empty;
 
     [ObservableProperty]
+    private IReadOnlyList<string> keyboardModeOptions = ["BPSK31", "BPSK63"];
+
+    [ObservableProperty]
+    private string keyboardSelectedMode = "BPSK31";
+
+    [ObservableProperty]
+    private IReadOnlyList<string> keyboardFrequencyOptions =
+    [
+        "14.070 MHz USB-D",
+        "7.070 MHz LSB-D",
+        "21.070 MHz USB-D",
+        "28.120 MHz USB-D"
+    ];
+
+    [ObservableProperty]
+    private string keyboardSelectedFrequency = "14.070 MHz USB-D";
+
+    [ObservableProperty]
+    private bool keyboardUseCurrentRadioFrequency = true;
+
+    [ObservableProperty]
+    private string keyboardAudioCenterHz = "1000";
+
+    [ObservableProperty]
+    private bool keyboardReversePolarity;
+
+    [ObservableProperty]
+    private string keyboardTuneHelperSuggestion = "Start RX, tune the PSK trace into the passband, then apply the helper if AFC settles off-center.";
+
+    [ObservableProperty]
+    private double keyboardSuggestedAudioCenterHz;
+
+    [ObservableProperty]
+    private string keyboardRxStatus = "Keyboard modes ready";
+
+    [ObservableProperty]
+    private string keyboardSessionNotes = "PSK31/63 receive uses the fldigi-derived GPL sidecar. Use USB-D/LSB-D and place the trace near the selected audio center.";
+
+    [ObservableProperty]
+    private string keyboardDecodedText = string.Empty;
+
+    [ObservableProperty]
+    private string keyboardTransmitText = "CQ CQ DE W8STR W8STR K";
+
+    [ObservableProperty]
+    private string keyboardPreparedTransmitStatus = "No PSK TX audio prepared.";
+
+    [ObservableProperty]
+    private string keyboardPreparedTransmitPath = "No prepared PSK WAV.";
+
+    public bool KeyboardHasPreparedTransmitClip => _keyboardPreparedTransmitClip is not null;
+
+    [ObservableProperty]
+    private IReadOnlyList<string> freedvModeOptions = ["RADEV1", "700D", "700E", "700C", "1600"];
+
+    [ObservableProperty]
+    private string freedvSelectedMode = "RADEV1";
+
+    [ObservableProperty]
+    private IReadOnlyList<string> freedvFrequencyOptions =
+    [
+        "14.236 MHz USB-D",
+        "7.177 MHz LSB-D",
+        "21.313 MHz USB-D",
+        "28.330 MHz USB-D"
+    ];
+
+    [ObservableProperty]
+    private string freedvSelectedFrequency = "14.236 MHz USB-D";
+
+    [ObservableProperty]
+    private bool freedvUseCurrentRadioFrequency = true;
+
+    [ObservableProperty]
+    private int freedvRxFrequencyOffsetHz;
+
+    [ObservableProperty]
+    private string freedvRxStatus = "FreeDV digital voice ready";
+
+    [ObservableProperty]
+    private string freedvSessionNotes = "Use USB-D/LSB-D with the official Codec2 FreeDV runtime. 700D is the practical first HF mode.";
+
+    [ObservableProperty]
+    private string freedvRuntimeStatus = "Codec2 runtime not loaded yet.";
+
+    [ObservableProperty]
+    private string freedvDecodedAudioStatus = "No decoded FreeDV speech yet.";
+
+    [ObservableProperty]
+    private string freedvSignalSummary = "Signal ---%  |  Sync ---%  |  SNR --.- dB";
+
+    [ObservableProperty]
+    private string freedvLastRadeCallsign = "None decoded";
+
+    [ObservableProperty]
+    private string freedvLastDecodedSpeechPath = "No decoded speech capture yet.";
+
+    [ObservableProperty]
+    private string freedvFieldNotes = "For live RADEV1: tune USB-D near the signal, Start RX, then adjust RX offset only if level is present but sync will not lock.";
+
+    [ObservableProperty]
+    private bool isFreedvTransmitting;
+
+    [ObservableProperty]
     private IReadOnlyList<string> wsjtxModeOptions = WsjtxModeCatalog.GetOperatorModeLabels();
 
     [ObservableProperty]
@@ -1011,6 +1203,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private string wsjtxSelectedFrequency = WsjtxModeCatalog.GetDefaultFrequencyLabel("FT8");
+
+    private int wsjtxDirectedAlertTestSequence;
 
     [ObservableProperty]
     private IReadOnlyList<string> js8ModeOptions = WsjtxModeCatalog.GetJs8ModeLabels();
@@ -1121,6 +1315,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string selectedVoiceLongwaveBandFilter = "All bands";
 
     [ObservableProperty]
+    private string voicePotaSpotComment = string.Empty;
+
+    [ObservableProperty]
+    private string voicePotaSpotCallsign = string.Empty;
+
+    [ObservableProperty]
+    private string voicePotaSpotParkReference = string.Empty;
+
+    [ObservableProperty]
+    private string voicePotaSpotFrequencyKhz = "14286.0";
+
+    [ObservableProperty]
+    private string voicePotaSpotMode = "SSB";
+
+    [ObservableProperty]
     private ObservableCollection<LongwaveLogbookItem> longwaveLogbooks = [];
 
     [ObservableProperty]
@@ -1136,7 +1345,24 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string longwaveNewLogbookName = string.Empty;
 
     [ObservableProperty]
+    private string longwaveSelectedLogbookName = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveSelectedLogbookOperatorCallsign = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveSelectedLogbookParkReference = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveSelectedLogbookActivationDate = string.Empty;
+
+    [ObservableProperty]
+    private string longwaveSelectedLogbookNotes = string.Empty;
+
+    [ObservableProperty]
     private bool isLongwaveBusy;
+
+    private bool _longwaveEnsureLoadInFlight;
 
     [ObservableProperty]
     private string longwaveStatus = "Longwave integration disabled.";
@@ -1148,24 +1374,90 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string longwaveLogStatus = "Ready to log from rig or selected spot.";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEditingLongwaveContact))]
+    [NotifyPropertyChangedFor(nameof(IsCreatingLongwaveContact))]
+    [NotifyPropertyChangedFor(nameof(LongwaveContactEditorSummary))]
+    private string longwaveEditingContactId = string.Empty;
+
+    public bool IsEditingLongwaveContact => !string.IsNullOrWhiteSpace(LongwaveEditingContactId);
+    public bool IsCreatingLongwaveContact => !IsEditingLongwaveContact;
+
+    public string LongwaveContactEditorSummary => IsEditingLongwaveContact
+        ? $"Editing {LongwaveLogCallsign} from {LongwaveLogQsoDate} {LongwaveLogTimeOn} UTC."
+        : "New contact. Use the rig, a spot, or the fields below.";
+
+    public string LongwaveQuickLogSummary
+    {
+        get
+        {
+            var station = string.IsNullOrWhiteSpace(LongwaveLogCallsign)
+                ? "no station selected"
+                : FormatCallsign(LongwaveLogCallsign);
+            var logbook = SelectedLongwaveLogbook?.Name ?? "default logbook";
+            var mode = string.IsNullOrWhiteSpace(LongwaveLogMode) ? "mode ?" : LongwaveLogMode.Trim().ToUpperInvariant();
+            var band = string.IsNullOrWhiteSpace(LongwaveLogBand) ? "band ?" : LongwaveLogBand.Trim();
+            var frequency = double.TryParse(LongwaveLogFrequencyKhz, out var khz) && khz > 0
+                ? $"{khz / 1000d:0.000000} MHz"
+                : "freq ?";
+            var report = string.IsNullOrWhiteSpace(LongwaveLogRstSent) && string.IsNullOrWhiteSpace(LongwaveLogRstReceived)
+                ? "report --/--"
+                : $"report {LongwaveLogRstSent}/{LongwaveLogRstReceived}";
+
+            return $"Will log {station} | {band} {mode} | {frequency} | {report} | {logbook}";
+        }
+    }
+
+    public string LongwaveSelectedLogbookQrzUploadSummary
+    {
+        get
+        {
+            if (SelectedLongwaveLogbook is null)
+            {
+                return "Select a logbook to see QRZ upload state.";
+            }
+
+            var uploaded = LongwaveRecentContacts.Count(static contact =>
+                string.Equals(contact.QrzUploadStatus, "Y", StringComparison.OrdinalIgnoreCase));
+            var pending = Math.Max(0, LongwaveRecentContacts.Count - uploaded);
+            return $"{SelectedLongwaveLogbook.Name}: {pending} QRZ pending, {uploaded} uploaded.";
+        }
+    }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LongwaveQuickLogSummary))]
     private string longwaveLogOperatorCallsign = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LongwaveContactEditorSummary))]
+    [NotifyPropertyChangedFor(nameof(LongwaveQuickLogSummary))]
     private string longwaveLogCallsign = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LongwaveContactEditorSummary))]
+    private string longwaveLogQsoDate = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LongwaveContactEditorSummary))]
+    private string longwaveLogTimeOn = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LongwaveQuickLogSummary))]
     private string longwaveLogMode = "SSB";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LongwaveQuickLogSummary))]
     private string longwaveLogBand = "20m";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LongwaveQuickLogSummary))]
     private string longwaveLogFrequencyKhz = "14074.0";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LongwaveQuickLogSummary))]
     private string longwaveLogRstSent = "59";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LongwaveQuickLogSummary))]
     private string longwaveLogRstReceived = "59";
 
     [ObservableProperty]
@@ -1279,11 +1571,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ? WsjtxTransmitArmSummary
         : "JS8 TX generation is wired for short Varicode/Huffman text frames; prepare before arming live PTT.";
 
-    public string WsjtxRxFrequencyTitle => $"Rx Frequency ({WsjtxRxAudioFrequencyHz:+0;-0;0} Hz)";
+    public string WsjtxRxFrequencyTitle => IsWsprMode(WsjtxSelectedMode)
+        ? "WSPR Spots"
+        : $"Rx Frequency ({WsjtxRxAudioFrequencyHz:+0;-0;0} Hz)";
 
     public string WsjtxTxFrequencyTitle => $"Tx Offset ({WsjtxTxAudioFrequencyHz:+0;-0;0} Hz)";
 
-    public string WsjtxRxTrackStatus => SelectedWsjtxMessage is null
+    public string WsjtxRxTrackStatus => IsWsprMode(WsjtxSelectedMode)
+        ? "WSPR reports RF spot frequency; audio-offset tracking is not used."
+        : SelectedWsjtxMessage is null
         ? "Select a decode to track its audio offset."
         : $"Selected offset {SelectedWsjtxMessage.FrequencyOffsetHz:+0;-0;0} Hz";
 
@@ -1291,7 +1587,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ? $"TX held at {WsjtxTxAudioFrequencyHz:+0;-0;0} Hz"
         : $"TX follows RX track ({WsjtxTxAudioFrequencyHz:+0;-0;0} Hz)";
 
-    public string WsjtxSuggestedMessagePreview => SelectedWsjtxSuggestedMessage?.MessageText ?? "No reply/CQ scaffolding yet.";
+    public string WsjtxSuggestedMessagePreview => SelectedWsjtxSuggestedMessage?.MessageText ?? "No reply or CQ selected.";
 
     public string WsjtxEffectiveTransmitText => NormalizeWsjtxTransmitText(WsjtxManualTransmitText)
         ?? WsjtxQueuedTransmitMessage?.MessageText
@@ -1306,6 +1602,36 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string WsjtxReplyAutomationSummary => SelectedWsjtxReplyAutomationMode.Summary;
 
     public bool WsjtxSelectedModeSupportsQso => IsWsjtxQsoMode(WsjtxSelectedMode);
+
+    public string WsjtxLongwaveLogPreview
+    {
+        get
+        {
+            if (!TryBuildWsjtxLongwaveLogContext(out var context))
+            {
+                return "Log target: no active/tracked QSO yet.";
+            }
+
+            var logbook = SelectedLongwaveLogbook?.Name ?? "default Longwave logbook";
+            var band = DeriveBandFromFrequencyKhz(CurrentFrequencyHz / 1000d);
+            var mode = WsjtxSelectedMode.Trim().ToUpperInvariant();
+            return $"Will log: {context.OperatorCallsign} worked {context.StationCallsign}  |  {band} {mode}  |  {CurrentFrequencyHz / 1_000_000d:0.000000} MHz  |  {logbook}";
+        }
+    }
+
+    public string WsjtxLongwaveLogDetail
+    {
+        get
+        {
+            if (!TryBuildWsjtxLongwaveLogContext(out var context))
+            {
+                return "Start or track a QSO first. If no QSO is active, select a decode row with a callsign.";
+            }
+
+            var report = context.SignalReportDb.ToString("+#;-#;0");
+            return $"UTC date/time is taken at click time. Report fields will be {report}/{report}.";
+        }
+    }
 
     public string WsjtxTransmitArmSummary
     {
@@ -1425,7 +1751,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private string sstvImageStatus = "No image captured yet";
 
     [ObservableProperty]
-    private string sstvSessionNotes = "Auto Detect is the recommended default. Lock a mode only when you know it; Force Start is for late joins or missing VIS.";
+    private string sstvSessionNotes = SstvIdleSessionNotes;
 
     [ObservableProperty]
     private string sstvDecodedFskIdCallsign = string.Empty;
@@ -1817,7 +2143,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 TxDeviceId = SelectedTxDevice?.DeviceId ?? string.Empty,
                 MicDeviceId = SelectedMicDevice?.DeviceId ?? string.Empty,
                 MonitorDeviceId = SelectedMonitorDevice?.DeviceId ?? string.Empty,
+                FreedvMonitorDeviceId = SelectedFreedvMonitorDevice?.DeviceId ?? string.Empty,
                 MonitorVolumePercent = MonitorVolumePercent,
+                FreedvMonitorVolumePercent = FreedvSpeechVolumePercent,
                 MicGainPercent = VoiceMicGainPercent,
                 VoiceCompressionPercent = VoiceCompressionPercent,
             },
@@ -1883,11 +2211,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var spots = await _longwaveService.GetPotaSpotsAsync(settings, CancellationToken.None);
             LongwaveOperatorSummary = $"Longwave operator {context.Callsign}  |  {spots.Count} POTA spots loaded";
             LongwaveLogbooks = new ObservableCollection<LongwaveLogbookItem>(
-                logbooks.Select(static logbook => new LongwaveLogbookItem(
-                    logbook.Id,
-                    logbook.Name,
-                    logbook.OperatorCallsign,
-                    logbook.Notes)));
+                logbooks.Select(ToLongwaveLogbookItem));
             SelectedLongwaveLogbook = SelectPreferredLongwaveLogbook(LongwaveLogbooks, SelectedLongwaveLogbook, settings.DefaultLogbookName);
             var contacts = await _longwaveService.GetContactsAsync(settings, SelectedLongwaveLogbook?.Id, CancellationToken.None);
             LongwavePotaSpots = new ObservableCollection<LongwaveSpotSummaryItem>(
@@ -1910,6 +2234,35 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         finally
         {
             IsLongwaveBusy = false;
+        }
+    }
+
+    public async Task EnsureLongwaveDataLoadedAsync()
+    {
+        if (_longwaveService is null
+            || _longwaveEnsureLoadInFlight
+            || IsLongwaveBusy
+            || LongwaveLogbooks.Count > 0)
+        {
+            return;
+        }
+
+        var settings = BuildCurrentLongwaveSettings();
+        if (!settings.Enabled
+            || string.IsNullOrWhiteSpace(settings.BaseUrl)
+            || string.IsNullOrWhiteSpace(settings.ClientApiToken))
+        {
+            return;
+        }
+
+        try
+        {
+            _longwaveEnsureLoadInFlight = true;
+            await RefreshLongwaveSpotsAsync();
+        }
+        finally
+        {
+            _longwaveEnsureLoadInFlight = false;
         }
     }
 
@@ -1954,6 +2307,24 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private void UseRigForVoicePotaSpot()
+    {
+        VoicePotaSpotFrequencyKhz = $"{CurrentFrequencyHz / 1000d:0.0}";
+        VoicePotaSpotMode = MapRadioModeToPotaMode(SelectedMode);
+        if (string.IsNullOrWhiteSpace(VoicePotaSpotCallsign))
+        {
+            VoicePotaSpotCallsign = FormatCallsign(LongwaveLogCallsign);
+        }
+
+        if (string.IsNullOrWhiteSpace(VoicePotaSpotParkReference))
+        {
+            VoicePotaSpotParkReference = LongwaveLogParkReference.Trim().ToUpperInvariant();
+        }
+
+        LongwaveStatus = $"Spot form filled from rig: {VoicePotaSpotFrequencyKhz} kHz {VoicePotaSpotMode}.";
+    }
+
+    [RelayCommand]
     private void UseSelectedSpotForLongwaveLog()
     {
         if (SelectedLongwavePotaSpot is null)
@@ -1978,13 +2349,201 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private async Task PostVoicePotaSpotAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveStatus = "Longwave service unavailable.";
+            return;
+        }
+
+        var activatorCall = FormatCallsign(VoicePotaSpotCallsign);
+        var park = VoicePotaSpotParkReference.Trim().ToUpperInvariant();
+        var mode = string.IsNullOrWhiteSpace(VoicePotaSpotMode)
+            ? MapRadioModeToPotaMode(SelectedMode)
+            : VoicePotaSpotMode.Trim().ToUpperInvariant();
+        var spotterCall = FormatCallsign(
+            string.IsNullOrWhiteSpace(LongwaveLogOperatorCallsign)
+                ? SettingsCallsign
+                : LongwaveLogOperatorCallsign);
+
+        if (string.IsNullOrWhiteSpace(activatorCall) || string.IsNullOrWhiteSpace(park))
+        {
+            LongwaveStatus = "POTA spot needs an activator callsign and park reference.";
+            return;
+        }
+
+        if (!double.TryParse(VoicePotaSpotFrequencyKhz, out var frequencyKhz) || frequencyKhz <= 0)
+        {
+            LongwaveStatus = "POTA spot needs a valid frequency in kHz.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            LongwaveStatus = $"Posting POTA spot for {activatorCall}...";
+            var band = DeriveBandFromFrequencyKhz(frequencyKhz);
+            var created = await _longwaveService.CreatePotaSpotAsync(
+                BuildCurrentLongwaveSettings(),
+                new LongwavePotaSpotDraft(
+                    activatorCall,
+                    park,
+                    frequencyKhz,
+                    mode,
+                    band,
+                    VoicePotaSpotComment,
+                    spotterCall),
+                CancellationToken.None);
+
+            var item = ToLongwaveSpotSummaryItem(created, isLogged: false);
+            LongwavePotaSpots.Insert(0, item);
+            SelectedLongwavePotaSpot = item;
+            RebuildVoiceLongwavePotaSpots();
+            SelectedVoiceLongwavePotaSpot = VoiceLongwavePotaSpots.FirstOrDefault(spot => spot.Id == item.Id) ?? SelectedVoiceLongwavePotaSpot;
+            VoicePotaSpotComment = string.Empty;
+            VoicePotaSpotCallsign = string.Empty;
+            VoicePotaSpotParkReference = string.Empty;
+            LongwaveStatus = $"Posted POTA spot for {created.ActivatorCallsign} at {created.ParkReference}.";
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
     private void UseRigForCwLongwaveLog()
     {
-        UseRigForLongwaveLog();
-        LongwaveLogMode = "CW";
-        LongwaveLogRstSent = "599";
-        LongwaveLogRstReceived = "599";
+        UseRigForModeLongwaveLog("CW", "599", "599");
         LongwaveLogStatus = $"Prefilled CW log from rig: {LongwaveLogBand} CW at {LongwaveLogFrequencyKhz} kHz.";
+    }
+
+    [RelayCommand]
+    private void UseRigForRttyLongwaveLog()
+    {
+        UseRigForModeLongwaveLog("RTTY", "599", "599");
+        LongwaveLogStatus = $"Prefilled RTTY log from rig: {LongwaveLogBand} RTTY at {LongwaveLogFrequencyKhz} kHz.";
+    }
+
+    [RelayCommand]
+    private void UseRigForKeyboardLongwaveLog()
+    {
+        var mode = string.IsNullOrWhiteSpace(KeyboardSelectedMode)
+            ? "PSK"
+            : KeyboardSelectedMode.Trim().ToUpperInvariant();
+        UseRigForModeLongwaveLog(mode, "599", "599");
+        LongwaveLogStatus = $"Prefilled {LongwaveLogMode} log from rig: {LongwaveLogBand} at {LongwaveLogFrequencyKhz} kHz.";
+    }
+
+    [RelayCommand]
+    private void UseRigForSstvLongwaveLog()
+    {
+        UseRigForModeLongwaveLog("SSTV", "595", "595");
+        if (!string.IsNullOrWhiteSpace(SstvDecodedFskIdCallsign))
+        {
+            LongwaveLogCallsign = FormatCallsign(SstvDecodedFskIdCallsign);
+        }
+
+        LongwaveLogStatus = $"Prefilled SSTV log from rig: {LongwaveLogBand} SSTV at {LongwaveLogFrequencyKhz} kHz.";
+    }
+
+    [RelayCommand]
+    private void UseRigForFreedvLongwaveLog()
+    {
+        UseRigForModeLongwaveLog("FREEDV", "59", "59");
+        if (!string.IsNullOrWhiteSpace(FreedvLastRadeCallsign) && !FreedvLastRadeCallsign.StartsWith("None", StringComparison.OrdinalIgnoreCase))
+        {
+            LongwaveLogCallsign = FormatCallsign(FreedvLastRadeCallsign);
+        }
+
+        LongwaveLogStatus = $"Prefilled FreeDV log from rig: {LongwaveLogBand} FreeDV at {LongwaveLogFrequencyKhz} kHz.";
+    }
+
+    [RelayCommand]
+    private void UseDecodedSstvFskIdForLog()
+    {
+        var callsign = FormatCallsign(SstvDecodedFskIdCallsign);
+        if (string.IsNullOrWhiteSpace(callsign))
+        {
+            LongwaveLogStatus = "No SSTV FSKID callsign has been decoded yet.";
+            return;
+        }
+
+        LongwaveLogCallsign = callsign;
+        if (string.IsNullOrWhiteSpace(LongwaveLogMode) || string.Equals(LongwaveLogMode, "SSB", StringComparison.OrdinalIgnoreCase))
+        {
+            UseRigForModeLongwaveLog("SSTV", "595", "595");
+            LongwaveLogCallsign = callsign;
+        }
+
+        LongwaveLogStatus = $"Using SSTV FSKID {callsign} for the log.";
+    }
+
+    [RelayCommand]
+    private void UseFreedvRadeCallForLog()
+    {
+        var callsign = FormatCallsign(FreedvLastRadeCallsign);
+        if (string.IsNullOrWhiteSpace(callsign) || callsign.StartsWith("NONE", StringComparison.OrdinalIgnoreCase))
+        {
+            LongwaveLogStatus = "No FreeDV RADE callsign has been decoded yet.";
+            return;
+        }
+
+        LongwaveLogCallsign = callsign;
+        if (string.IsNullOrWhiteSpace(LongwaveLogMode) || string.Equals(LongwaveLogMode, "SSB", StringComparison.OrdinalIgnoreCase))
+        {
+            UseRigForModeLongwaveLog("FREEDV", "59", "59");
+            LongwaveLogCallsign = callsign;
+        }
+
+        LongwaveLogStatus = $"Using FreeDV RADE callsign {callsign} for the log.";
+    }
+
+    private void UseRigForModeLongwaveLog(string mode, string sentReport, string receivedReport)
+    {
+        UseRigForLongwaveLog();
+        LongwaveLogMode = mode.Trim().ToUpperInvariant();
+        LongwaveLogRstSent = sentReport;
+        LongwaveLogRstReceived = receivedReport;
+        OnPropertyChanged(nameof(LongwaveQuickLogSummary));
+    }
+
+    [RelayCommand]
+    private void UseSelectedJs8ForLongwaveLog()
+    {
+        var selected = SelectedWsjtxMessage;
+        if (selected is null || !selected.ModeText.StartsWith("JS8", StringComparison.OrdinalIgnoreCase))
+        {
+            LongwaveLogStatus = "Select a JS8 decode before preparing a log.";
+            return;
+        }
+
+        var callsign = FormatCallsign(Js8TargetCallsign);
+        if (string.IsNullOrWhiteSpace(callsign))
+        {
+            callsign = FormatCallsign(TryExtractCallsign(selected.MessageText) ?? string.Empty);
+        }
+
+        if (string.IsNullOrWhiteSpace(callsign))
+        {
+            LongwaveLogStatus = "Selected JS8 decode does not contain an obvious callsign.";
+            return;
+        }
+
+        LongwaveLogOperatorCallsign = FormatCallsign(SettingsCallsign);
+        LongwaveLogCallsign = callsign;
+        LongwaveLogMode = "JS8";
+        LongwaveLogBand = DeriveBandFromFrequencyKhz(CurrentFrequencyHz / 1000d);
+        LongwaveLogFrequencyKhz = $"{CurrentFrequencyHz / 1000d:0.0}";
+        LongwaveLogRstSent = selected.SnrDb.ToString("+#;-#;0");
+        LongwaveLogRstReceived = selected.SnrDb.ToString("+#;-#;0");
+        LongwaveLogGridSquare = SettingsGridSquare.Trim().ToUpperInvariant();
+        LongwaveLogStatus = $"Prepared JS8 log for {callsign} from selected decode at {selected.FrequencyOffsetHz:+0;-0;0} Hz.";
     }
 
     [RelayCommand]
@@ -2044,7 +2603,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        var qsoTime = DateTime.UtcNow;
+        var qsoTime = GetLongwaveEditorQsoTimeUtc();
         var logKey = BuildLongwaveLogDedupeKey(stationCall, LongwaveLogMode, frequencyKhz, qsoTime);
         if (!_longwaveLoggedContactKeys.Add(logKey))
         {
@@ -2062,41 +2621,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     SelectedLongwaveLogbook.Id,
                     SelectedLongwaveLogbook.Name,
                     SelectedLongwaveLogbook.OperatorCallsign,
-                    null,
-                    null,
+                    SelectedLongwaveLogbook.ParkReference,
+                    SelectedLongwaveLogbook.ActivationDate,
                     SelectedLongwaveLogbook.Notes,
-                    0)
+                    SelectedLongwaveLogbook.ContactCount)
                 : await _longwaveService.GetOrCreateLogbookAsync(settings, operatorCall, CancellationToken.None);
+            EnsureLongwaveLogbookSelected(logbook);
+            var draft = BuildLongwaveContactDraft(logbook.Id, stationCall, operatorCall, frequencyKhz, qsoTime);
             var created = await _longwaveService.CreateContactAsync(
                 settings,
-                new LongwaveContactDraft(
-                    logbook.Id,
-                    stationCall,
-                    operatorCall,
-                    qsoTime.ToString("yyyyMMdd"),
-                    qsoTime.ToString("HHmmss"),
-                    string.IsNullOrWhiteSpace(LongwaveLogBand) ? DeriveBandFromFrequencyKhz(frequencyKhz) : LongwaveLogBand.Trim(),
-                    LongwaveLogMode.Trim().ToUpperInvariant(),
-                    frequencyKhz,
-                    LongwaveLogParkReference,
-                    LongwaveLogRstSent,
-                    LongwaveLogRstReceived,
-                    LongwaveLogName,
-                    LongwaveLogQth,
-                    LongwaveLogCounty,
-                    LongwaveLogGridSquare,
-                    LongwaveLogCountry,
-                    LongwaveLogState,
-                    LongwaveLogDxcc,
-                    _longwaveLogLatitude,
-                    _longwaveLogLongitude,
-                    SelectedLongwavePotaSpot is not null
-                        && string.Equals(SelectedLongwavePotaSpot.ActivatorCallsign, stationCall, StringComparison.OrdinalIgnoreCase)
-                        ? SelectedLongwavePotaSpot.Id
-                        : null),
+                draft,
                 CancellationToken.None);
 
-            LongwaveLogStatus = $"Logged {created.StationCallsign} to Longwave logbook {logbook.Name}.";
+            UpsertLongwaveRecentContact(created);
+            LongwaveLogStatus = BuildLongwaveLoggedContactSummary(created, logbook.Name);
             LongwaveStatus = $"Longwave logged {created.StationCallsign} on {created.Band} {created.Mode}.";
             MarkLongwaveSpotLogged(created.SourceSpotId);
             await RefreshLongwaveContactsAsync();
@@ -2110,6 +2648,82 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             IsLongwaveBusy = false;
         }
+    }
+
+    [RelayCommand]
+    private async Task UpdateSelectedLongwaveContactAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveLogStatus = "Longwave service unavailable.";
+            return;
+        }
+
+        if (SelectedLongwaveRecentContact is null || string.IsNullOrWhiteSpace(LongwaveEditingContactId))
+        {
+            LongwaveLogStatus = "Select a logged contact before saving changes.";
+            return;
+        }
+
+        if (!double.TryParse(LongwaveLogFrequencyKhz, out var frequencyKhz) || frequencyKhz <= 0)
+        {
+            LongwaveLogStatus = "Enter a valid frequency in kHz.";
+            return;
+        }
+
+        var operatorCall = FormatCallsign(LongwaveLogOperatorCallsign);
+        var stationCall = FormatCallsign(LongwaveLogCallsign);
+        if (string.IsNullOrWhiteSpace(operatorCall) || string.IsNullOrWhiteSpace(stationCall))
+        {
+            LongwaveLogStatus = "Operator and station callsigns are required.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            LongwaveLogStatus = $"Saving changes for {stationCall}...";
+            var logbookId = SelectedLongwaveLogbook?.Id ?? SelectedLongwaveRecentContact.LogbookId;
+            var draft = BuildLongwaveContactDraft(logbookId, stationCall, operatorCall, frequencyKhz, GetLongwaveEditorQsoTimeUtc());
+            var updated = await _longwaveService.UpdateContactAsync(
+                BuildCurrentLongwaveSettings(),
+                LongwaveEditingContactId,
+                draft,
+                CancellationToken.None);
+            UpsertLongwaveRecentContact(updated);
+            LongwaveEditingContactId = updated.Id;
+            LongwaveLogStatus = BuildLongwaveLoggedContactSummary(updated, SelectedLongwaveLogbook?.Name ?? "Longwave");
+            LongwaveStatus = $"Longwave updated {updated.StationCallsign} on {updated.Band} {updated.Mode}.";
+            await RefreshLongwaveContactsAsync();
+        }
+        catch (Exception ex)
+        {
+            LongwaveLogStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void NewLongwaveContact()
+    {
+        SelectedLongwaveRecentContact = null;
+        LongwaveEditingContactId = string.Empty;
+        LongwaveLogCallsign = string.Empty;
+        LongwaveLogQsoDate = string.Empty;
+        LongwaveLogTimeOn = string.Empty;
+        LongwaveLogParkReference = string.Empty;
+        LongwaveLogName = string.Empty;
+        LongwaveLogQth = string.Empty;
+        LongwaveLogCounty = string.Empty;
+        LongwaveLogState = string.Empty;
+        LongwaveLogCountry = string.Empty;
+        LongwaveLogDxcc = string.Empty;
+        _longwaveLogLatitude = null;
+        _longwaveLogLongitude = null;
+        LongwaveLogStatus = "Ready for a new Longwave contact.";
     }
 
     [RelayCommand]
@@ -2140,11 +2754,77 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             IsLongwaveBusy = true;
             var settings = BuildCurrentLongwaveSettings();
             var created = await _longwaveService.CreateLogbookAsync(settings, name, operatorCall, null, CancellationToken.None);
-            LongwaveLogbooks.Insert(0, new LongwaveLogbookItem(created.Id, created.Name, created.OperatorCallsign, created.Notes));
+            LongwaveLogbooks.Insert(0, ToLongwaveLogbookItem(created));
             SelectedLongwaveLogbook = LongwaveLogbooks.FirstOrDefault(item => item.Id == created.Id);
             LongwaveNewLogbookName = string.Empty;
             await RefreshLongwaveContactsAsync();
             LongwaveStatus = $"Created logbook {created.Name}.";
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task UpdateSelectedLongwaveLogbookAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveStatus = "Longwave service unavailable.";
+            return;
+        }
+
+        if (SelectedLongwaveLogbook is null)
+        {
+            LongwaveStatus = "Select a logbook first.";
+            return;
+        }
+
+        var name = LongwaveSelectedLogbookName.Trim();
+        var operatorCall = FormatCallsign(LongwaveSelectedLogbookOperatorCallsign);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            LongwaveStatus = "Logbook name is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(operatorCall))
+        {
+            LongwaveStatus = "Logbook operator callsign is required.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            var target = SelectedLongwaveLogbook;
+            var updated = await _longwaveService.UpdateLogbookAsync(
+                BuildCurrentLongwaveSettings(),
+                target.Id,
+                name,
+                operatorCall,
+                LongwaveSelectedLogbookParkReference,
+                LongwaveSelectedLogbookActivationDate,
+                LongwaveSelectedLogbookNotes,
+                CancellationToken.None);
+            var updatedItem = ToLongwaveLogbookItem(updated);
+            var index = LongwaveLogbooks.IndexOf(target);
+            if (index >= 0)
+            {
+                LongwaveLogbooks[index] = updatedItem;
+            }
+            else
+            {
+                LongwaveLogbooks.Insert(0, updatedItem);
+            }
+
+            SelectedLongwaveLogbook = updatedItem;
+            LongwaveStatus = $"Updated logbook {updated.Name}.";
         }
         catch (Exception ex)
         {
@@ -2192,6 +2872,50 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private async Task ExportSelectedLongwaveLogbookAdifAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveStatus = "Longwave service unavailable.";
+            return;
+        }
+
+        if (SelectedLongwaveLogbook is null)
+        {
+            LongwaveStatus = "Select a logbook before exporting ADIF.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            var target = SelectedLongwaveLogbook;
+            LongwaveStatus = $"Exporting {target.Name} ADIF...";
+            var adif = await _longwaveService.ExportLogbookAdifAsync(
+                BuildCurrentLongwaveSettings(),
+                target.Id,
+                CancellationToken.None);
+
+            var exportRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ShackStack", "longwave-adif");
+            Directory.CreateDirectory(exportRoot);
+            var safeName = MakeSafeFileName(target.Name);
+            var path = Path.Combine(exportRoot, $"{safeName}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.adi");
+            await File.WriteAllTextAsync(path, adif, CancellationToken.None);
+            LongwaveStatus = $"Exported ADIF to {path}.";
+            LongwaveLogStatus = LongwaveStatus;
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = ex.Message;
+            LongwaveLogStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
     private async Task DeleteSelectedLongwaveContactAsync()
     {
         if (_longwaveService is null)
@@ -2226,44 +2950,158 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void UseSelectedWsjtxForLongwaveLog()
+    private async Task RefreshLongwaveContactsNowAsync()
     {
-        var selected = SelectedWsjtxMessage;
-        var myCall = FormatCallsign(WsjtxOperatorCallsign);
-        var state = ClassifyWsjtxQsoState(selected?.MessageText, myCall);
-        var theirCall = state.OtherCall ?? TryExtractCallsign(selected?.MessageText);
-        if (selected is null || string.IsNullOrWhiteSpace(theirCall))
+        try
         {
-            WsjtxRxStatus = "Select a decode with a callsign first.";
+            IsLongwaveBusy = true;
+            await RefreshLongwaveContactsAsync();
+            var uploaded = LongwaveRecentContacts.Count(static contact =>
+                string.Equals(contact.QrzUploadStatus, "Y", StringComparison.OrdinalIgnoreCase));
+            var pending = Math.Max(0, LongwaveRecentContacts.Count - uploaded);
+            LongwaveStatus = $"Loaded {LongwaveRecentContacts.Count} contacts. QRZ uploaded {uploaded}, pending {pending}.";
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task UploadSelectedLongwaveLogbookToQrzAsync()
+    {
+        if (_longwaveService is null)
+        {
+            LongwaveStatus = "Longwave service unavailable.";
             return;
         }
 
-        LongwaveLogOperatorCallsign = myCall;
-        LongwaveLogCallsign = theirCall;
+        if (SelectedLongwaveLogbook is null)
+        {
+            LongwaveStatus = "Select a logbook before uploading to QRZ.";
+            return;
+        }
+
+        try
+        {
+            IsLongwaveBusy = true;
+            var target = SelectedLongwaveLogbook;
+            var pending = LongwaveRecentContacts.Count(static contact =>
+                !string.Equals(contact.QrzUploadStatus, "Y", StringComparison.OrdinalIgnoreCase));
+            if (pending <= 0)
+            {
+                LongwaveStatus = $"{target.Name} has no QRZ-pending contacts.";
+                LongwaveLogStatus = LongwaveStatus;
+                return;
+            }
+
+            LongwaveStatus = $"Uploading {pending} pending contact(s) from {target.Name} to QRZ via Longwave...";
+            var result = await _longwaveService.UploadLogbookToQrzAsync(
+                BuildCurrentLongwaveSettings(),
+                target.Id,
+                CancellationToken.None);
+            await RefreshLongwaveContactsAsync();
+            var uploaded = LongwaveRecentContacts.Count(static contact =>
+                string.Equals(contact.QrzUploadStatus, "Y", StringComparison.OrdinalIgnoreCase));
+            LongwaveStatus = result.Uploaded
+                ? $"{result.Message} Refreshed {uploaded} uploaded contact badge(s)."
+                : result.Message;
+            LongwaveLogStatus = LongwaveStatus;
+        }
+        catch (Exception ex)
+        {
+            LongwaveStatus = ex.Message;
+            LongwaveLogStatus = ex.Message;
+        }
+        finally
+        {
+            IsLongwaveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void UseSelectedWsjtxForLongwaveLog()
+    {
+        if (!TryBuildWsjtxLongwaveLogContext(out var context))
+        {
+            WsjtxRxStatus = "Track a QSO or select a decode with a callsign first.";
+            return;
+        }
+
+        LongwaveLogOperatorCallsign = context.OperatorCallsign;
+        LongwaveLogCallsign = context.StationCallsign;
         LongwaveLogMode = WsjtxSelectedMode.Trim().ToUpperInvariant();
         LongwaveLogBand = DeriveBandFromFrequencyKhz(CurrentFrequencyHz / 1000d);
         LongwaveLogFrequencyKhz = $"{CurrentFrequencyHz / 1000d:0.0}";
-        var snrText = selected.SnrDb.ToString("+#;-#;0");
+        var snrText = context.SignalReportDb.ToString("+#;-#;0");
         LongwaveLogRstSent = snrText;
         LongwaveLogRstReceived = snrText;
-        LongwaveLogStatus = $"Prefilled Longwave log from {theirCall} on {LongwaveLogBand} {LongwaveLogMode}.";
+        LongwaveLogStatus = $"Prefilled Longwave log from {context.StationCallsign} on {LongwaveLogBand} {LongwaveLogMode}.";
+    }
+
+    private bool TryBuildWsjtxLongwaveLogContext(out WsjtxLongwaveLogContext context)
+    {
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        var activeCall = FormatCallsign(WsjtxActiveSession?.OtherCall ?? string.Empty);
+        var selected = SelectedWsjtxMessage;
+
+        if (string.IsNullOrWhiteSpace(activeCall))
+        {
+            var state = ClassifyWsjtxQsoState(selected?.MessageText, myCall);
+            activeCall = FormatCallsign(state.OtherCall ?? TryExtractCallsign(selected?.MessageText) ?? string.Empty);
+        }
+
+        if (string.IsNullOrWhiteSpace(myCall) || string.IsNullOrWhiteSpace(activeCall))
+        {
+            context = default;
+            return false;
+        }
+
+        var anchor = FindLatestWsjtxMessageForCall(activeCall) ?? selected;
+        var report = anchor?.SnrDb ?? 0;
+        context = new WsjtxLongwaveLogContext(myCall, activeCall, report);
+        return true;
+    }
+
+    private WsjtxMessageItem? FindLatestWsjtxMessageForCall(string callsign)
+    {
+        var normalizedCall = FormatCallsign(callsign);
+        if (string.IsNullOrWhiteSpace(normalizedCall))
+        {
+            return null;
+        }
+
+        return WsjtxConversationMessages
+            .Concat(WsjtxMessages)
+            .Where(message => WsjtxMessageMentionsCall(message.MessageText, normalizedCall))
+            .OrderByDescending(message => message.TimestampUtc)
+            .FirstOrDefault();
+    }
+
+    private static bool WsjtxMessageMentionsCall(string messageText, string callsign)
+    {
+        var tokens = messageText
+            .ToUpperInvariant()
+            .Split([' ', '\t', '\r', '\n', ',', ';', ':'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return tokens.Contains(callsign, StringComparer.OrdinalIgnoreCase);
     }
 
     [RelayCommand]
     private async Task LogSelectedWsjtxQsoAsync()
     {
-        var selected = SelectedWsjtxMessage;
-        var myCall = FormatCallsign(WsjtxOperatorCallsign);
-        var theirCall = ClassifyWsjtxQsoState(selected?.MessageText, myCall).OtherCall ?? TryExtractCallsign(selected?.MessageText);
-        if (selected is null || string.IsNullOrWhiteSpace(theirCall))
+        if (!TryBuildWsjtxLongwaveLogContext(out _))
         {
-            WsjtxRxStatus = "Select a decode with a callsign first.";
+            WsjtxRxStatus = "Track a QSO or select a decode with a callsign first.";
             return;
         }
 
         UseSelectedWsjtxForLongwaveLog();
         await LogCurrentQsoAsync();
-        WsjtxRxStatus = LongwaveLogStatus;
+        WsjtxRxStatus = $"Longwave: {LongwaveLogStatus}";
     }
 
     [RelayCommand]
@@ -2319,8 +3157,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         CwDecodedText = string.Empty;
-        CwDetectedCallsign = string.Empty;
-        CwOperatorHint = "No CW callsign detected yet.";
         await _cwDecoderHost.ResetAsync(CancellationToken.None);
     }
 
@@ -2328,8 +3164,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void ClearCwDecodedText()
     {
         CwDecodedText = string.Empty;
-        CwDetectedCallsign = string.Empty;
-        CwOperatorHint = "No CW callsign detected yet.";
     }
 
     [RelayCommand]
@@ -2351,21 +3185,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         LoadCwMacro(label);
         await QueueCwSendTextAsync();
-    }
-
-    [RelayCommand]
-    private void UseDetectedCwCallForLog()
-    {
-        var detected = FormatCallsign(CwDetectedCallsign);
-        if (string.IsNullOrWhiteSpace(detected))
-        {
-            CwOperatorHint = "No decoded CW callsign to log yet.";
-            return;
-        }
-
-        UseRigForCwLongwaveLog();
-        LongwaveLogCallsign = detected;
-        CwOperatorHint = $"Prepared CW log for {detected}.";
     }
 
     [RelayCommand]
@@ -2408,6 +3227,332 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void ClearRttyDecodedText() => RttyDecodedText = string.Empty;
+
+    [RelayCommand]
+    private void StartKeyboardReceive()
+    {
+        if (_keyboardModeDecoderHost is null)
+        {
+            KeyboardRxStatus = "Keyboard decoder host unavailable";
+            return;
+        }
+
+        _ = StartKeyboardReceiveCoreAsync();
+    }
+
+    [RelayCommand]
+    private void StopKeyboardReceive()
+    {
+        if (_keyboardModeDecoderHost is not null)
+        {
+            _ = _keyboardModeDecoderHost.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [RelayCommand]
+    private void ResetKeyboardSession()
+    {
+        if (_keyboardModeDecoderHost is not null)
+        {
+            _ = _keyboardModeDecoderHost.ResetAsync(CancellationToken.None);
+        }
+
+        KeyboardRxStatus = "Keyboard modes ready";
+        KeyboardSessionNotes = "PSK31/63 receive uses the fldigi-derived GPL sidecar. Use USB-D/LSB-D and place the trace near the selected audio center.";
+        KeyboardTuneHelperSuggestion = "Start RX, tune the PSK trace into the passband, then apply the helper if AFC settles off-center.";
+        KeyboardSuggestedAudioCenterHz = 0;
+        KeyboardDecodedText = string.Empty;
+    }
+
+    [RelayCommand]
+    private void ClearKeyboardDecodedText() => KeyboardDecodedText = string.Empty;
+
+    [RelayCommand]
+    private Task PrepareKeyboardTransmitAsync()
+    {
+        var text = KeyboardTransmitText.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _keyboardPreparedTransmitClip = null;
+            KeyboardPreparedTransmitStatus = "Type PSK text before preparing TX audio.";
+            KeyboardPreparedTransmitPath = "No prepared PSK WAV.";
+            OnPropertyChanged(nameof(KeyboardHasPreparedTransmitClip));
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(_keyboardTxDirectory);
+            var mode = string.Equals(KeyboardSelectedMode, "BPSK63", StringComparison.OrdinalIgnoreCase)
+                ? "BPSK63"
+                : "BPSK31";
+            var audioCenterHz = ParseKeyboardAudioCenterHz(KeyboardAudioCenterHz);
+            var clip = PskBpskWaveformGenerator.Generate(mode, text, audioCenterHz);
+            var timestamp = DateTime.Now;
+            var safeMode = mode.ToLowerInvariant();
+            var wavPath = Path.Combine(_keyboardTxDirectory, $"{timestamp:yyyyMMdd_HHmmss}_{safeMode}.wav");
+
+            SstvReplyRenderer.WriteWaveFile(wavPath, clip);
+            _keyboardPreparedTransmitClip = clip;
+            _keyboardPreparedTransmitFingerprint = BuildKeyboardTransmitFingerprint();
+            var durationSeconds = clip.PcmBytes.Length / (double)(clip.SampleRate * clip.Channels * 2);
+            KeyboardPreparedTransmitStatus = $"Prepared {mode} TX WAV at {audioCenterHz:0} Hz audio center ({durationSeconds:0.0}s).";
+            KeyboardPreparedTransmitPath = wavPath;
+            OnPropertyChanged(nameof(KeyboardHasPreparedTransmitClip));
+        }
+        catch (Exception ex)
+        {
+            _keyboardPreparedTransmitClip = null;
+            _keyboardPreparedTransmitFingerprint = null;
+            KeyboardPreparedTransmitStatus = $"PSK TX prepare failed: {ex.Message}";
+            KeyboardPreparedTransmitPath = "No prepared PSK WAV.";
+            OnPropertyChanged(nameof(KeyboardHasPreparedTransmitClip));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private async Task SendKeyboardTransmitAsync()
+    {
+        if (_keyboardTxSendInFlight)
+        {
+            return;
+        }
+
+        _keyboardTxSendInFlight = true;
+        var pttRaised = false;
+        var txAudioStarted = false;
+
+        try
+        {
+            var interlockError = ValidateKeyboardLiveTransmitInterlock();
+            if (interlockError is not null)
+            {
+                KeyboardPreparedTransmitStatus = interlockError;
+                VoiceTxStatus = "TX audio idle";
+                RadioStatusSummary = interlockError;
+                return;
+            }
+
+            if (KeyboardUseCurrentRadioFrequency)
+            {
+                await SetRadioForKeyboardAudioDataModeAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                await TuneRadioForKeyboardAsync(KeyboardSelectedFrequency).ConfigureAwait(false);
+            }
+
+            var route = BuildCurrentAudioRoute();
+            var liveClip = WithLeadingSilence(_keyboardPreparedTransmitClip!, 250);
+            var clipDurationMs = Math.Max(250, (int)Math.Ceiling(
+                liveClip.PcmBytes.Length / (double)(liveClip.SampleRate * liveClip.Channels * 2) * 1000.0));
+            var mode = string.Equals(KeyboardSelectedMode, "BPSK63", StringComparison.OrdinalIgnoreCase) ? "BPSK63" : "BPSK31";
+            var text = KeyboardTransmitText.Trim();
+
+            await _audioService!.StartTransmitPcmAsync(route, liveClip, CancellationToken.None).ConfigureAwait(false);
+            txAudioStarted = true;
+            await _radioService!.SetPttAsync(true, CancellationToken.None).ConfigureAwait(false);
+            pttRaised = true;
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                KeyboardPreparedTransmitStatus = $"Sending {mode} on-air: {text}";
+                VoiceTxStatus = "PSK TX audio live";
+                RadioStatusSummary = $"Keyboard TX live  |  {mode}  |  {KeyboardAudioCenterHz} Hz audio";
+            });
+
+            await Task.Delay(clipDurationMs + 150, CancellationToken.None).ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                KeyboardPreparedTransmitStatus = $"PSK TX sent: {mode}. Prepared WAV retained.";
+                VoiceTxStatus = "TX audio idle";
+                RadioStatusSummary = "Keyboard TX complete";
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                KeyboardPreparedTransmitStatus = $"PSK TX failed: {ex.Message}";
+                VoiceTxStatus = "TX audio idle";
+                RadioStatusSummary = $"Keyboard TX failed: {ex.Message}";
+            });
+        }
+        finally
+        {
+            try
+            {
+                if (pttRaised && _radioService is not null)
+                {
+                    await _radioService.SetPttAsync(false, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                // Leave shutdown paths to force PTT low if CI-V readback is in a bad mood.
+            }
+
+            try
+            {
+                if (txAudioStarted && _audioService is not null)
+                {
+                    await _audioService.StopTransmitAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+            }
+
+            _keyboardTxSendInFlight = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ApplyKeyboardTuneHelperAsync()
+    {
+        if (KeyboardSuggestedAudioCenterHz <= 0)
+        {
+            KeyboardTuneHelperSuggestion = "No PSK tuning estimate is available yet. Start RX and wait for DCD/AFC to settle.";
+            return;
+        }
+
+        KeyboardAudioCenterHz = $"{KeyboardSuggestedAudioCenterHz:0.0}";
+        KeyboardTuneHelperSuggestion = $"Applied Audio Hz {KeyboardAudioCenterHz}.";
+        if (_keyboardModeDecoderHost is not null)
+        {
+            await ConfigureKeyboardDecoderAsync();
+            KeyboardTuneHelperSuggestion = $"Applied Audio Hz {KeyboardAudioCenterHz}; decoder reconfigured live.";
+        }
+    }
+
+    [RelayCommand]
+    private void StartFreedvReceive()
+    {
+        if (_freedvDigitalVoiceHost is null)
+        {
+            FreedvRxStatus = "FreeDV host unavailable";
+            return;
+        }
+
+        _ = StartFreedvReceiveCoreAsync();
+    }
+
+    [RelayCommand]
+    private void StopFreedvReceive()
+    {
+        _ = StopFreedvReceiveCoreAsync();
+    }
+
+    [RelayCommand]
+    private void ResetFreedvSession()
+    {
+        if (_freedvDigitalVoiceHost is not null)
+        {
+            _ = _freedvDigitalVoiceHost.ResetAsync(CancellationToken.None);
+        }
+
+        FreedvRxStatus = "FreeDV digital voice ready";
+        FreedvSessionNotes = "Use USB-D/LSB-D with the official Codec2 FreeDV runtime. 700D is the practical first HF mode.";
+        FreedvRuntimeStatus = "Codec2 runtime not loaded yet.";
+        FreedvDecodedAudioStatus = "No decoded FreeDV speech yet.";
+        FreedvSignalSummary = "Signal ---%  |  Sync ---%  |  SNR --.- dB";
+        FreedvLastRadeCallsign = "None decoded";
+    }
+
+    [RelayCommand]
+    private async Task StartFreedvTransmitAsync()
+    {
+        if (_freedvDigitalVoiceHost is null)
+        {
+            FreedvRxStatus = "FreeDV host unavailable";
+            return;
+        }
+
+        if (_radioService is null || CanConnect)
+        {
+            FreedvRxStatus = "FreeDV TX blocked: radio is not connected.";
+            return;
+        }
+
+        if (_audioService is null || SelectedMicDevice is null || SelectedTxDevice is null)
+        {
+            FreedvRxStatus = "FreeDV TX blocked: mic/TX audio device is not configured.";
+            return;
+        }
+
+        if (IsFreedvTransmitting)
+        {
+            return;
+        }
+
+        try
+        {
+            IsFreedvTransmitting = true;
+            FreedvRxStatus = "Starting FreeDV TX...";
+            if (FreedvUseCurrentRadioFrequency)
+            {
+                await SetRadioForFreedvAudioDataModeAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                await TuneRadioForFreedvAsync(FreedvSelectedFrequency).ConfigureAwait(false);
+            }
+
+            var frequencyLabel = FreedvUseCurrentRadioFrequency
+                ? "Current radio frequency"
+                : FreedvSelectedFrequency;
+            await _freedvDigitalVoiceHost.ConfigureAsync(
+                new FreedvDigitalVoiceConfiguration(
+                    FreedvSelectedMode,
+                    frequencyLabel,
+                    FreedvUseCurrentRadioFrequency,
+                    FreedvRxFrequencyOffsetHz,
+                    FormatCallsign(SettingsCallsign)),
+                CancellationToken.None).ConfigureAwait(false);
+            await _freedvDigitalVoiceHost.StartTransmitAsync(BuildCurrentAudioRoute(), CancellationToken.None).ConfigureAwait(false);
+            await Task.Delay(150).ConfigureAwait(false);
+            await _radioService.SetPttAsync(true, CancellationToken.None).ConfigureAwait(false);
+            FreedvRxStatus = $"FreeDV TX live ({FreedvSelectedMode})";
+            FreedvSignalSummary = $"TX active  |  Mode {FreedvSelectedMode}  |  EOO call {FormatCallsign(SettingsCallsign)}";
+            FreedvSessionNotes = string.Equals(FreedvSelectedMode, "RADEV1", StringComparison.OrdinalIgnoreCase)
+                ? "Speak normally; RADEV1 TX will append your callsign in the end-of-over frame when you stop transmit."
+                : "Speak normally; Codec2 FreeDV is encoding mic audio to the radio TX device.";
+        }
+        catch (Exception ex)
+        {
+            FreedvRxStatus = $"FreeDV TX failed: {ex.Message}";
+            await StopFreedvTransmitSafelyAsync().ConfigureAwait(false);
+        }
+    }
+
+    [RelayCommand]
+    private async Task StopFreedvTransmitAsync()
+    {
+        await StopFreedvTransmitSafelyAsync().ConfigureAwait(false);
+        FreedvRxStatus = "FreeDV TX stopped";
+    }
+
+    [RelayCommand]
+    private void OpenFreedvDebugFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(_freedvDebugDirectory);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _freedvDebugDirectory,
+                UseShellExecute = true,
+            });
+            FreedvDecodedAudioStatus = $"Opened FreeDV captures: {_freedvDebugDirectory}";
+        }
+        catch (Exception ex)
+        {
+            FreedvDecodedAudioStatus = $"Could not open FreeDV captures: {ex.Message}";
+        }
+    }
 
     [RelayCommand]
     private async Task ApplyRttyTuneHelperAsync()
@@ -2568,6 +3713,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void TrackSelectedWsjtxOffset()
     {
+        if (IsWsprMode(WsjtxSelectedMode))
+        {
+            WsjtxRxStatus = "WSPR monitor does not use manual audio-offset tracking.";
+            return;
+        }
+
         if (SelectedWsjtxMessage is null)
         {
             return;
@@ -2593,8 +3744,50 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private void InjectWsjtxDirectedTestDecode()
+    {
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        if (string.IsNullOrWhiteSpace(myCall))
+        {
+            myCall = FormatCallsign(SettingsCallsign);
+        }
+
+        if (string.IsNullOrWhiteSpace(myCall))
+        {
+            WsjtxRxStatus = "Set your callsign before running the directed-message alert test.";
+            return;
+        }
+
+        var sequence = Interlocked.Increment(ref wsjtxDirectedAlertTestSequence);
+        var mode = IsWsjtxQsoMode(WsjtxSelectedMode) ? WsjtxSelectedMode : "FT8";
+        var offsetHz = Math.Clamp(WsjtxRxAudioFrequencyHz + sequence % 7, 200, 3000);
+        var report = -7 - sequence % 3;
+        var message = new WsjtxDecodeMessage(
+            TimestampUtc: DateTime.UtcNow,
+            ModeLabel: mode,
+            FrequencyOffsetHz: offsetHz,
+            SnrDb: report,
+            DeltaTimeSeconds: 0.2,
+            MessageText: $"K1TST {myCall} {report:+00;-00;00}",
+            Confidence: 1.0,
+            IsDirectedToMe: true,
+            IsCq: false);
+
+        UpsertWsjtxMessage(message);
+        SelectedWsjtxMessage = WsjtxMessages.FirstOrDefault();
+        WsjtxRxStatus = $"Injected directed test decode to {myCall}; alert tone should play.";
+        OnPropertyChanged(nameof(WsjtxHasMessages));
+    }
+
+    [RelayCommand]
     private void SetSelectedWsjtxTxOffset()
     {
+        if (IsWsprMode(WsjtxSelectedMode))
+        {
+            WsjtxRxStatus = "WSPR TX/QSO rail is disabled for now; RF spots are receive-only.";
+            return;
+        }
+
         if (SelectedWsjtxMessage is null)
         {
             return;
@@ -2632,6 +3825,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void StageSelectedWsjtxSuggestedMessage()
+        => StageWsjtxSuggestedMessage(SelectedWsjtxSuggestedMessage);
+
+    [RelayCommand]
+    private void StageWsjtxSuggestedMessage(WsjtxSuggestedMessageItem? message)
     {
         if (!IsWsjtxQsoMode(WsjtxSelectedMode))
         {
@@ -2639,22 +3836,23 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (SelectedWsjtxSuggestedMessage is null)
+        if (message is null)
         {
             return;
         }
 
-        WsjtxQueuedTransmitMessage = SelectedWsjtxSuggestedMessage;
-        SetWsjtxManualTransmitText(SelectedWsjtxSuggestedMessage.MessageText, isManualOverride: false);
+        SelectedWsjtxSuggestedMessage = message;
+        WsjtxQueuedTransmitMessage = message;
+        SetWsjtxManualTransmitText(message.MessageText, isManualOverride: false);
         var myCall = FormatCallsign(WsjtxOperatorCallsign);
-        if (string.Equals(SelectedWsjtxSuggestedMessage.Label, "CQ", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(message.Label, "CQ", StringComparison.OrdinalIgnoreCase))
         {
             WsjtxCallingCq = true;
             WsjtxActiveSession = null;
         }
         else
         {
-            var state = ClassifyWsjtxQsoState(SelectedWsjtxSuggestedMessage.MessageText, myCall);
+            var state = ClassifyWsjtxQsoState(message.MessageText, myCall);
             if (!string.IsNullOrWhiteSpace(state.OtherCall))
             {
                 var sessionOffset = SelectedWsjtxMessage?.FrequencyOffsetHz
@@ -2676,7 +3874,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WsjtxTransmitArmedLocal = false;
         WsjtxAwaitingReply = false;
         WsjtxTransmitArmStatus = "Prepared message not generated yet.";
-        WsjtxRxStatus = $"Staged TX: {SelectedWsjtxSuggestedMessage.Label}";
+        WsjtxRxStatus = $"Staged TX: {message.Label} | {message.MessageText}";
     }
 
     [RelayCommand]
@@ -2856,14 +4054,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task SendNextWsjtxMessageAsync()
     {
-        if (string.IsNullOrWhiteSpace(WsjtxManualTransmitText)
-            && SelectedWsjtxSuggestedMessage is not null
-            && (WsjtxQueuedTransmitMessage is null
-                || !string.Equals(WsjtxQueuedTransmitMessage.MessageText, SelectedWsjtxSuggestedMessage.MessageText, StringComparison.Ordinal)))
-        {
-            StageSelectedWsjtxSuggestedMessage();
-        }
-
         var transmitText = NormalizeWsjtxTransmitText(WsjtxManualTransmitText)
             ?? WsjtxQueuedTransmitMessage?.MessageText;
         if (string.IsNullOrWhiteSpace(transmitText))
@@ -2878,6 +4068,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         await PrepareAndArmQueuedWsjtxTransmitAsync(WsjtxQueuedTransmitMessage.Label);
+    }
+
+    [RelayCommand]
+    private async Task PrepareAndArmWsjtxSuggestedMessageAsync(WsjtxSuggestedMessageItem? message)
+    {
+        if (message is null)
+        {
+            return;
+        }
+
+        StageWsjtxSuggestedMessage(message);
+        await PrepareAndArmQueuedWsjtxTransmitAsync(message.Label);
     }
 
     [RelayCommand]
@@ -2912,7 +4114,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         if (!IsWsjtxQsoMode(WsjtxSelectedMode))
         {
-            WsjtxPreparedTransmitStatus = $"{WsjtxSelectedMode} transmit is not wired into the QSO rail.";
+            WsjtxPreparedTransmitStatus = $"{WsjtxSelectedMode} transmit is not available from this QSO rail.";
             WsjtxPreparedTransmitPath = "No prepared TX artifact.";
             WsjtxTransmitArmStatus = $"{WsjtxSelectedMode} is receive/monitor only for now.";
             return;
@@ -3094,10 +4296,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         RebuildWsjtxRxFrequencyMessages();
         TrackWsjtxConversationMessage(incoming);
 
-        if (isNewMessage && message.IsDirectedToMe && !incoming.IsOwnTransmit)
+        if (isNewMessage && IsWsjtxDirectedToOperator(message) && !incoming.IsOwnTransmit)
         {
             PlayWsjtxDirectedAlert();
         }
+    }
+
+    private bool IsWsjtxDirectedToOperator(WsjtxDecodeMessage message)
+    {
+        if (message.IsDirectedToMe)
+        {
+            return true;
+        }
+
+        var myCall = FormatCallsign(WsjtxOperatorCallsign);
+        return !string.IsNullOrWhiteSpace(myCall) && WsjtxMessageMentionsCall(message.MessageText, myCall);
     }
 
     private void PlayWsjtxDirectedAlert()
@@ -3129,14 +4342,62 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            Console.Beep(1046, 55);
-            Thread.Sleep(45);
-            Console.Beep(1318, 70);
+            if (PlaySound(WsjtxDirectedAlertWave, IntPtr.Zero, 0x0004 | 0x0002))
+            {
+                return;
+            }
+
+            _ = MessageBeep(0x00000040);
         }
         catch
         {
         }
     }
+
+    private static byte[] CreateWsjtxDirectedAlertWave()
+    {
+        const int sampleRate = 44100;
+        const short channels = 1;
+        const short bitsPerSample = 16;
+        const double durationSeconds = 0.28;
+        var sampleCount = (int)(sampleRate * durationSeconds);
+        var dataBytes = sampleCount * sizeof(short);
+        using var stream = new MemoryStream(44 + dataBytes);
+        using var writer = new BinaryWriter(stream);
+
+        writer.Write("RIFF"u8);
+        writer.Write(36 + dataBytes);
+        writer.Write("WAVE"u8);
+        writer.Write("fmt "u8);
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write(channels);
+        writer.Write(sampleRate);
+        writer.Write(sampleRate * channels * bitsPerSample / 8);
+        writer.Write((short)(channels * bitsPerSample / 8));
+        writer.Write(bitsPerSample);
+        writer.Write("data"u8);
+        writer.Write(dataBytes);
+
+        for (var i = 0; i < sampleCount; i++)
+        {
+            var t = i / (double)sampleRate;
+            var frequency = t < durationSeconds * 0.48 ? 1046.5 : 1318.5;
+            var attack = Math.Min(1.0, t / 0.015);
+            var release = Math.Min(1.0, (durationSeconds - t) / 0.035);
+            var envelope = Math.Min(attack, release);
+            var sample = (short)(Math.Sin(2.0 * Math.PI * frequency * t) * 18000 * envelope);
+            writer.Write(sample);
+        }
+
+        return stream.ToArray();
+    }
+
+    [DllImport("user32.dll", SetLastError = false)]
+    private static extern bool MessageBeep(uint uType);
+
+    [DllImport("winmm.dll", SetLastError = false)]
+    private static extern bool PlaySound(byte[] pszSound, IntPtr hmod, uint fdwSound);
 
     private void InsertOutgoingWsjtxMessage(WsjtxPreparedTransmit prepared)
     {
@@ -3257,7 +4518,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WsjtxRxFrequencyMessages.Clear();
         foreach (var item in WsjtxMessages)
         {
-            if (Math.Abs(item.FrequencyOffsetHz - WsjtxRxAudioFrequencyHz) <= GetWsjtxRxFrequencyWindowHz(item.ModeText))
+            if (IsWsprMode(item.ModeText)
+                || Math.Abs(item.FrequencyOffsetHz - WsjtxRxAudioFrequencyHz) <= GetWsjtxRxFrequencyPaneWindowHz(item.ModeText))
             {
                 WsjtxRxFrequencyMessages.Add(item);
             }
@@ -3434,13 +4696,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var isCq = message.IsCq;
         var normalized = NormalizeWsjtxMessageText(message.MessageText);
         var highlight = GetWsjtxHighlight(normalized, isDirected, isCq, false);
+        var badgeText = IsWsprMode(message.ModeLabel)
+            ? "WSPR"
+            : highlight.BadgeText;
         return new WsjtxMessageItem(
             message.TimestampUtc,
             localTime.ToString("HH:mm:ss"),
             message.ModeLabel,
             $"{message.SnrDb} dB",
             $"{message.DeltaTimeSeconds:+0.0;-0.0;0.0}",
-            $"{message.FrequencyOffsetHz:+0;-0;0} Hz",
+            FormatWsjtxFrequencyText(message),
             message.MessageText,
             message.FrequencyOffsetHz,
             message.SnrDb,
@@ -3452,10 +4717,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             highlight.AccentBrush,
             highlight.MessageBrush,
             highlight.MetaBrush,
-            highlight.BadgeText,
+            badgeText,
             highlight.ShowBadge,
             highlight.BadgeBackground,
             highlight.BadgeForeground);
+    }
+
+    private static string FormatWsjtxFrequencyText(WsjtxDecodeMessage message)
+    {
+        if (IsWsprMode(message.ModeLabel) && message.FrequencyOffsetHz > 100_000)
+        {
+            return $"{message.FrequencyOffsetHz / 1_000_000d:0.000000} MHz";
+        }
+
+        return $"{message.FrequencyOffsetHz:+0;-0;0} Hz";
     }
 
     private static WsjtxMessageItem BuildOutgoingWsjtxMessageItem(WsjtxPreparedTransmit prepared)
@@ -3645,6 +4920,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _ => 100,
     };
 
+    private static int GetWsjtxRxFrequencyPaneWindowHz(string modeLabel) => modeLabel.Trim().ToUpperInvariant() switch
+    {
+        "WSPR" or "FST4W" => 20,
+        "MSK144" => 50,
+        _ => 0,
+    };
+
     private sealed record WsjtxHighlightStyle(
         string RowBackground,
         string AccentBrush,
@@ -3667,6 +4949,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     private sealed record WsjtxQsoState(WsjtxQsoStage Stage, string? OtherCall);
+
+    private readonly record struct WsjtxLongwaveLogContext(string OperatorCallsign, string StationCallsign, int SignalReportDb);
 
     [RelayCommand]
     private void StartSstvReceive()
@@ -3713,7 +4997,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         SstvRxStatus = "SSTV receiver ready";
         SstvImageStatus = "No image captured yet";
-        SstvSessionNotes = "Auto Detect is the recommended default. Lock a mode only when you know it; Force Start is for late joins or missing VIS.";
+        SstvSessionNotes = SstvIdleSessionNotes;
         SstvDecodedFskIdCallsign = string.Empty;
         UpdateSstvPreview(null);
     }
@@ -4694,7 +5978,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         await _sstvDecoderHost.StartAsync(CancellationToken.None);
         await _sstvDecoderHost.ForceStartAsync(CancellationToken.None);
         SstvRxStatus = $"Force-start requested for {config.Mode}";
-        SstvSessionNotes = "Manual force-start will try sync-based start first, then best-effort decode from buffered audio if the preamble was missed.";
+        SstvSessionNotes = $"ShackStack SSTV native sidecar  |  Signal  ---%  |  Mode {config.Mode}  |  FSKID none";
     }
 
     private async Task StartRttyReceiveCoreAsync()
@@ -4722,6 +6006,275 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         await _rttyDecoderHost.ConfigureAsync(config, CancellationToken.None);
         await _rttyDecoderHost.StartAsync(CancellationToken.None);
         RttySessionNotes = "RTTY audio decoder running. IC-7300 should be in USB-D or LSB-D; native RTTY is for the rig's FSK/RTTY path.";
+    }
+
+    private async Task StartKeyboardReceiveCoreAsync()
+    {
+        if (_keyboardModeDecoderHost is null)
+        {
+            return;
+        }
+
+        if (KeyboardUseCurrentRadioFrequency)
+        {
+            await SetRadioForKeyboardAudioDataModeAsync();
+        }
+        else
+        {
+            await TuneRadioForKeyboardAsync(KeyboardSelectedFrequency);
+        }
+
+        await ConfigureKeyboardDecoderAsync();
+        await _keyboardModeDecoderHost.StartAsync(CancellationToken.None);
+        KeyboardSessionNotes = "PSK receiver running. Use USB-D/LSB-D and tune the waterfall trace near the selected audio center.";
+    }
+
+    private async Task ConfigureKeyboardDecoderAsync()
+    {
+        if (_keyboardModeDecoderHost is null)
+        {
+            return;
+        }
+
+        var frequencyLabel = KeyboardUseCurrentRadioFrequency
+            ? "Current radio frequency"
+            : KeyboardSelectedFrequency;
+        var config = new KeyboardModeDecoderConfiguration(
+            KeyboardSelectedMode,
+            frequencyLabel,
+            ParseKeyboardAudioCenterHz(KeyboardAudioCenterHz),
+            KeyboardReversePolarity);
+        await _keyboardModeDecoderHost.ConfigureAsync(config, CancellationToken.None);
+    }
+
+    private string? ValidateKeyboardLiveTransmitInterlock()
+    {
+        if (_radioService is null || CanConnect)
+        {
+            return "PSK TX blocked: radio is not connected.";
+        }
+
+        if (_audioService is null)
+        {
+            return "PSK TX blocked: audio service unavailable.";
+        }
+
+        if (SelectedTxDevice is null)
+        {
+            return "PSK TX blocked: no TX audio device configured.";
+        }
+
+        if (_keyboardPreparedTransmitClip is null)
+        {
+            return "PSK TX blocked: prepare TX WAV first.";
+        }
+
+        if (!string.Equals(_keyboardPreparedTransmitFingerprint, BuildKeyboardTransmitFingerprint(), StringComparison.Ordinal))
+        {
+            return "PSK TX blocked: prepared audio is stale. Press Prepare TX WAV again.";
+        }
+
+        return null;
+    }
+
+    private string BuildKeyboardTransmitFingerprint()
+    {
+        var mode = string.Equals(KeyboardSelectedMode, "BPSK63", StringComparison.OrdinalIgnoreCase)
+            ? "BPSK63"
+            : "BPSK31";
+        return string.Join('|',
+            mode,
+            KeyboardTransmitText.Trim(),
+            ParseKeyboardAudioCenterHz(KeyboardAudioCenterHz).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    partial void OnKeyboardTransmitTextChanged(string value) => MarkKeyboardPreparedTransmitStale();
+
+    partial void OnKeyboardSelectedModeChanged(string value) => MarkKeyboardPreparedTransmitStale();
+
+    partial void OnKeyboardAudioCenterHzChanged(string value) => MarkKeyboardPreparedTransmitStale();
+
+    private void MarkKeyboardPreparedTransmitStale()
+    {
+        if (_keyboardPreparedTransmitClip is null)
+        {
+            return;
+        }
+
+        KeyboardPreparedTransmitStatus = "PSK TX text/mode/audio changed; prepare TX WAV again.";
+        OnPropertyChanged(nameof(KeyboardHasPreparedTransmitClip));
+    }
+
+    private async Task StartFreedvReceiveCoreAsync()
+    {
+        if (_freedvDigitalVoiceHost is null)
+        {
+            return;
+        }
+
+        if (_audioService is null)
+        {
+            FreedvRxStatus = "FreeDV RX blocked: audio service unavailable.";
+            return;
+        }
+
+        if (SelectedRxDevice is null)
+        {
+            FreedvRxStatus = "FreeDV RX blocked: no RX audio device configured.";
+            return;
+        }
+
+        if (GetSelectedFreedvMonitorDevice() is null)
+        {
+            FreedvRxStatus = "FreeDV RX blocked: no FreeDV speech output configured.";
+            FreedvDecodedAudioStatus = "Choose a FreeDV speech output, or configure PC RX Audio as the fallback, before starting FreeDV RX.";
+            return;
+        }
+
+        if (FreedvUseCurrentRadioFrequency)
+        {
+            await SetRadioForFreedvAudioDataModeAsync();
+        }
+        else
+        {
+            await TuneRadioForFreedvAsync(FreedvSelectedFrequency);
+        }
+
+        var frequencyLabel = FreedvUseCurrentRadioFrequency
+            ? "Current radio frequency"
+            : FreedvSelectedFrequency;
+        try
+        {
+            await _audioService.StartReceiveCaptureAsync(BuildCurrentAudioRoute(), CancellationToken.None);
+            AudioMonitorState = CanStopAudio ? AudioMonitorState : "Decoder capture";
+            CanStopAudio = true;
+            await ApplyFreedvSpeechVolumeAsync(FreedvSpeechVolumePercent);
+        }
+        catch (Exception ex)
+        {
+            FreedvRxStatus = $"FreeDV RX blocked: decoder audio capture did not start ({ex.Message}).";
+            AudioMonitorState = $"Error: {ex.Message}";
+            CanStopAudio = false;
+            return;
+        }
+
+            FreedvDecodedAudioStatus = $"FreeDV decoder capture is active; decoded speech will play on {GetSelectedFreedvMonitorDevice()?.FriendlyName} at {FreedvSpeechVolumePercent}%.";
+        await _freedvDigitalVoiceHost.ConfigureAsync(
+            new FreedvDigitalVoiceConfiguration(
+                FreedvSelectedMode,
+                frequencyLabel,
+                FreedvUseCurrentRadioFrequency,
+                FreedvRxFrequencyOffsetHz,
+                FormatCallsign(SettingsCallsign)),
+            CancellationToken.None);
+        await _freedvDigitalVoiceHost.StartAsync(CancellationToken.None);
+        FreedvSessionNotes = $"FreeDV receiver running on {frequencyLabel}. RX offset {FreedvRxFrequencyOffsetHz:+0;-0;0} Hz.";
+    }
+
+    private async Task StopFreedvReceiveCoreAsync()
+    {
+        try
+        {
+            if (_freedvDigitalVoiceHost is not null)
+            {
+                await _freedvDigitalVoiceHost.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                FreedvRxStatus = "FreeDV receiver stopped";
+                FreedvDecodedAudioStatus = "FreeDV decoder stopped; normal RX audio monitor is unchanged.";
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                FreedvRxStatus = $"FreeDV stop failed: {ex.Message}";
+            });
+        }
+    }
+
+    private async Task TuneRadioForFreedvAsync(string frequencyLabel)
+    {
+        if (_radioService is null || CanConnect)
+        {
+            return;
+        }
+
+        if (!TryParseUiFrequencyHz(frequencyLabel, out var hz))
+        {
+            return;
+        }
+
+        try
+        {
+            var mode = frequencyLabel.Contains("LSB", StringComparison.OrdinalIgnoreCase)
+                ? RadioMode.LsbData
+                : RadioMode.UsbData;
+            await _radioService.SetModeAsync(mode, CancellationToken.None);
+            await _radioService.SetFrequencyAsync(hz, CancellationToken.None);
+            RadioStatusSummary = $"FreeDV tuned: {hz:N0} Hz {FormatModeDisplay(mode)}";
+        }
+        catch (Exception ex)
+        {
+            RadioStatusSummary = $"FreeDV tune failed: {ex.Message}";
+        }
+    }
+
+    private async Task SetRadioForFreedvAudioDataModeAsync()
+    {
+        if (_radioService is null || CanConnect)
+        {
+            FreedvSessionNotes = "FreeDV RX using current radio frequency. Set the IC-7300 to USB-D/LSB-D.";
+            return;
+        }
+
+        try
+        {
+            var currentMode = _radioService.CurrentState.Mode;
+            var mode = currentMode == RadioMode.Lsb || currentMode == RadioMode.LsbData
+                ? RadioMode.LsbData
+                : RadioMode.UsbData;
+            if (currentMode != mode)
+            {
+                await _radioService.SetModeAsync(mode, CancellationToken.None);
+            }
+
+            RadioStatusSummary = $"FreeDV RX using current radio frequency in {FormatModeDisplay(mode)}";
+        }
+        catch (Exception ex)
+        {
+            RadioStatusSummary = $"FreeDV mode set failed: {ex.Message}";
+            FreedvSessionNotes = "FreeDV RX will still start, but manually set the IC-7300 to USB-D/LSB-D.";
+        }
+    }
+
+    private async Task StopFreedvTransmitSafelyAsync()
+    {
+        try
+        {
+            if (_radioService is not null)
+            {
+                await _radioService.SetPttAsync(false, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (_freedvDigitalVoiceHost is not null)
+            {
+                await _freedvDigitalVoiceHost.StopTransmitAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+        }
+
+        IsFreedvTransmitting = false;
     }
 
     public void ActivateJs8Desk()
@@ -5073,6 +6626,61 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private async Task TuneRadioForKeyboardAsync(string frequencyLabel)
+    {
+        if (_radioService is null || CanConnect)
+        {
+            return;
+        }
+
+        if (!TryParseUiFrequencyHz(frequencyLabel, out var hz))
+        {
+            return;
+        }
+
+        try
+        {
+            var mode = frequencyLabel.Contains("LSB", StringComparison.OrdinalIgnoreCase)
+                ? RadioMode.LsbData
+                : RadioMode.UsbData;
+            await _radioService.SetModeAsync(mode, CancellationToken.None);
+            await _radioService.SetFrequencyAsync(hz, CancellationToken.None);
+            RadioStatusSummary = $"Keyboard mode tuned: {hz:N0} Hz {FormatModeDisplay(mode)}";
+        }
+        catch (Exception ex)
+        {
+            RadioStatusSummary = $"Keyboard mode tune failed: {ex.Message}";
+        }
+    }
+
+    private async Task SetRadioForKeyboardAudioDataModeAsync()
+    {
+        if (_radioService is null || CanConnect)
+        {
+            KeyboardSessionNotes = "Keyboard RX using current radio frequency. Set the IC-7300 to USB-D/LSB-D for PSK.";
+            return;
+        }
+
+        try
+        {
+            var currentMode = _radioService.CurrentState.Mode;
+            var mode = currentMode == RadioMode.Lsb || currentMode == RadioMode.LsbData
+                ? RadioMode.LsbData
+                : RadioMode.UsbData;
+            if (currentMode != mode)
+            {
+                await _radioService.SetModeAsync(mode, CancellationToken.None);
+            }
+
+            RadioStatusSummary = $"Keyboard RX using current radio frequency in {FormatModeDisplay(mode)}";
+        }
+        catch (Exception ex)
+        {
+            RadioStatusSummary = $"Keyboard mode set failed: {ex.Message}";
+            KeyboardSessionNotes = "Keyboard RX will still start, but manually set the IC-7300 to USB-D/LSB-D.";
+        }
+    }
+
     private async Task TuneRadioForWsjtxAsync(string frequencyLabel)
     {
         if (_radioService is null || CanConnect)
@@ -5335,12 +6943,170 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private static LongwaveRecentContactItem ToLongwaveRecentContactItem(LongwaveContact contact) =>
         new(
             contact.Id,
+            contact.LogbookId,
             contact.StationCallsign,
+            contact.OperatorCallsign,
+            contact.QsoDate,
+            contact.TimeOn,
             contact.Mode,
             contact.Band,
             $"{contact.QsoDate} {contact.TimeOn}",
             contact.ParkReference,
-            contact.FrequencyKhz);
+            contact.FrequencyKhz,
+            contact.RstSent,
+            contact.RstReceived,
+            contact.Name,
+            contact.Qth,
+            contact.County,
+            contact.GridSquare,
+            contact.Country,
+            contact.State,
+            contact.Dxcc,
+            contact.QrzUploadStatus,
+            contact.QrzUploadDate,
+            contact.Latitude,
+            contact.Longitude,
+            contact.SourceSpotId);
+
+    private static LongwaveLogbookItem ToLongwaveLogbookItem(LongwaveLogbook logbook) =>
+        new(
+            logbook.Id,
+            logbook.Name,
+            logbook.OperatorCallsign,
+            logbook.ParkReference,
+            logbook.ActivationDate,
+            logbook.Notes,
+            logbook.ContactCount);
+
+    private LongwaveContactDraft BuildLongwaveContactDraft(
+        string logbookId,
+        string stationCall,
+        string operatorCall,
+        double frequencyKhz,
+        DateTime qsoTimeUtc) =>
+        new(
+            logbookId,
+            stationCall,
+            operatorCall,
+            qsoTimeUtc.ToString("yyyyMMdd"),
+            qsoTimeUtc.ToString("HHmmss"),
+            string.IsNullOrWhiteSpace(LongwaveLogBand) ? DeriveBandFromFrequencyKhz(frequencyKhz) : LongwaveLogBand.Trim(),
+            LongwaveLogMode.Trim().ToUpperInvariant(),
+            frequencyKhz,
+            LongwaveLogParkReference,
+            LongwaveLogRstSent,
+            LongwaveLogRstReceived,
+            LongwaveLogName,
+            LongwaveLogQth,
+            LongwaveLogCounty,
+            LongwaveLogGridSquare,
+            LongwaveLogCountry,
+            LongwaveLogState,
+            LongwaveLogDxcc,
+            _longwaveLogLatitude,
+            _longwaveLogLongitude,
+            SelectedLongwavePotaSpot is not null
+                && string.Equals(SelectedLongwavePotaSpot.ActivatorCallsign, stationCall, StringComparison.OrdinalIgnoreCase)
+                    ? SelectedLongwavePotaSpot.Id
+                    : SelectedLongwaveRecentContact?.SourceSpotId);
+
+    private static string BuildLongwaveLoggedContactSummary(LongwaveContact contact, string logbookName)
+    {
+        var report = string.IsNullOrWhiteSpace(contact.RstSent) && string.IsNullOrWhiteSpace(contact.RstReceived)
+            ? "no report"
+            : $"{contact.RstSent ?? "--"}/{contact.RstReceived ?? "--"}";
+        var park = string.IsNullOrWhiteSpace(contact.ParkReference) ? string.Empty : $" | {contact.ParkReference}";
+        return $"Logged {contact.StationCallsign} | {contact.QsoDate} {contact.TimeOn} UTC | {contact.Band} {contact.Mode} | {contact.FrequencyKhz / 1000d:0.000000} MHz | RST {report} | {logbookName}{park}.";
+    }
+
+    private static string MakeSafeFileName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var safe = new string(value.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(safe) ? "longwave-logbook" : safe;
+    }
+
+    private DateTime GetLongwaveEditorQsoTimeUtc()
+    {
+        var date = LongwaveLogQsoDate.Trim();
+        var time = LongwaveLogTimeOn.Trim();
+        if (date.Length == 8
+            && DateTime.TryParseExact(date, "yyyyMMdd", null, System.Globalization.DateTimeStyles.AssumeUniversal, out var parsedDate))
+        {
+            if (time.Length is > 0 and < 6)
+            {
+                time = time.PadRight(6, '0');
+            }
+
+            if (time.Length == 6
+                && TimeSpan.TryParseExact(time, "hhmmss", null, out var parsedTime))
+            {
+                return DateTime.SpecifyKind(parsedDate.Date + parsedTime, DateTimeKind.Utc);
+            }
+        }
+
+        var now = DateTime.UtcNow;
+        LongwaveLogQsoDate = now.ToString("yyyyMMdd");
+        LongwaveLogTimeOn = now.ToString("HHmmss");
+        return now;
+    }
+
+    private void ApplyLongwaveContactToEditor(LongwaveRecentContactItem contact)
+    {
+        LongwaveEditingContactId = contact.Id;
+        var matchingLogbook = LongwaveLogbooks.FirstOrDefault(logbook => string.Equals(logbook.Id, contact.LogbookId, StringComparison.Ordinal));
+        if (matchingLogbook is not null
+            && !string.Equals(SelectedLongwaveLogbook?.Id, matchingLogbook.Id, StringComparison.Ordinal))
+        {
+            SelectedLongwaveLogbook = matchingLogbook;
+        }
+
+        LongwaveLogOperatorCallsign = contact.OperatorCallsign;
+        LongwaveLogCallsign = contact.StationCallsign;
+        LongwaveLogQsoDate = contact.QsoDate;
+        LongwaveLogTimeOn = contact.TimeOn;
+        LongwaveLogMode = contact.Mode;
+        LongwaveLogBand = contact.Band;
+        LongwaveLogFrequencyKhz = $"{contact.FrequencyKhz:0.0}";
+        LongwaveLogRstSent = contact.RstSent ?? string.Empty;
+        LongwaveLogRstReceived = contact.RstReceived ?? string.Empty;
+        LongwaveLogParkReference = contact.ParkReference ?? string.Empty;
+        LongwaveLogGridSquare = contact.GridSquare ?? string.Empty;
+        LongwaveLogName = contact.Name ?? string.Empty;
+        LongwaveLogQth = contact.Qth ?? string.Empty;
+        LongwaveLogCounty = contact.County ?? string.Empty;
+        LongwaveLogState = contact.State ?? string.Empty;
+        LongwaveLogCountry = contact.Country ?? string.Empty;
+        LongwaveLogDxcc = contact.Dxcc ?? string.Empty;
+        _longwaveLogLatitude = contact.Latitude;
+        _longwaveLogLongitude = contact.Longitude;
+        LongwaveLogStatus = $"Loaded {contact.StationCallsign} for editing. {contact.QrzUploadText}.";
+    }
+
+    private void EnsureLongwaveLogbookSelected(LongwaveLogbook logbook)
+    {
+        var existing = LongwaveLogbooks.FirstOrDefault(item => string.Equals(item.Id, logbook.Id, StringComparison.Ordinal));
+        if (existing is null)
+        {
+            existing = ToLongwaveLogbookItem(logbook);
+            LongwaveLogbooks.Insert(0, existing);
+        }
+
+        SelectedLongwaveLogbook = existing;
+    }
+
+    private void UpsertLongwaveRecentContact(LongwaveContact contact)
+    {
+        var item = ToLongwaveRecentContactItem(contact);
+        var existing = LongwaveRecentContacts.FirstOrDefault(existing => string.Equals(existing.Id, item.Id, StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            LongwaveRecentContacts.Remove(existing);
+        }
+
+        LongwaveRecentContacts.Insert(0, item);
+        SelectedLongwaveRecentContact = item;
+    }
 
     private void MarkLongwaveSpotLogged(string? sourceSpotId)
     {
@@ -5400,6 +7166,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var contacts = await _longwaveService.GetContactsAsync(BuildCurrentLongwaveSettings(), SelectedLongwaveLogbook?.Id, CancellationToken.None);
         LongwaveRecentContacts = new ObservableCollection<LongwaveRecentContactItem>(
             contacts.Take(50).Select(ToLongwaveRecentContactItem));
+        OnPropertyChanged(nameof(LongwaveSelectedLogbookQrzUploadSummary));
         if (SelectedLongwaveRecentContact is not null)
         {
             SelectedLongwaveRecentContact = LongwaveRecentContacts.FirstOrDefault(item => item.Id == SelectedLongwaveRecentContact.Id);
@@ -5477,7 +7244,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var upper = mode.Trim().ToUpperInvariant();
         return upper switch
         {
-            "FT8" or "FT4" or "WSPR" => frequencyHz < 10_000_000 ? RadioMode.LsbData : RadioMode.UsbData,
+            "FT8" or "FT4" or "WSPR" => RadioMode.UsbData,
             "RTTY" => RadioMode.Rtty,
             "CW" => RadioMode.Cw,
             "AM" => RadioMode.Am,
@@ -5500,6 +7267,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         string.Equals(mode, "FT8", StringComparison.OrdinalIgnoreCase)
         || string.Equals(mode, "FT4", StringComparison.OrdinalIgnoreCase)
         || mode.StartsWith("JS8", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsWsprMode(string mode) =>
+        string.Equals(mode, "WSPR", StringComparison.OrdinalIgnoreCase);
 
     private bool ShouldAutoStageWsjtxReplies =>
         string.Equals(SelectedWsjtxReplyAutomationMode.Key, "stage", StringComparison.OrdinalIgnoreCase)
@@ -5535,6 +7305,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     private static string MapRadioModeToLogMode(RadioMode mode) => mode switch
+    {
+        RadioMode.Lsb or RadioMode.Usb => "SSB",
+        RadioMode.LsbData or RadioMode.UsbData => "DATA",
+        RadioMode.Cw => "CW",
+        RadioMode.Am => "AM",
+        RadioMode.Fm => "FM",
+        RadioMode.Rtty => "RTTY",
+        _ => "SSB",
+    };
+
+    private static string MapRadioModeToPotaMode(RadioMode mode) => mode switch
     {
         RadioMode.Lsb or RadioMode.Usb => "SSB",
         RadioMode.LsbData or RadioMode.UsbData => "DATA",
@@ -5785,6 +7566,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(WsjtxSelectedMessageText));
         OnPropertyChanged(nameof(WsjtxRxTrackStatus));
+        OnPropertyChanged(nameof(WsjtxLongwaveLogPreview));
+        OnPropertyChanged(nameof(WsjtxLongwaveLogDetail));
         OnPropertyChanged(nameof(Js8SelectedDecodeSummary));
         RebuildWsjtxSuggestedMessages();
         if (value is not null && value.ModeText.StartsWith("JS8", StringComparison.OrdinalIgnoreCase))
@@ -5939,6 +7722,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(WsjtxActiveSessionSummary));
         OnPropertyChanged(nameof(WsjtxQsoRailSummary));
+        OnPropertyChanged(nameof(WsjtxLongwaveLogPreview));
+        OnPropertyChanged(nameof(WsjtxLongwaveLogDetail));
         _ = RefreshWsjtxCurrentQsoLookupAsync(value);
     }
 
@@ -6218,6 +8003,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WsjtxCycleDisplay = $"{mode.Label}  |  {mode.CycleLengthSeconds:0.#}s cycle  |  Next --.-s";
         WsjtxSessionNotes = DescribeWsjtxMode(value);
         OnPropertyChanged(nameof(WsjtxSelectedModeSupportsQso));
+        OnPropertyChanged(nameof(WsjtxRxFrequencyTitle));
+        OnPropertyChanged(nameof(WsjtxRxTrackStatus));
+        OnPropertyChanged(nameof(WsjtxLongwaveLogPreview));
+        OnPropertyChanged(nameof(WsjtxLongwaveLogDetail));
         ClearWsjtxMessages();
         WsjtxRxStatus = $"Mode selected: {value}";
         RebuildWsjtxSuggestedMessages();
@@ -7229,16 +9018,51 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     partial void OnSelectedVoiceLongwaveBandFilterChanged(string value) => RebuildVoiceLongwavePotaSpots();
 
+    partial void OnSelectedLongwaveRecentContactChanged(LongwaveRecentContactItem? value)
+    {
+        if (value is null)
+        {
+            LongwaveEditingContactId = string.Empty;
+            return;
+        }
+
+        ApplyLongwaveContactToEditor(value);
+    }
+
     partial void OnSelectedLongwaveLogbookChanged(LongwaveLogbookItem? value)
     {
         if (value is null)
         {
             LongwaveRecentContacts = [];
+            LongwaveSelectedLogbookName = string.Empty;
+            LongwaveSelectedLogbookOperatorCallsign = string.Empty;
+            LongwaveSelectedLogbookParkReference = string.Empty;
+            LongwaveSelectedLogbookActivationDate = string.Empty;
+            LongwaveSelectedLogbookNotes = string.Empty;
+            OnPropertyChanged(nameof(WsjtxLongwaveLogPreview));
+            OnPropertyChanged(nameof(WsjtxLongwaveLogDetail));
+            OnPropertyChanged(nameof(LongwaveSelectedLogbookQrzUploadSummary));
+            OnPropertyChanged(nameof(LongwaveQuickLogSummary));
             return;
         }
 
+        LongwaveSelectedLogbookName = value.Name;
+        LongwaveSelectedLogbookOperatorCallsign = value.OperatorCallsign;
+        LongwaveSelectedLogbookParkReference = value.ParkReference ?? string.Empty;
+        LongwaveSelectedLogbookActivationDate = value.ActivationDate ?? string.Empty;
+        LongwaveSelectedLogbookNotes = value.Notes ?? string.Empty;
         LongwaveLogStatus = $"Using Longwave logbook {value.Name}.";
+        OnPropertyChanged(nameof(WsjtxLongwaveLogPreview));
+        OnPropertyChanged(nameof(WsjtxLongwaveLogDetail));
+        OnPropertyChanged(nameof(LongwaveSelectedLogbookQrzUploadSummary));
+        OnPropertyChanged(nameof(LongwaveQuickLogSummary));
         _ = RefreshLongwaveContactsForSelectionAsync();
+    }
+
+    partial void OnCurrentFrequencyHzChanged(long value)
+    {
+        OnPropertyChanged(nameof(WsjtxLongwaveLogPreview));
+        OnPropertyChanged(nameof(WsjtxLongwaveLogDetail));
     }
 
     partial void OnSettingsLongwaveEnabledChanged(bool value) => ApplyLongwaveSettingsState(_settings);
@@ -7282,6 +9106,30 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         _ = ApplyMonitorVolumeAsync(clamped);
         ScheduleRuntimeUiStateSave();
+    }
+
+    partial void OnFreedvSpeechVolumePercentChanged(int value)
+    {
+        var clamped = Math.Clamp(value, 0, 100);
+        if (clamped != value)
+        {
+            FreedvSpeechVolumePercent = clamped;
+            return;
+        }
+
+        _ = ApplyFreedvSpeechVolumeAsync(clamped);
+        ScheduleRuntimeUiStateSave();
+    }
+
+    partial void OnSelectedMonitorDeviceChanged(AudioDeviceInfo? value)
+    {
+        VoiceMonitorDeviceDisplay = value?.FriendlyName ?? "Not configured";
+        FreedvMonitorDeviceDisplay = DescribeFreedvMonitorDevice();
+    }
+
+    partial void OnSelectedFreedvMonitorDeviceChanged(AudioDeviceInfo? value)
+    {
+        FreedvMonitorDeviceDisplay = DescribeFreedvMonitorDevice();
     }
 
     partial void OnAudioMonitorStateChanged(string value) => DiagnosticsAudioMonitorState = value;
@@ -7407,6 +9255,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SettingsFlrigHost = settings.Interop.FlrigHost;
         SettingsFlrigPort = settings.Interop.FlrigPort.ToString();
         MonitorVolumePercent = Math.Clamp(settings.Audio.MonitorVolumePercent, 0, 100);
+        FreedvSpeechVolumePercent = Math.Clamp(settings.Audio.FreedvMonitorVolumePercent, 0, 100);
         WaterfallFloorPercent = Math.Clamp(settings.Ui.WaterfallFloorPercent, 0, 95);
         WaterfallCeilingPercent = Math.Clamp(settings.Ui.WaterfallCeilingPercent, WaterfallFloorPercent + 1, 100);
         _voiceRigSettingsDirty = false;
@@ -7548,6 +9397,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private async Task ApplyFreedvSpeechVolumeAsync(int volumePercent)
+    {
+        if (_audioService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _audioService.SetDecodedMonitorVolumeAsync(volumePercent / 100f, CancellationToken.None);
+        }
+        catch
+        {
+        }
+    }
+
     private async Task ApplyVoiceRigSettingsCoreAsync()
     {
         if (_radioService is null || CanConnect)
@@ -7573,6 +9438,108 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SelectedMicDevice?.DeviceId ?? string.Empty,
         SelectedMonitorDevice?.DeviceId ?? string.Empty);
 
+    private AudioRoute BuildFreedvMonitorAudioRoute() => new(
+        SelectedRxDevice?.DeviceId ?? string.Empty,
+        SelectedTxDevice?.DeviceId ?? string.Empty,
+        SelectedMicDevice?.DeviceId ?? string.Empty,
+        GetSelectedFreedvMonitorDevice()?.DeviceId ?? string.Empty);
+
+    private AudioDeviceInfo? GetSelectedFreedvMonitorDevice() =>
+        SelectedFreedvMonitorDevice;
+
+    private string DescribeFreedvMonitorDevice()
+    {
+        if (SelectedFreedvMonitorDevice is null)
+        {
+            return "Not configured";
+        }
+
+        if (SelectedMonitorDevice is not null
+            && string.Equals(SelectedFreedvMonitorDevice.DeviceId, SelectedMonitorDevice.DeviceId, StringComparison.Ordinal))
+        {
+            return $"{SelectedFreedvMonitorDevice.FriendlyName} (same physical output as PC RX)";
+        }
+
+        return SelectedFreedvMonitorDevice.FriendlyName;
+    }
+
+    private async Task PlayFreedvSpeechFrameAsync(Pcm16AudioClip clip)
+    {
+        var duration = clip.PcmBytes.Length / (double)(clip.SampleRate * clip.Channels * 2);
+            var debugPath = SaveFreedvDecodedSpeechFrame(clip);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                FreedvLastDecodedSpeechPath = debugPath ?? "Decoded speech was not saved.";
+                FreedvDecodedAudioStatus = string.IsNullOrWhiteSpace(debugPath)
+                    ? $"Decoded speech frame: {duration:0.00}s @ {clip.SampleRate} Hz"
+                    : $"Decoded speech frame: {duration:0.00}s @ {clip.SampleRate} Hz | saved {Path.GetFileName(debugPath)}";
+        });
+
+        if (_audioService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _audioService.PlayDecodedMonitorPcmAsync(BuildFreedvMonitorAudioRoute(), clip, CancellationToken.None).ConfigureAwait(false);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                FreedvLastDecodedSpeechPath = debugPath ?? "Decoded speech was not saved.";
+                FreedvDecodedAudioStatus = string.IsNullOrWhiteSpace(debugPath)
+                    ? $"Decoded speech playing: {duration:0.00}s @ {clip.SampleRate} Hz"
+                    : $"Decoded speech playing: {duration:0.00}s @ {clip.SampleRate} Hz | saved {debugPath}";
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                FreedvDecodedAudioStatus = $"FreeDV speech monitor failed: {ex.Message}";
+            });
+        }
+    }
+
+    private string? SaveFreedvDecodedSpeechFrame(Pcm16AudioClip clip)
+    {
+        try
+        {
+            var mode = FreedvSelectedMode.ToLowerInvariant();
+            var path = Path.Combine(_freedvDebugDirectory, $"last_{mode}_speech.wav");
+            WritePcm16Wave(path, clip);
+            return path;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void WritePcm16Wave(string path, Pcm16AudioClip clip)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+        var dataSize = clip.PcmBytes.Length;
+        var blockAlign = (short)(clip.Channels * sizeof(short));
+        var byteRate = clip.SampleRate * blockAlign;
+
+        writer.Write("RIFF"u8.ToArray());
+        writer.Write(36 + dataSize);
+        writer.Write("WAVE"u8.ToArray());
+        writer.Write("fmt "u8.ToArray());
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)clip.Channels);
+        writer.Write(clip.SampleRate);
+        writer.Write(byteRate);
+        writer.Write(blockAlign);
+        writer.Write((short)16);
+        writer.Write("data"u8.ToArray());
+        writer.Write(dataSize);
+        writer.Write(clip.PcmBytes);
+    }
+
     private void ApplyWaterfallDisplaySettings()
     {
         _waterfallService?.UpdateDisplaySettings(
@@ -7588,10 +9555,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SelectedMicDevice = FindDevice(RxDeviceOptions, _settings.Audio.MicDeviceId);
         SelectedTxDevice = FindDevice(OutputDeviceOptions, _settings.Audio.TxDeviceId);
         SelectedMonitorDevice = FindDevice(OutputDeviceOptions, _settings.Audio.MonitorDeviceId);
+        SelectedFreedvMonitorDevice = FindDevice(OutputDeviceOptions, _settings.Audio.FreedvMonitorDeviceId);
         VoiceRxDeviceDisplay = SelectedRxDevice?.FriendlyName ?? "Not configured";
         VoiceTxDeviceDisplay = SelectedTxDevice?.FriendlyName ?? "Not configured";
         VoiceMicDeviceDisplay = SelectedMicDevice?.FriendlyName ?? "Not configured";
         VoiceMonitorDeviceDisplay = SelectedMonitorDevice?.FriendlyName ?? "Not configured";
+        FreedvMonitorDeviceDisplay = DescribeFreedvMonitorDevice();
         DiagnosticsAudioRadioRx = VoiceRxDeviceDisplay;
         DiagnosticsAudioRadioTx = VoiceTxDeviceDisplay;
         DiagnosticsAudioPcTx = VoiceMicDeviceDisplay;
@@ -7686,6 +9655,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private static string FormatMarker(long hz) => $"{hz / 1_000_000.0:0.000}";
 
+    private static string FormatTelemetryPercent(int percent)
+        => $"{Math.Clamp(percent, 0, 100),3}%";
+
     private static string FormatCallsign(string callsign) => callsign.Trim().ToUpperInvariant();
 
     private static string FormatWeakSignalGrid(string gridSquare)
@@ -7758,6 +9730,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return 1700.0;
     }
 
+    private static double ParseKeyboardAudioCenterHz(string value)
+    {
+        if (double.TryParse(value.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var hz))
+        {
+            return Math.Clamp(hz, 300.0, 3200.0);
+        }
+
+        return 1000.0;
+    }
+
     private static double GetWsjtxCycleLengthSeconds(string modeLabel) =>
         WsjtxModeCatalog.GetMode(modeLabel).CycleLengthSeconds;
 
@@ -7787,7 +9769,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         if (mode.Label.StartsWith("JS8 ", StringComparison.OrdinalIgnoreCase))
         {
-            return $"{mode.Label} receive scaffold ready. Uses JS8Call-compatible cycles and expects a JS8Call jt9.exe via SHACKSTACK_JS8_JT9_PATH or a bundled js8call-tools runtime.";
+            return $"{mode.Label} monitor ready. Uses JS8Call-compatible cycles and expects a JS8Call jt9.exe via SHACKSTACK_JS8_JT9_PATH or a bundled js8call-tools runtime.";
         }
 
         var sequenceText = mode.SupportsAutoSequence ? "Auto-sequence capable." : "Manual/semi-manual sequencing expected.";
@@ -7960,152 +9942,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return null;
     }
 
-    private void UpdateCwDetectedCallsign()
-    {
-        var detected = TryExtractCwCallsign(CwDecodedText, FormatCallsign(SettingsCallsign));
-        if (string.IsNullOrWhiteSpace(detected))
-        {
-            if (!string.IsNullOrWhiteSpace(CwDetectedCallsign))
-            {
-                CwDetectedCallsign = string.Empty;
-            }
-
-            CwOperatorHint = "Listening for CQ/DE exchange before suggesting a call.";
-            return;
-        }
-
-        if (!string.Equals(CwDetectedCallsign, detected, StringComparison.OrdinalIgnoreCase))
-        {
-            CwDetectedCallsign = detected;
-            CwOperatorHint = $"Detected {detected}. Load/send macros can use %tocall, or prefill the CW log.";
-        }
-    }
-
-    private static string? TryExtractCwCallsign(string? decodedText, string myCall)
-    {
-        if (string.IsNullOrWhiteSpace(decodedText))
-        {
-            return null;
-        }
-
-        var tokens = TokenizeCwAssistText(decodedText);
-        if (tokens.Length == 0)
-        {
-            return null;
-        }
-
-        var myCallNormalized = FormatCallsign(myCall);
-        for (var i = tokens.Length - 1; i >= 0; i--)
-        {
-            var token = tokens[i];
-            if (token == "CQ")
-            {
-                var candidate = FindNextCwCallsign(tokens, i + 1, myCallNormalized, stopAtDe: true);
-                if (!string.IsNullOrWhiteSpace(candidate))
-                {
-                    return candidate;
-                }
-            }
-
-            if (token == "DE")
-            {
-                var candidate = FindNextCwCallsign(tokens, i + 1, myCallNormalized, stopAtDe: false);
-                if (!string.IsNullOrWhiteSpace(candidate))
-                {
-                    return candidate;
-                }
-            }
-
-            if (i + 2 < tokens.Length && tokens[i + 1] == "DE")
-            {
-                var left = tokens[i];
-                var right = tokens[i + 2];
-                if (IsLikelyCwCallsign(left) && IsLikelyCwCallsign(right))
-                {
-                    if (string.Equals(right, myCallNormalized, StringComparison.OrdinalIgnoreCase)
-                        && !string.Equals(left, myCallNormalized, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return left;
-                    }
-
-                    if (!string.Equals(right, myCallNormalized, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return right;
-                    }
-                }
-            }
-
-            if (i + 1 < tokens.Length && IsCwReportToken(tokens[i + 1]) && IsLikelyCwCallsign(token))
-            {
-                if (!string.Equals(token, myCallNormalized, StringComparison.OrdinalIgnoreCase))
-                {
-                    return token;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static string[] TokenizeCwAssistText(string decodedText)
-    {
-        var compact = decodedText
-            .ToUpperInvariant()
-            .Replace('\r', ' ')
-            .Replace('\n', ' ');
-
-        return compact
-            .Split([' ', '\t', ',', ';', ':'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(static token => token.Trim('.', '?', '!', '"', '\''))
-            .Where(static token => !string.IsNullOrWhiteSpace(token))
-            .ToArray();
-    }
-
-    private static string? FindNextCwCallsign(string[] tokens, int startIndex, string myCall, bool stopAtDe)
-    {
-        for (var i = startIndex; i < tokens.Length && i < startIndex + 4; i++)
-        {
-            if (stopAtDe && tokens[i] == "DE")
-            {
-                return null;
-            }
-
-            if (!IsLikelyCwCallsign(tokens[i]))
-            {
-                continue;
-            }
-
-            if (string.Equals(tokens[i], myCall, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            return tokens[i];
-        }
-
-        return null;
-    }
-
-    private static bool IsLikelyCwCallsign(string token)
-    {
-        if (token.Length < 3 || token.Length > 12)
-        {
-            return false;
-        }
-
-        if (token is "CQ" or "DE" or "TEST" or "POTA" or "K" or "KN" or "SK" or "TU" or "UR" or "RST" or "RR" or "R")
-        {
-            return false;
-        }
-
-        var hasLetter = token.Any(char.IsLetter);
-        var hasDigit = token.Any(char.IsDigit);
-        return hasLetter && hasDigit && token.All(ch => char.IsLetterOrDigit(ch) || ch == '/');
-    }
-
-    private static bool IsCwReportToken(string token)
-        => token is "599" or "5NN" or "579" or "589" or "559" or "RST";
-
     private string ExpandCwMacro(string? label)
     {
         var myCall = FormatCallsign(SettingsCallsign);
@@ -8114,7 +9950,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             myCall = "<MYCALL>";
         }
 
-        var toCall = FormatCallsign(CwDetectedCallsign);
+        var toCall = FormatCallsign(LongwaveLogCallsign);
         if (string.IsNullOrWhiteSpace(toCall))
         {
             toCall = "<CALL>";
@@ -8789,6 +10625,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _cwDecodeSubscription?.Dispose();
         _rttyTelemetrySubscription?.Dispose();
         _rttyDecodeSubscription?.Dispose();
+        _keyboardModeTelemetrySubscription?.Dispose();
+        _keyboardModeDecodeSubscription?.Dispose();
+        _freedvTelemetrySubscription?.Dispose();
+        _freedvSpeechSubscription?.Dispose();
         _wsjtxTelemetrySubscription?.Dispose();
         _wsjtxDecodeSubscription?.Dispose();
         _sstvTelemetrySubscription?.Dispose();
@@ -8799,12 +10639,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _runtimeUiStateSaveCts?.Dispose();
         _sstvTxCts?.Dispose();
 
-        DisposeIfPresent(_cwDecoderHost);
-        DisposeIfPresent(_rttyDecoderHost);
-        DisposeIfPresent(_sstvDecoderHost);
-        DisposeIfPresent(_wefaxDecoderHost);
-        DisposeIfPresent(_wsjtxModeHost);
-        DisposeIfPresent(_sstvTransmitService);
     }
 
     private void StopRuntimeServices(CancellationToken ct)
@@ -8816,6 +10650,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         RunShutdownStep(token => _cwDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _rttyDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _keyboardModeDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _freedvDigitalVoiceHost?.StopTransmitAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _freedvDigitalVoiceHost?.StopAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _sstvDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _wefaxDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _wsjtxModeHost?.StopAsync(token) ?? Task.CompletedTask, ct);
@@ -8843,15 +10680,4 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private static void DisposeIfPresent(object? value)
-    {
-        try
-        {
-            (value as IDisposable)?.Dispose();
-        }
-        catch
-        {
-            // Best-effort cleanup only.
-        }
-    }
 }

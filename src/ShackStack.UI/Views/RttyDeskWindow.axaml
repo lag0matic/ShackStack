@@ -69,8 +69,40 @@
                 </Grid>
                 <Grid ColumnDefinitions="82,*" ColumnSpacing="10">
                   <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
-                  <TextBlock Grid.Column="1" Text="{Binding RttySessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                  <TextBlock Grid.Column="1" Text="{Binding RttySessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" FontFamily="Consolas" />
                 </Grid>
+              </StackPanel>
+            </Border>
+            <Border Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
+              <StackPanel Spacing="8">
+                <TextBlock Text="RTTY / Longwave Log" FontSize="13" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding LongwaveQuickLogSummary}" Foreground="#E9F3FF" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="74,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding LongwaveLogbooks}" SelectedItem="{Binding SelectedLongwaveLogbook}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:LongwaveLogbookItem">
+                        <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                </Grid>
+                <Grid ColumnDefinitions="74,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBox Grid.Column="1" Text="{Binding LongwaveLogCallsign}" Watermark="Worked station" />
+                </Grid>
+                <Grid ColumnDefinitions="74,*,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="RST S/R" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBox Grid.Column="1" Text="{Binding LongwaveLogRstSent}" />
+                  <TextBox Grid.Column="2" Text="{Binding LongwaveLogRstReceived}" />
+                </Grid>
+                <WrapPanel Orientation="Horizontal">
+                  <Button Content="Use Rig" Command="{Binding UseRigForRttyLongwaveLogCommand}" Margin="0,0,8,6" />
+                  <Button Content="Log QSO" Command="{Binding LogCurrentQsoCommand}" IsVisible="{Binding IsCreatingLongwaveContact}" Margin="0,0,8,6" />
+                  <Button Content="Save" Command="{Binding UpdateSelectedLongwaveContactCommand}" IsVisible="{Binding IsEditingLongwaveContact}" Margin="0,0,8,6" />
+                  <Button Content="New" Command="{Binding NewLongwaveContactCommand}" Margin="0,0,8,6" />
+                </WrapPanel>
               </StackPanel>
             </Border>
           </StackPanel>

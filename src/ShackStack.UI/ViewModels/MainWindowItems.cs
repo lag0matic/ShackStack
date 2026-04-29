@@ -78,21 +78,58 @@ public sealed record LongwaveSpotSummaryItem(
     public string MessageForeground => IsLogged ? "#8F9BB4" : "#E5ECFF";
 }
 
-public sealed record LongwaveLogbookItem(string Id, string Name, string OperatorCallsign, string? Notes)
+public sealed record LongwaveLogbookItem(
+    string Id,
+    string Name,
+    string OperatorCallsign,
+    string? ParkReference,
+    string? ActivationDate,
+    string? Notes,
+    int ContactCount)
 {
-    public string DisplayText => Name;
+    public string DisplayText => ContactCount <= 0 ? Name : $"{Name}  ({ContactCount})";
+    public string DetailText => string.IsNullOrWhiteSpace(ParkReference)
+        ? $"{OperatorCallsign}"
+        : $"{OperatorCallsign}  |  {ParkReference}";
 }
 
 public sealed record LongwaveRecentContactItem(
     string Id,
+    string LogbookId,
     string StationCallsign,
+    string OperatorCallsign,
+    string QsoDate,
+    string TimeOn,
     string Mode,
     string Band,
     string TimeText,
     string? ParkReference,
-    double FrequencyKhz)
+    double FrequencyKhz,
+    string? RstSent,
+    string? RstReceived,
+    string? Name,
+    string? Qth,
+    string? County,
+    string? GridSquare,
+    string? Country,
+    string? State,
+    string? Dxcc,
+    string? QrzUploadStatus,
+    string? QrzUploadDate,
+    double? Latitude,
+    double? Longitude,
+    string? SourceSpotId)
 {
     public string FrequencyText => $"{FrequencyKhz / 1000d:0.000} MHz";
+    public string QrzUploadText => string.Equals(QrzUploadStatus, "Y", StringComparison.OrdinalIgnoreCase)
+        ? string.IsNullOrWhiteSpace(QrzUploadDate) ? "QRZ uploaded" : $"QRZ {QrzUploadDate}"
+        : "QRZ pending";
+    public string QrzUploadBackground => string.Equals(QrzUploadStatus, "Y", StringComparison.OrdinalIgnoreCase)
+        ? "#1E6F5C"
+        : "#4A3B18";
+    public string QrzUploadForeground => string.Equals(QrzUploadStatus, "Y", StringComparison.OrdinalIgnoreCase)
+        ? "#F4FFF8"
+        : "#FFE7A6";
     public string SummaryText => string.IsNullOrWhiteSpace(ParkReference)
         ? $"{StationCallsign}  |  {Band} {Mode}"
         : $"{StationCallsign}  |  {Band} {Mode}  |  {ParkReference}";
