@@ -1,12 +1,12 @@
 # Digital Mode Roadmap
 
-Last refreshed: 2026-04-28.
+Last refreshed: 2026-04-29.
 
 This document captures the next likely digital-mode targets after the ShackStack 1.0 baseline.
 
 The current target station is HF-first: IC-7300-class rig, wire antenna, practical operating from common HF bands. VHF/UHF, satellite, EME, meteor-scatter, and specialized directional-antenna workflows are intentionally out of scope unless the station changes.
 
-Current 1.0 coverage already includes voice/POTA workflow, FT8, FT4, JS8, WSPR receive, RTTY receive, SSTV receive/transmit, WeFAX receive, FreeDV/RADEV1 harness support, Longwave integration, and experimental CW.
+Current 1.0 coverage already includes voice/POTA workflow, FT8, FT4, JS8, WSPR receive, RTTY receive, SSTV receive/transmit, WeFAX receive, FreeDV/RADEV1 harness support with separated decoded audio, Longwave integration, and experimental CW.
 
 ## Best Next Targets
 
@@ -26,7 +26,7 @@ Current 1.0 coverage already includes voice/POTA workflow, FT8, FT4, JS8, WSPR r
 | --- | --- | --- | --- |
 | VARA HF / VarAC | Unsupported | Low-Medium | VARA itself is closed/proprietary. ShackStack can potentially integrate with an installed VARA/VarAC setup, but cannot direct-port it like MMSSTV, fldigi, or WSJT-X. |
 | ARDOP / Winlink-style modes | Unsupported | Medium-Low | HF-capable through ardopcf or external integration, but the workflow becomes mailbox/session based rather than normal live decode. |
-| FreeDV | Harness-proven | Medium | HF-capable digital voice. ShackStack now has Codec2/RADEV1 sidecar support, synthetic TX/RX loopback, EOO callsign metadata, and a separated decoded-audio path. Live RF validation and latency reduction are next. |
+| FreeDV | Harness-proven | Medium | HF-capable digital voice. ShackStack now has Codec2/RADEV1 sidecar support, synthetic TX/RX loopback, EOO callsign metadata, separated decoded-audio path, and stabilized desk telemetry layout. Live RF validation and latency reduction are next. |
 | ALE / MIL-STD-188-141A monitor | Unsupported | Medium | Down-the-line HF utility monitor target. RX-first only: detect ALE bursts, decode addresses/calls and link-quality metadata if practical, and keep it separate from RTTY/PSK because ALE is not a two-tone keyboard mode. Look for a proven open-source decoder before attempting any native implementation. |
 | Packet / APRS / AX.25 | Unsupported | Low-Medium | Dire Wolf is the obvious source/integration path. HF packet exists, but this is more of a packet/TNC desk than a simple decoder and is not a near-term need. |
 | PACTOR | Unsupported | Very Low | Mostly hardware/proprietary ecosystem. Not a good ShackStack-native target. |

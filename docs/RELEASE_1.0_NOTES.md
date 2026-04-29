@@ -1,6 +1,6 @@
 # ShackStack 1.0 Release Notes
 
-Last refreshed: 2026-04-28.
+Last refreshed: 2026-04-29.
 
 ShackStack 1.0 is the first "good enough to live with on the desk" build. It packages the desktop app, bundled decoder workers, and the current FT8/FT4, SSTV, RTTY, voice, POTA, and Longwave workflows into a self-contained Windows installer.
 
@@ -14,9 +14,11 @@ ShackStack 1.0 is the first "good enough to live with on the desk" build. It pac
 - Voice, CW, RTTY, weak-signal, WeFAX, SSTV, JS8, and Longwave workflows now use dedicated desk windows with the main app serving as a launcher/status surface.
 - WeFAX includes a schedule-aware receive desk, manual slant/offset correction, image cleanup controls, and archive review.
 - RTTY receive uses the GPL fldigi-derived sidecar instead of the old Python worker, with manual audio-center tuning, reverse polarity support, and USB-D/LSB-D friendly rig handling.
-- FreeDV/RADEV1 support is harness-proven with Codec2/RADE sidecar integration, end-of-over callsign metadata, and separated decoded-audio output. Live RF validation remains in progress.
+- FreeDV/RADEV1 support is harness-proven with Codec2/RADE sidecar integration, end-of-over callsign metadata, separated decoded-audio output, and stable live-state desk layout. Live RF validation remains in progress.
 - PSK31/PSK63 work has a desk/sidecar and synthetic TX audio path, but real-signal RX is still in progress.
 - Longwave logging is now more consistent across desks, including mode quick-log previews, POTA spot posting, QRZ upload result messages, and logbook selection fixes.
+- SSTV regression coverage now includes imperfect auto-start samples for Martin 1/2, Scottie 1/2, Robot36, static rejection, force-start, PD120, and Robot36 TX round-trip smoke testing.
+- `MainWindowViewModel` has been split into concern-based partial files so the codebase is less of a single giant panel controller.
 - ShackStack now uses the antenna/ground circuit badge branding for the app, window, and installer icons.
 - The installer build now rebuilds and packages the native SSTV sidecar, GPL RTTY sidecar, GPL WSJT-X sidecar, and remaining Python workers so installed builds are not dependent on random local decoder paths.
 

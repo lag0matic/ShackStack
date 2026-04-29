@@ -18,11 +18,11 @@ The 1.0 release is published from `main`. Older cleanup and beta branches remain
 - Voice operating: radio-backed voice controls, PTT, POTA-oriented workflow, and log staging.
 - Weak-signal FT8/FT4: live decode, signal generation, on-air CQ/reply flow, RX/TX audio offset controls, QSO staging, SNTP-assisted clock discipline, and bundled WSJT-X-derived sidecar/runtime support.
 - JS8: live JS8 receive and transmit for Normal/Fast/Turbo/Slow, heartbeat support including `@HB`, directed replies, audio offset control, and bundled JS8Call-compatible runtime tools.
-- SSTV receive: MMSSTV-shaped receive path with live preview, VIS/sync handling, common ham mode support, slant correction, archive saving, FSKID callsign capture, and graceful image completion when signal drops.
-- SSTV transmit: template overlays, draggable text blocks, received-image thumbnail replies, generated PCM transmit clips, optional CW ID, optional MMSSTV-style FSKID, and `%tocall` replacement from decoded FSKID.
+- SSTV receive: MMSSTV-shaped receive path with live preview, VIS/sync handling, common ham mode support, slant correction, archive saving, FSKID callsign capture, graceful image completion when signal drops, and synthetic regression coverage for imperfect main-mode auto-start.
+- SSTV transmit: template overlays, draggable text blocks, received-image thumbnail replies, generated PCM transmit clips, optional CW ID, optional MMSSTV-style FSKID, `%tocall` replacement from decoded FSKID, and Robot36 encoder round-trip smoke coverage.
 - WeFAX receive: live image receive, dedicated desk, schedule view, manual slant/offset controls, fldigi/py-wefax-inspired alignment and cleanup controls, archive review, and improved live stability.
 - RTTY receive: fldigi-derived GPL sidecar, manual audio-center tuning, reverse polarity, 45.45 baud / 170 Hz defaults, USB-D/LSB-D friendly radio handling, and practical decode quality against live signals.
-- Longwave integration: POTA spots, callsign lookup/staging, logbook selection, manual QSO logging, and recent-contact sync from another Longwave client or machine.
+- Longwave integration: POTA spots, spot posting, callsign lookup/staging, logbook selection, manual QSO logging, QRZ upload result surfacing, and recent-contact sync from another Longwave client or machine.
 - Packaging: self-contained Windows installer, bundled decoder workers, bundled native SSTV sidecar, bundled GPL RTTY/WSJT sidecars, app icon branding, and shutdown cleanup for decoder processes and CI-V COM ports.
 
 ## Functional Mode Coverage
@@ -47,6 +47,7 @@ The 1.0 release is published from `main`. Older cleanup and beta branches remain
 - RTTY decode depends heavily on signal quality, polarity, passband placement, shift, and baud. Manual tuning is part of the workflow.
 - JS8 TX supports the current short Varicode/Huffman text path and live heartbeat/reply use. Richer JS8Call message packing can still be expanded.
 - WSPR receive is wired as a weak-signal monitor path using the bundled WSJT-X `wsprd.exe`; WSPR TX/QSO automation is not part of 1.0.
+- PSK31/PSK63 live RX is still not proven due lack of signals.
 - Q65, FST4, FST4W, JT65, JT9, JT4, and MSK144 are scaffolded as weak-signal monitor modes, but they are not 1.0 headline-tested operator workflows.
 - SSTV AVT exists in the native workbench/harness path but is not a priority ham workflow for 1.0.
 - Installer/update flow is simple: self-contained `win-x64` publish wrapped by Inno Setup. No auto-updater yet.
@@ -99,7 +100,7 @@ publish\ShackStack-Setup-v1.0.exe
 ## Repository Layout
 
 - `src/ShackStack.Desktop`: desktop entry point, DI bootstrap, app assets, and packaged decoder/runtime folders.
-- `src/ShackStack.UI`: Avalonia views, desks, controls, and main view model.
+- `src/ShackStack.UI`: Avalonia views, desks, controls, and concern-split main view-model partials.
 - `src/ShackStack.Core`: app workflow helpers and core operating logic.
 - `src/ShackStack.Core.Abstractions`: shared contracts, models, mode catalogs, and service interfaces.
 - `src/ShackStack.Infrastructure.Audio`: NAudio-backed receive/transmit audio transport.

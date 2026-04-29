@@ -165,7 +165,7 @@ For the `1.0` installer, build bundled decoder workers first, then publish the d
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\installer\Build-DecoderWorkers.ps1
 dotnet publish .\src\ShackStack.Desktop\ShackStack.Desktop.csproj -c Release -r win-x64 --self-contained true -o .\publish\ShackStack-win-x64-v1.0
-& "C:\Program Files\Inno Setup 6\ISCC.exe" ".\installer\ShackStack.iss"
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" ".\installer\ShackStack.iss"
 ```
 
 Expected installer output:

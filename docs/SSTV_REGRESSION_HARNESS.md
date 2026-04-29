@@ -19,10 +19,12 @@ dotnet run --project .\src\ShackStack.DecoderHost.Sstv.Harness\ShackStack.Decode
 | Case | Purpose |
 | --- | --- |
 | `static_noise_reject` | Verifies Auto Detect does not start a bogus image from pure static. |
-| `martin_1_clean_auto` | Clean Martin 1 auto-detect loopback. |
+| `martin_1_qrn_34db_clock_plus50_auto` | Martin 1 with light synthetic QRN and positive sample-clock skew. |
 | `martin_2_qrn_30db_auto` | Martin 2 with synthetic QRN/noise to protect weak-but-valid VIS/sync behavior. |
 | `scottie_1_clock_75ppm_auto` | Scottie 1 with sample-clock skew to guard against slant/timing regressions. |
-| `robot_36_clean_auto` | Robot 36 auto-detect loopback. |
+| `scottie_2_qrn_32db_clock_minus50_auto` | Scottie 2 with QRN and negative sample-clock skew, guarding against mode favoritism. |
+| `robot_36_qrn_34db_auto` | Robot 36 auto-detect loopback with less-than-perfect signal. |
+| `robot_36_tx_roundtrip_auto` | Robot 36 TX encoder smoke: generated TX audio must VIS-detect and auto-decode as Robot 36. |
 | `pd_120_clean_auto` | PD 120 auto-detect loopback. |
 | `martin_1_force_late` | Locked-mode late force-start path, simulating a missed preamble. |
 
@@ -55,3 +57,5 @@ The static-noise case must:
 - Avoid entering a receiving state.
 
 These thresholds are intentionally not picture-perfect. The harness is meant to catch broken RX flow, false starts, mode selection regressions, and major color/timing failures without overfitting to one synthetic image.
+
+Current 2026-04-29 baseline: `9/9` regression cases pass in Release.
