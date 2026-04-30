@@ -11,6 +11,10 @@ namespace ShackStack.UI.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    private float _rxMeterLevel;
+    private float _txMeterLevel;
+    private float _micMeterLevel;
+
     [ObservableProperty]
     private string audioMonitorState = "Stopped";
 
@@ -43,6 +47,36 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     private int waterfallCeilingPercent = 92;
+
+    private void SetAudioLevelPercentages(AudioLevels levels)
+    {
+        _rxMeterLevel = SmoothMeterLevel(_rxMeterLevel, levels.RxLevel);
+        _txMeterLevel = SmoothMeterLevel(_txMeterLevel, levels.TxLevel);
+        _micMeterLevel = SmoothMeterLevel(_micMeterLevel, levels.MicLevel);
+
+        RxLevelPercent = ToMeterPercent(_rxMeterLevel);
+        TxLevelPercent = ToMeterPercent(_txMeterLevel);
+        MicLevelPercent = ToMeterPercent(_micMeterLevel);
+    }
+
+    private static float SmoothMeterLevel(float current, float next)
+    {
+        next = Math.Clamp(next, 0f, 1f);
+        if (next <= 0.001f)
+        {
+            return 0f;
+        }
+
+        if (next >= current)
+        {
+            return next;
+        }
+
+        return (current * 0.72f) + (next * 0.28f);
+    }
+
+    private static int ToMeterPercent(float value) =>
+        Math.Clamp((int)Math.Round(value * 100f), 0, 100);
 
     [ObservableProperty]
     private int waterfallZoom = 1;

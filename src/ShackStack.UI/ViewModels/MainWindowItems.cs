@@ -1,5 +1,6 @@
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using CommunityToolkit.Mvvm.ComponentModel;
 using ShackStack.Core.Abstractions.Models;
 
 namespace ShackStack.UI.ViewModels;
@@ -133,4 +134,86 @@ public sealed record LongwaveRecentContactItem(
     public string SummaryText => string.IsNullOrWhiteSpace(ParkReference)
         ? $"{StationCallsign}  |  {Band} {Mode}"
         : $"{StationCallsign}  |  {Band} {Mode}  |  {ParkReference}";
+}
+
+public sealed class FreedvReporterStationItem : ObservableObject
+{
+    private string _callsign;
+    private string _gridSquare;
+    private string _frequencyText;
+    private string _modeText;
+    private string _txText;
+    private string _heardText;
+    private string _messageText;
+    private string _updatedText;
+    private long? _frequencyHz;
+    private bool _isTransmitting;
+
+    public FreedvReporterStationItem(
+        string sid,
+        string callsign,
+        string gridSquare,
+        string frequencyText,
+        string modeText,
+        string txText,
+        string heardText,
+        string messageText,
+        string updatedText,
+        long? frequencyHz,
+        bool isTransmitting)
+    {
+        Sid = sid;
+        _callsign = callsign;
+        _gridSquare = gridSquare;
+        _frequencyText = frequencyText;
+        _modeText = modeText;
+        _txText = txText;
+        _heardText = heardText;
+        _messageText = messageText;
+        _updatedText = updatedText;
+        _frequencyHz = frequencyHz;
+        _isTransmitting = isTransmitting;
+    }
+
+    public string Sid { get; }
+    public string Callsign { get => _callsign; private set => SetProperty(ref _callsign, value); }
+    public string GridSquare { get => _gridSquare; private set => SetProperty(ref _gridSquare, value); }
+    public string FrequencyText { get => _frequencyText; private set => SetProperty(ref _frequencyText, value); }
+    public string ModeText { get => _modeText; private set => SetProperty(ref _modeText, value); }
+    public string TxText { get => _txText; private set => SetProperty(ref _txText, value); }
+    public string HeardText { get => _heardText; private set => SetProperty(ref _heardText, value); }
+    public string MessageText { get => _messageText; private set => SetProperty(ref _messageText, value); }
+    public string UpdatedText { get => _updatedText; private set => SetProperty(ref _updatedText, value); }
+    public long? FrequencyHz { get => _frequencyHz; private set => SetProperty(ref _frequencyHz, value); }
+    public bool IsTransmitting
+    {
+        get => _isTransmitting;
+        private set
+        {
+            if (SetProperty(ref _isTransmitting, value))
+            {
+                OnPropertyChanged(nameof(AccentBrush));
+                OnPropertyChanged(nameof(RowBackground));
+            }
+        }
+    }
+
+    public string SummaryText => $"{Callsign}  |  {GridSquare}";
+    public string AccentBrush => IsTransmitting ? "#FFB000" : "#77D8FF";
+    public string RowBackground => IsTransmitting ? "#261B08" : "#0C1017";
+
+    public void UpdateFrom(FreedvReporterStationItem item)
+    {
+        Callsign = item.Callsign;
+        GridSquare = item.GridSquare;
+        FrequencyText = item.FrequencyText;
+        ModeText = item.ModeText;
+        TxText = item.TxText;
+        HeardText = item.HeardText;
+        MessageText = item.MessageText;
+        UpdatedText = item.UpdatedText;
+        FrequencyHz = item.FrequencyHz;
+        IsTransmitting = item.IsTransmitting;
+        OnPropertyChanged(nameof(SummaryText));
+    }
 }

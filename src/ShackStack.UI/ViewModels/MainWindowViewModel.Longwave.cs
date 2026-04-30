@@ -476,9 +476,10 @@ public partial class MainWindowViewModel
     private void UseRigForFreedvLongwaveLog()
     {
         UseRigForModeLongwaveLog("FREEDV", "59", "59");
-        if (!string.IsNullOrWhiteSpace(FreedvLastRadeCallsign) && !FreedvLastRadeCallsign.StartsWith("None", StringComparison.OrdinalIgnoreCase))
+        var callsign = NormalizeFreedvRadeCallsign(FreedvLastRadeCallsign);
+        if (callsign is not null)
         {
-            LongwaveLogCallsign = FormatCallsign(FreedvLastRadeCallsign);
+            LongwaveLogCallsign = callsign;
         }
 
         LongwaveLogStatus = $"Prefilled FreeDV log from rig: {LongwaveLogBand} FreeDV at {LongwaveLogFrequencyKhz} kHz.";
@@ -507,10 +508,10 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void UseFreedvRadeCallForLog()
     {
-        var callsign = FormatCallsign(FreedvLastRadeCallsign);
-        if (string.IsNullOrWhiteSpace(callsign) || callsign.StartsWith("NONE", StringComparison.OrdinalIgnoreCase))
+        var callsign = NormalizeFreedvRadeCallsign(FreedvLastRadeCallsign);
+        if (callsign is null)
         {
-            LongwaveLogStatus = "No FreeDV RADE callsign has been decoded yet.";
+            LongwaveLogStatus = "No valid FreeDV RADE callsign has been decoded yet.";
             return;
         }
 
@@ -1552,6 +1553,8 @@ public partial class MainWindowViewModel
     {
         OnPropertyChanged(nameof(WsjtxLongwaveLogPreview));
         OnPropertyChanged(nameof(WsjtxLongwaveLogDetail));
+        OnPropertyChanged(nameof(FreedvActiveFrequencyDisplay));
+        _ = UpdateFreedvReporterFrequencyAsync();
     }
 
     partial void OnSettingsLongwaveEnabledChanged(bool value) => ApplyLongwaveSettingsState(_settings);

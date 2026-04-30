@@ -4,6 +4,7 @@ using ShackStack.Core.Abstractions.Contracts;
 using ShackStack.Infrastructure.Audio;
 using ShackStack.Infrastructure.Configuration;
 using ShackStack.Infrastructure.Decoders;
+using ShackStack.Infrastructure.Interop.FreeDvReporter;
 using ShackStack.Infrastructure.Interop;
 using ShackStack.Infrastructure.Interop.BandConditions;
 using ShackStack.Infrastructure.Interop.Longwave;
@@ -28,6 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBandConditionsService, HamqslBandConditionsService>();
         services.AddSingleton<ILongwaveService, LongwaveService>();
         services.AddSingleton<IClockDisciplineService, SystemClockDisciplineService>();
+        services.AddSingleton<IFreedvReporterService, FreedvReporterService>();
         services.AddSingleton<ICwDecoderHost>(provider =>
             new PythonCwDecoderHost(provider.GetRequiredService<IAudioService>()));
         services.AddSingleton<IRttyDecoderHost, FldigiRttyDecoderHost>();
@@ -65,6 +67,7 @@ public static class ServiceCollectionExtensions
             var rttyDecoderHost = provider.GetRequiredService<IRttyDecoderHost>();
             var keyboardModeDecoderHost = provider.GetRequiredService<IKeyboardModeDecoderHost>();
             var freedvDigitalVoiceHost = provider.GetRequiredService<IFreedvDigitalVoiceHost>();
+            var freedvReporterService = provider.GetRequiredService<IFreedvReporterService>();
             var sstvDecoderHost = provider.GetRequiredService<ISstvDecoderHost>();
             var sstvTransmitService = provider.GetRequiredService<ISstvTransmitService>();
             var wefaxDecoderHost = provider.GetRequiredService<IWefaxDecoderHost>();
@@ -84,6 +87,7 @@ public static class ServiceCollectionExtensions
                 rttyDecoderHost,
                 keyboardModeDecoderHost,
                 freedvDigitalVoiceHost,
+                freedvReporterService,
                 sstvDecoderHost,
                 sstvTransmitService,
                 wefaxDecoderHost,

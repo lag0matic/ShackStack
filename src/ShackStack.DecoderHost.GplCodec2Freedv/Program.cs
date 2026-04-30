@@ -70,7 +70,7 @@ internal static class Program
         private Codec2FreeDvRuntime? _runtime;
         private RadeFreeDvRuntime? _radeRuntime;
         private string? _lastRuntimeLoadError;
-        private string _modeLabel = "700D";
+        private string _modeLabel = "RADEV1";
         private string _transmitCallsign = string.Empty;
         private int _rxFrequencyOffsetHz;
         private float _rxFrequencyOffsetPhaseReal = 1.0f;
@@ -92,7 +92,7 @@ internal static class Program
         {
             var requestedMode = root.TryGetProperty("modeLabel", out var modeEl)
                 ? NormalizeMode(modeEl.GetString())
-                : "700D";
+                : NormalizeMode(_modeLabel);
             if (!string.Equals(_modeLabel, requestedMode, StringComparison.OrdinalIgnoreCase))
             {
                 _runtime?.Dispose();
@@ -133,6 +133,7 @@ internal static class Program
         {
             _isRunning = true;
             TryLoadRuntime();
+            _radeRuntime?.ResetReceiveState();
             EmitTelemetry(IsRadeMode
                 ? _radeRuntime?.IsReady == true ? "FreeDV RADEV1 RX running" : "FreeDV RADEV1 RX waiting: RADE runtime not found"
                 : _runtime?.IsReady == true ? $"FreeDV RX running ({_modeLabel})" : "FreeDV RX waiting: Codec2 runtime not found");
@@ -153,6 +154,7 @@ internal static class Program
             _isTransmitting = false;
             _modemSamples.Clear();
             _speechSamples.Clear();
+            _radeRuntime?.ResetReceiveState();
             EmitTelemetry("FreeDV sidecar stopped");
         }
 
@@ -466,10 +468,15 @@ internal static class Program
                     out var callsign);
                 _lastSyncPercent = sync != 0 ? 100 : 0;
                 _lastSnrDb = snrDb;
-                if (!string.IsNullOrWhiteSpace(callsign))
+                var normalizedCallsign = NormalizeCallsign(callsign);
+                if (IsPlausibleCallsign(normalizedCallsign))
                 {
-                    _lastRadeCallsign = callsign.Trim().ToUpperInvariant();
+                    _lastRadeCallsign = normalizedCallsign;
                     EmitTelemetry($"FreeDV RADEV1 EOO callsign {_lastRadeCallsign}");
+                }
+                else if (!string.IsNullOrWhiteSpace(callsign))
+                {
+                    EmitTelemetry("FreeDV RADEV1 ignored invalid EOO callsign");
                 }
 
                 if (sync != 0 && speech.Length > 0)
@@ -549,7 +556,7 @@ internal static class Program
         private static string NormalizeMode(string? modeLabel)
         {
             var normalized = string.IsNullOrWhiteSpace(modeLabel)
-                ? "700D"
+                ? "RADEV1"
                 : modeLabel.Trim().ToUpperInvariant();
             return normalized switch
             {
@@ -558,7 +565,7 @@ internal static class Program
                 "700E" => "700E",
                 "RADE" => "RADEV1",
                 "RADEV1" => "RADEV1",
-                _ => "700D",
+                _ => "RADEV1",
             };
         }
 
@@ -584,6 +591,47 @@ internal static class Program
             }
 
             return builder.ToString();
+        }
+
+        private static bool IsPlausibleCallsign(string callsign)
+        {
+            if (callsign.Length is < 3 or > 12)
+            {
+                return false;
+            }
+
+            var hasLetter = false;
+            var hasDigit = false;
+            var lastWasSlash = false;
+            for (var i = 0; i < callsign.Length; i++)
+            {
+                var ch = callsign[i];
+                var isLetter = ch is >= 'A' and <= 'Z';
+                var isDigit = ch is >= '0' and <= '9';
+                if (isLetter)
+                {
+                    hasLetter = true;
+                }
+                else if (isDigit)
+                {
+                    hasDigit = true;
+                }
+                else if (ch == '/')
+                {
+                    if (i == 0 || i == callsign.Length - 1 || lastWasSlash)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+
+                lastWasSlash = ch == '/';
+            }
+
+            return hasLetter && hasDigit;
         }
 
         private static double EstimateFloatPcmSignalPercent(byte[] bytes)
@@ -623,6 +671,8 @@ internal static class Program
         private const int RadeVerboseQuiet = 0x8;
         private const int FeatureWidth = 36;
         private const int FeatureBatchThreshold = FeatureWidth * 36;
+        private const int FeatureSynthesisContextFeatures = FeatureWidth * 36;
+        private const int SpeechCrossfadeSamples = 320;
         private const int HilbertTaps = 127;
         private const int HilbertDelay = (HilbertTaps - 1) / 2;
         private static readonly float[] HilbertCoefficients = CreateHilbertCoefficients();
@@ -646,8 +696,10 @@ internal static class Program
         private readonly RadeSetEooCallsign _setEooCallsign;
         private readonly RadeDecodeCallsign _decodeCallsign;
         private readonly List<float> _pendingFeatures = [];
+        private readonly List<float> _synthesisContextFeatures = [];
         private readonly List<float> _pendingTransmitFeatures = [];
         private readonly List<float> _hilbertHistory = [];
+        private short[] _speechTail = [];
 
         private RadeFreeDvRuntime(
             IntPtr library,
@@ -707,6 +759,14 @@ internal static class Program
         public int TransmitEooSampleCount { get; }
 
         public float FrequencyOffsetHz => IsReady ? _freqOffset(_rade) : 0.0f;
+
+        public void ResetReceiveState()
+        {
+            _pendingFeatures.Clear();
+            _synthesisContextFeatures.Clear();
+            _hilbertHistory.Clear();
+            _speechTail = [];
+        }
 
         public short[] Receive(
             short[] demodIn,
@@ -833,6 +893,14 @@ internal static class Program
 
             var features = _pendingFeatures.GetRange(0, usable).ToArray();
             _pendingFeatures.RemoveRange(0, usable);
+            var context = _synthesisContextFeatures.Count > 0
+                ? _synthesisContextFeatures.ToArray()
+                : [];
+            var synthesisFeatures = context.Length == 0
+                ? features
+                : context.Concat(features).ToArray();
+            var contextSamplesToDiscard = (context.Length / FeatureWidth) * 160;
+            UpdateSynthesisContext(features);
 
             var tempDirectory = Path.Combine(Path.GetTempPath(), "ShackStack", "freedv-rade");
             Directory.CreateDirectory(tempDirectory);
@@ -842,7 +910,7 @@ internal static class Program
 
             try
             {
-                WriteFloat32File(featurePath, features);
+                WriteFloat32File(featurePath, synthesisFeatures);
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = _lpcnetDemoPath,
@@ -879,13 +947,77 @@ internal static class Program
                 var bytes = File.ReadAllBytes(pcmPath);
                 var speech = new short[bytes.Length / sizeof(short)];
                 Buffer.BlockCopy(bytes, 0, speech, 0, bytes.Length);
-                return speech;
+                if (contextSamplesToDiscard > 0 && speech.Length > contextSamplesToDiscard)
+                {
+                    return CrossfadeSpeechChunk(speech.Skip(contextSamplesToDiscard).ToArray());
+                }
+
+                return CrossfadeSpeechChunk(speech);
             }
             finally
             {
                 TryDelete(featurePath);
                 TryDelete(pcmPath);
             }
+        }
+
+        private short[] CrossfadeSpeechChunk(short[] speech)
+        {
+            if (speech.Length == 0)
+            {
+                return speech;
+            }
+
+            var tailSamples = Math.Min(speech.Length, SpeechCrossfadeSamples);
+            var nextTail = speech.Skip(speech.Length - tailSamples).ToArray();
+            var emitLength = speech.Length - tailSamples;
+            if (emitLength <= 0)
+            {
+                _speechTail = _speechTail.Concat(speech).TakeLast(SpeechCrossfadeSamples).ToArray();
+                return [];
+            }
+
+            var output = new List<short>(emitLength + _speechTail.Length);
+            if (_speechTail.Length > 0)
+            {
+                var fadeSamples = Math.Min(Math.Min(_speechTail.Length, emitLength), SpeechCrossfadeSamples);
+                for (var i = 0; i < fadeSamples; i++)
+                {
+                    var mix = (i + 1) / (float)(fadeSamples + 1);
+                    output.Add((short)Math.Clamp(
+                        (_speechTail[_speechTail.Length - fadeSamples + i] * (1f - mix)) + (speech[i] * mix),
+                        short.MinValue,
+                        short.MaxValue));
+                }
+
+                for (var i = fadeSamples; i < emitLength; i++)
+                {
+                    output.Add(speech[i]);
+                }
+            }
+            else
+            {
+                output.AddRange(speech.Take(emitLength));
+            }
+
+            _speechTail = nextTail;
+            return output.ToArray();
+        }
+
+        private void UpdateSynthesisContext(float[] features)
+        {
+            if (features.Length == 0)
+            {
+                return;
+            }
+
+            _synthesisContextFeatures.AddRange(features);
+            if (_synthesisContextFeatures.Count <= FeatureSynthesisContextFeatures)
+            {
+                return;
+            }
+
+            _synthesisContextFeatures.RemoveRange(0, _synthesisContextFeatures.Count - FeatureSynthesisContextFeatures);
         }
 
         private float[] ExtractFeatures(short[] speech)

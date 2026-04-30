@@ -16,15 +16,26 @@
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Spacing="4">
           <TextBlock Text="FreeDV Digital Voice" FontSize="20" FontWeight="SemiBold" />
-          <TextBlock Text="FreeDV digital voice for HF SSB. RADEV1 is the modern default; legacy Codec2 modes remain available for older stations."
-                     Foreground="#AAB1C7"
-                     TextWrapping="Wrap" />
         </StackPanel>
         <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
           <Button Content="Start RX" Command="{Binding StartFreedvReceiveCommand}" Margin="0,0,8,0" />
           <Button Content="Stop RX" Command="{Binding StopFreedvReceiveCommand}" Margin="0,0,8,0" />
-          <Button Content="Start TX" Command="{Binding StartFreedvTransmitCommand}" Margin="0,0,8,0" />
-          <Button Content="Stop TX" Command="{Binding StopFreedvTransmitCommand}" Margin="0,0,8,0" />
+          <Border Background="#303542"
+                  BorderBrush="#4B5568"
+                  BorderThickness="1"
+                  CornerRadius="4"
+                  Padding="12,6"
+                  MinWidth="88"
+                  Margin="0,0,8,0"
+                  Focusable="False"
+                  PointerPressed="OnFreedvPttPressed"
+                  PointerReleased="OnFreedvPttReleased"
+                  PointerCaptureLost="OnFreedvPttCaptureLost">
+            <TextBlock Text="{Binding FreedvPttButtonText}"
+                       Foreground="#FFFFFF"
+                       FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+          </Border>
           <Button Content="Reset" Command="{Binding ResetFreedvSessionCommand}" />
         </WrapPanel>
       </Grid>
@@ -33,19 +44,11 @@
     <Grid Grid.Row="1" ColumnDefinitions="360,*" ColumnSpacing="10">
       <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
         <StackPanel Spacing="10">
-          <TextBlock Text="Receive Setup" FontSize="16" FontWeight="SemiBold" />
-          <TextBlock Text="Use USB-D/LSB-D like other sound-card modes. Start RX captures radio audio without monitoring the raw modem noise; only decoded speech is routed to the selected monitor device."
-                     Foreground="#AAB1C7"
-                     TextWrapping="Wrap" />
-          <CheckBox Content="Use tuned frequency" IsChecked="{Binding FreedvUseCurrentRadioFrequency}" />
+          <CheckBox Content="Use current radio frequency instead of preset" IsChecked="{Binding FreedvUseCurrentRadioFrequency}" />
           <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
             <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
             <ComboBox Grid.Column="1" ItemsSource="{Binding FreedvModeOptions}" SelectedItem="{Binding FreedvSelectedMode}" />
           </Grid>
-          <TextBlock Text="Most current HF FreeDV activity is expected to be RADEV1. Try 700D/700E/700C/1600 only when working an older station or known legacy mode."
-                     Foreground="#8E97AC"
-                     TextWrapping="Wrap"
-                     FontSize="11" />
           <Grid ColumnDefinitions="92,*,44" ColumnSpacing="10">
             <TextBlock Grid.Column="0" Text="RX offset" Foreground="#7F879B" VerticalAlignment="Center" />
             <Slider Grid.Column="1"
@@ -63,17 +66,11 @@
                        TextAlignment="Right"
                        FontFamily="Consolas" />
           </Grid>
-          <TextBlock Text="Matches FreeDV's own coherent RX frequency shift before the demodulator. Use small steps if a signal has level but no lock."
-                     Foreground="#8E97AC"
-                     TextWrapping="Wrap"
-                     FontSize="11" />
           <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
             <TextBlock Grid.Column="0" Text="Tune" Foreground="#7F879B" VerticalAlignment="Center" />
-            <AutoCompleteBox Grid.Column="1"
-                             ItemsSource="{Binding FreedvFrequencyOptions}"
-                             Text="{Binding FreedvSelectedFrequency}"
-                             FilterMode="Contains"
-                             MinimumPrefixLength="0" />
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{Binding FreedvFrequencyOptions}"
+                      SelectedItem="{Binding FreedvSelectedFrequency}" />
           </Grid>
           <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
             <TextBlock Grid.Column="0" Text="Speech out" Foreground="#7F879B" VerticalAlignment="Center" />
@@ -103,24 +100,21 @@
                        TextAlignment="Right"
                        FontFamily="Consolas" />
           </Grid>
+          <Grid ColumnDefinitions="92,*,48" ColumnSpacing="10">
+            <TextBlock Grid.Column="0" Text="Mic" Foreground="#7F879B" VerticalAlignment="Center" />
+            <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MicLevelPercent}" Height="8" />
+            <TextBlock Grid.Column="2" Text="{Binding MicLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" HorizontalAlignment="Right" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
+          </Grid>
+          <Grid ColumnDefinitions="92,*,48" ColumnSpacing="10">
+            <TextBlock Grid.Column="0" Text="Modem TX" Foreground="#7F879B" VerticalAlignment="Center" />
+            <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding TxLevelPercent}" Height="8" />
+            <TextBlock Grid.Column="2" Text="{Binding TxLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" HorizontalAlignment="Right" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
+          </Grid>
+          <TextBlock Text="For FreeDV TX, Mic is your voice into the codec; Modem TX is the encoded audio actually sent to the radio."
+                     Foreground="#8E97AC"
+                     TextWrapping="Wrap"
+                     FontSize="11" />
 
-          <Border Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
-            <StackPanel Spacing="8">
-              <TextBlock Text="Runtime" FontSize="13" FontWeight="SemiBold" />
-              <TextBlock Text="{Binding FreedvRuntimeStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding AudioMonitorState, StringFormat=RX monitor: {0}}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="11" />
-            </StackPanel>
-          </Border>
-          <Border Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
-            <StackPanel Spacing="8">
-              <TextBlock Text="Field Notes" FontSize="13" FontWeight="SemiBold" />
-              <TextBlock Text="{Binding FreedvFieldNotes}" Foreground="#AAB1C7" TextWrapping="Wrap" />
-              <TextBlock Text="If decoded speech sounds wrong, keep the raw modem recording and last decoded speech capture; those two files are enough to reproduce most FreeDV bugs."
-                         Foreground="#8E97AC"
-                         TextWrapping="Wrap"
-                         FontSize="11" />
-            </StackPanel>
-          </Border>
           <Border Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
             <StackPanel Spacing="8">
               <TextBlock Text="FreeDV / Longwave Log" FontSize="13" FontWeight="SemiBold" />
@@ -158,7 +152,7 @@
       </Border>
 
       <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="10">
+        <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="10">
           <TextBlock Grid.Row="0" Text="Live FreeDV State" FontSize="16" FontWeight="SemiBold" />
 
           <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="10">
@@ -166,7 +160,8 @@
               <StackPanel Spacing="4">
                 <TextBlock Text="Mode" Foreground="#7F879B" FontSize="11" />
                 <TextBlock Text="{Binding FreedvSelectedMode}" Foreground="#FFFFFF" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding FreedvSelectedFrequency}" Foreground="#8E97AC" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding FreedvActiveFrequencyDisplay}" Foreground="#8E97AC" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding FreedvRuntimeStatus}" Foreground="#8E97AC" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="10" />
               </StackPanel>
             </Border>
             <Border Grid.Column="1" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10" MinHeight="96">
@@ -190,25 +185,86 @@
             <TextBlock Grid.Column="1" Text="{Binding FreedvSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" FontFamily="Consolas" MinHeight="36" MaxHeight="36" TextTrimming="CharacterEllipsis" />
           </Grid>
 
-          <Border Grid.Row="3" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
-            <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Capture" Foreground="#7F879B" />
-              <TextBlock Grid.Column="1" Text="{Binding FreedvLastDecodedSpeechPath}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+          <Border Grid.Row="3" Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="6">
+            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="5">
+              <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <StackPanel Spacing="0">
+                  <TextBlock Text="FreeDV Reporter" FontSize="13" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding FreedvReporterStatus}" Foreground="#AAB1C7" FontSize="11" TextWrapping="Wrap" />
+                </StackPanel>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding FreedvReporterStationCount, StringFormat={}{0} stations}"
+                           Foreground="#77D8FF"
+                           FontFamily="Consolas"
+                           FontSize="11"
+                           VerticalAlignment="Top" />
+              </Grid>
+
+              <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6">
+                <CheckBox Grid.Column="0" Content="Report me" IsChecked="{Binding FreedvReporterReportStation}" VerticalAlignment="Center" />
+                <CheckBox Grid.Column="1" Content="RX only" IsChecked="{Binding FreedvReporterReceiveOnly}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="2" Text="{Binding FreedvReporterMessage}" Watermark="Reporter status message" />
+                <Button Grid.Column="3" Content="Connect" Command="{Binding ConnectFreedvReporterCommand}" />
+                <Button Grid.Column="4" Content="Disconnect" Command="{Binding DisconnectFreedvReporterCommand}" />
+                <Button Grid.Column="5" Content="Refresh Freq" Command="{Binding RefreshFreedvReporterFrequencyCommand}" />
+                <Button Grid.Column="6" Content="Send Msg" Command="{Binding SendFreedvReporterMessageCommand}" />
+                <Button Grid.Column="7" Content="Website" Command="{Binding OpenFreedvReporterWebsiteCommand}" />
+              </Grid>
+
+              <Grid Grid.Row="2" RowDefinitions="Auto,*" MinHeight="180">
+                <Grid Grid.Row="0" ColumnDefinitions="110,90,96,70,150,*,56" Margin="4,0,4,2">
+                  <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" FontSize="11" />
+                  <TextBlock Grid.Column="1" Text="Grid" Foreground="#7F879B" FontSize="11" />
+                  <TextBlock Grid.Column="2" Text="Frequency" Foreground="#7F879B" FontSize="11" />
+                  <TextBlock Grid.Column="3" Text="State" Foreground="#7F879B" FontSize="11" />
+                  <TextBlock Grid.Column="4" Text="Heard" Foreground="#7F879B" FontSize="11" />
+                  <TextBlock Grid.Column="5" Text="Message" Foreground="#7F879B" FontSize="11" />
+                  <TextBlock Grid.Column="6" Text="Age" Foreground="#7F879B" FontSize="11" HorizontalAlignment="Right" />
+                </Grid>
+                <ListBox Grid.Row="1"
+                         ItemsSource="{Binding FreedvReporterStations}"
+                         SelectedItem="{Binding SelectedFreedvReporterStation}"
+                         Background="Transparent"
+                         BorderThickness="0">
+                  <ListBox.Styles>
+                    <Style Selector="ListBoxItem">
+                      <Setter Property="Padding" Value="1" />
+                      <Setter Property="Margin" Value="0" />
+                      <Setter Property="MinHeight" Value="0" />
+                      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                      <Setter Property="Background" Value="#18263A" />
+                    </Style>
+                    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                      <Setter Property="Background" Value="#2A5D8F" />
+                    </Style>
+                  </ListBox.Styles>
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FreedvReporterStationItem">
+                      <Border Background="{Binding RowBackground}" CornerRadius="2" Padding="4,0" Margin="0,0,0,1">
+                        <Grid ColumnDefinitions="110,90,96,70,150,*,56" ColumnSpacing="8" MinHeight="15">
+                          <TextBlock Grid.Column="0" Text="{Binding Callsign}" Foreground="{Binding AccentBrush}" FontWeight="SemiBold" FontFamily="Consolas" FontSize="10" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="1" Text="{Binding GridSquare}" Foreground="#C4C8D8" FontFamily="Consolas" FontSize="10" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="2" Text="{Binding FrequencyText}" Foreground="#C4C8D8" FontFamily="Consolas" FontSize="10" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="3" Text="{Binding TxText}" Foreground="#FFD166" FontSize="10" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="4" Text="{Binding HeardText}" Foreground="#AAB1C7" TextTrimming="CharacterEllipsis" FontSize="10" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="5" Text="{Binding MessageText}" Foreground="#E9F3FF" TextTrimming="CharacterEllipsis" FontSize="10" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="6" Text="{Binding UpdatedText}" Foreground="#7F879B" HorizontalAlignment="Right" FontFamily="Consolas" FontSize="10" VerticalAlignment="Center" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+
+              <WrapPanel Grid.Row="3" Orientation="Horizontal">
+                <Button Content="Use Selected For Log" Command="{Binding UseFreedvReporterStationForLogCommand}" Margin="0,0,8,0" />
+                <Button Content="Work Spot" Command="{Binding WorkFreedvReporterSpotCommand}" Margin="0,0,8,0" />
+              </WrapPanel>
             </Grid>
           </Border>
 
-          <Border Grid.Row="4" Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
-            <StackPanel Spacing="8">
-              <TextBlock Text="Decoded Speech" FontSize="15" FontWeight="SemiBold" />
-              <TextBlock Text="{Binding FreedvDecodedAudioStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
-              <TextBlock Text="Radio RX audio stays on the normal RX monitor slider. Decoded FreeDV speech uses the Speech out device and DV volume above."
-                         Foreground="#7F879B"
-                         TextWrapping="Wrap" />
-              <WrapPanel Orientation="Horizontal">
-                <Button Content="Open Captures" Command="{Binding OpenFreedvDebugFolderCommand}" Margin="0,0,8,6" />
-              </WrapPanel>
-            </StackPanel>
-          </Border>
         </Grid>
       </Border>
     </Grid>

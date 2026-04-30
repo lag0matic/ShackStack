@@ -28,6 +28,8 @@ public sealed class AudioService : IAudioService, IDisposable
     private BufferedWaveProvider? _decodedMonitorBuffer;
     private WaveFormat? _decodedMonitorFormat;
     private string? _decodedMonitorDeviceId;
+    private bool _decodedMonitorPlaybackStarted;
+    private short[]? _decodedMonitorLastPcm16Frame;
     private float _monitorVolume = 0.75f;
     private float _decodedMonitorVolume = 0.75f;
     private float _micGain = 1.0f;
@@ -37,6 +39,7 @@ public sealed class AudioService : IAudioService, IDisposable
     private float _rxLevel;
     private float _txLevel;
     private float _micLevel;
+    private bool _directMicTransmitActive;
 
     public AudioService()
     {
@@ -134,6 +137,7 @@ public sealed class AudioService : IAudioService, IDisposable
             var micDevice = _enumerator.GetDevice(route.MicDeviceId);
             var txDevice = _enumerator.GetDevice(route.TxDeviceId);
 
+            _directMicTransmitActive = true;
             _micCapture = new WasapiCapture(micDevice);
             _txBuffer = new BufferedWaveProvider(_micCapture.WaveFormat)
             {
@@ -183,6 +187,7 @@ public sealed class AudioService : IAudioService, IDisposable
             var txDevice = _enumerator.GetDevice(route.TxDeviceId);
             var format = new WaveFormat(clip.SampleRate, 16, clip.Channels);
 
+            _directMicTransmitActive = false;
             _txBuffer = new BufferedWaveProvider(format)
             {
                 DiscardOnBufferOverflow = false,
@@ -210,6 +215,7 @@ public sealed class AudioService : IAudioService, IDisposable
             }
 
             var micDevice = _enumerator.GetDevice(route.MicDeviceId);
+            _directMicTransmitActive = false;
             _micCapture = new WasapiCapture(micDevice);
 
             if (_micMonitorEnabled && !string.IsNullOrWhiteSpace(route.MonitorDeviceId))
@@ -343,16 +349,24 @@ public sealed class AudioService : IAudioService, IDisposable
                 _decodedMonitorDeviceId = route.MonitorDeviceId;
                 _decodedMonitorBuffer = new BufferedWaveProvider(format)
                 {
-                    BufferDuration = TimeSpan.FromSeconds(2),
+                    BufferDuration = TimeSpan.FromSeconds(3),
                     DiscardOnBufferOverflow = true,
                 };
-                _decodedMonitorPlayback = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, 80);
+                _decodedMonitorPlaybackStarted = false;
+                _decodedMonitorLastPcm16Frame = null;
+                _decodedMonitorPlayback = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, 120);
                 _decodedMonitorPlayback.Init(_decodedMonitorBuffer);
-                _decodedMonitorPlayback.Play();
             }
 
             var monitorBuffer = ApplyMonitorVolume(clip.PcmBytes, clip.PcmBytes.Length, format, _decodedMonitorVolume);
+            ApplyPcm16BoundaryRamp(monitorBuffer, format, ref _decodedMonitorLastPcm16Frame);
             _decodedMonitorBuffer!.AddSamples(monitorBuffer, 0, monitorBuffer.Length);
+            if (!_decodedMonitorPlaybackStarted
+                && _decodedMonitorBuffer.BufferedDuration >= TimeSpan.FromMilliseconds(160))
+            {
+                _decodedMonitorPlayback!.Play();
+                _decodedMonitorPlaybackStarted = true;
+            }
         }
 
         return Task.CompletedTask;
@@ -466,6 +480,7 @@ public sealed class AudioService : IAudioService, IDisposable
         float compression;
         float micMonitorLevel;
         bool micMonitorEnabled;
+        bool directMicTransmitActive;
 
         lock (_sync)
         {
@@ -476,6 +491,7 @@ public sealed class AudioService : IAudioService, IDisposable
             compression = _voiceCompression;
             micMonitorLevel = _micMonitorLevel;
             micMonitorEnabled = _micMonitorEnabled;
+            directMicTransmitActive = _directMicTransmitActive;
         }
 
         if (micCapture is null || e.BytesRecorded <= 0)
@@ -493,8 +509,9 @@ public sealed class AudioService : IAudioService, IDisposable
         var processed = ProcessMicSamples(samples, micGain, compression);
         var txPeak = processed.Max(static s => MathF.Abs(s));
         var txBytes = ConvertFloatSamplesToBytes(processed, micCapture.WaveFormat);
+        var isDirectMicTransmit = directMicTransmitActive && txBuffer is not null;
 
-        if (txBuffer is not null)
+        if (isDirectMicTransmit && txBuffer is not null)
         {
             txBuffer.AddSamples(txBytes, 0, txBytes.Length);
         }
@@ -510,7 +527,11 @@ public sealed class AudioService : IAudioService, IDisposable
         lock (_sync)
         {
             _micLevel = micPeak;
-            _txLevel = txPeak;
+            if (isDirectMicTransmit)
+            {
+                _txLevel = txPeak;
+            }
+
             PublishLevelsLocked();
         }
     }
@@ -585,6 +606,8 @@ public sealed class AudioService : IAudioService, IDisposable
         _decodedMonitorBuffer = null;
         _decodedMonitorFormat = null;
         _decodedMonitorDeviceId = null;
+        _decodedMonitorPlaybackStarted = false;
+        _decodedMonitorLastPcm16Frame = null;
     }
 
     private void StopTransmitLocked()
@@ -636,6 +659,7 @@ public sealed class AudioService : IAudioService, IDisposable
 
         _txBuffer = null;
         _micMonitorBuffer = null;
+        _directMicTransmitActive = false;
         _txLevel = 0f;
         _micLevel = 0f;
         PublishLevelsLocked();
@@ -708,6 +732,50 @@ public sealed class AudioService : IAudioService, IDisposable
         var fallback = new byte[bytesRecorded];
         Buffer.BlockCopy(buffer, 0, fallback, 0, bytesRecorded);
         return fallback;
+    }
+
+    private static void ApplyPcm16BoundaryRamp(byte[] buffer, WaveFormat format, ref short[]? previousFrame)
+    {
+        if (buffer.Length < 2 || format.BitsPerSample != 16 || format.Channels <= 0)
+        {
+            previousFrame = null;
+            return;
+        }
+
+        var channels = format.Channels;
+        var frameCount = buffer.Length / (2 * channels);
+        if (frameCount <= 0)
+        {
+            return;
+        }
+
+        if (previousFrame is not null && previousFrame.Length == channels)
+        {
+            var rampFrames = Math.Min(frameCount, Math.Max(1, format.SampleRate / 200));
+            for (var frame = 0; frame < rampFrames; frame++)
+            {
+                var mix = (frame + 1) / (float)(rampFrames + 1);
+                for (var channel = 0; channel < channels; channel++)
+                {
+                    var byteIndex = ((frame * channels) + channel) * 2;
+                    var current = BitConverter.ToInt16(buffer, byteIndex);
+                    var smoothed = (short)Math.Clamp(
+                        (previousFrame[channel] * (1f - mix)) + (current * mix),
+                        short.MinValue,
+                        short.MaxValue);
+                    var bytes = BitConverter.GetBytes(smoothed);
+                    buffer[byteIndex] = bytes[0];
+                    buffer[byteIndex + 1] = bytes[1];
+                }
+            }
+        }
+
+        previousFrame = new short[channels];
+        var lastFrameStart = (frameCount - 1) * channels * 2;
+        for (var channel = 0; channel < channels; channel++)
+        {
+            previousFrame[channel] = BitConverter.ToInt16(buffer, lastFrameStart + (channel * 2));
+        }
     }
 
     private static float EstimatePcm16Peak(byte[] bytes)

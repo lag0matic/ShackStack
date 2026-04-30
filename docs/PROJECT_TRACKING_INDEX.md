@@ -1,11 +1,12 @@
 # Project Tracking Index
 
-Last refreshed: 2026-04-29.
+Last refreshed: 2026-04-30.
 
 Use these documents when planning the next ShackStack work session.
 
 | Document | Purpose |
 | --- | --- |
+| `USER_MANUAL.md` | Operator-facing manual: desk workflows, setup notes, FreeDV Reporter, logging flow, and practical shutdown/testing guidance. |
 | `DIGITAL_WEAK_MODE_STATUS_2026-04-29.md` | Current digital/weak mode status, planned modes, deferred/abandoned modes, and validation notes. Refreshed after WSPR RX, FreeDV RADEV1 harness work, PSK scaffolding, SSTV regression expansion, and Robot36 TX smoke testing. |
 | `CURRENT_FEATURE_STATUS_2026-04-29.md` | Whole-app feature inventory across shell, radio/audio, desks, Longwave, interop, packaging, and risk areas. Refreshed after logging, shutdown, FreeDV audio/layout, SSTV stability work, and the main view-model split. |
 | `NEXT_STEPS_AND_TECH_DEBT_2026-04-29.md` | Prioritized next work: Longwave desk UX, selected-contact editing, logging consistency, digital-mode continuation, and conservative post-split cleanup. |

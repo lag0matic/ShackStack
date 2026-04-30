@@ -18,6 +18,7 @@ docs/*
 !docs/PROJECT_TRACKING_INDEX.md
 !docs/RELEASE_1.0_NOTES.md
 !docs/SSTV_REGRESSION_HARNESS.md
+!docs/USER_MANUAL.md
 src/ShackStack.Desktop/DecoderWorkers/
 src/ShackStack.DecoderWorkers.Python/.pyinstaller/
 

@@ -2,6 +2,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ShackStack.Core.Abstractions.Models;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 
@@ -9,6 +10,8 @@ namespace ShackStack.UI.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    private bool _freedvPttRequested;
+
     [ObservableProperty]
     private int cwPitchHz = 700;
 
@@ -212,7 +215,12 @@ public partial class MainWindowViewModel
     private string freedvSelectedFrequency = "14.236 MHz USB-D";
 
     [ObservableProperty]
-    private bool freedvUseCurrentRadioFrequency = true;
+    private bool freedvUseCurrentRadioFrequency;
+
+    public string FreedvActiveFrequencyDisplay =>
+        FreedvUseCurrentRadioFrequency
+            ? $"{CurrentFrequencyHz / 1_000_000d:0.000000} MHz {ModeDisplay}"
+            : FreedvSelectedFrequency;
 
     [ObservableProperty]
     private int freedvRxFrequencyOffsetHz;
@@ -243,6 +251,29 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     private bool isFreedvTransmitting;
+
+    [ObservableProperty]
+    private string freedvPttButtonText = "PTT";
+
+    public ObservableCollection<FreedvReporterStationItem> FreedvReporterStations { get; } = [];
+
+    [ObservableProperty]
+    private FreedvReporterStationItem? selectedFreedvReporterStation;
+
+    [ObservableProperty]
+    private string freedvReporterStatus = "Reporter disconnected";
+
+    [ObservableProperty]
+    private int freedvReporterStationCount;
+
+    [ObservableProperty]
+    private bool freedvReporterReportStation = true;
+
+    [ObservableProperty]
+    private bool freedvReporterReceiveOnly;
+
+    [ObservableProperty]
+    private string freedvReporterMessage = "Listening with ShackStack";
 
 
 
@@ -647,7 +678,6 @@ public partial class MainWindowViewModel
 
         try
         {
-            IsFreedvTransmitting = true;
             FreedvRxStatus = "Starting FreeDV TX...";
             if (FreedvUseCurrentRadioFrequency)
             {
@@ -669,9 +699,37 @@ public partial class MainWindowViewModel
                     FreedvRxFrequencyOffsetHz,
                     FormatCallsign(SettingsCallsign)),
                 CancellationToken.None).ConfigureAwait(false);
+
+            if (!_freedvPttRequested)
+            {
+                FreedvRxStatus = "FreeDV TX cancelled before keying.";
+                return;
+            }
+
             await _freedvDigitalVoiceHost.StartTransmitAsync(BuildCurrentAudioRoute(), CancellationToken.None).ConfigureAwait(false);
+            if (_freedvReporterService is not null)
+            {
+                await UpdateFreedvReporterFrequencyAsync().ConfigureAwait(false);
+                await _freedvReporterService.UpdateTransmitAsync(FreedvSelectedMode, true, CancellationToken.None).ConfigureAwait(false);
+            }
+
+            if (!_freedvPttRequested)
+            {
+                await StopFreedvTransmitSafelyAsync().ConfigureAwait(false);
+                FreedvRxStatus = "FreeDV TX cancelled before keying.";
+                return;
+            }
+
             await Task.Delay(150).ConfigureAwait(false);
+            if (!_freedvPttRequested)
+            {
+                await StopFreedvTransmitSafelyAsync().ConfigureAwait(false);
+                FreedvRxStatus = "FreeDV TX cancelled before keying.";
+                return;
+            }
+
             await _radioService.SetPttAsync(true, CancellationToken.None).ConfigureAwait(false);
+            IsFreedvTransmitting = true;
             FreedvRxStatus = $"FreeDV TX live ({FreedvSelectedMode})";
             FreedvSignalSummary = $"TX active  |  Mode {FreedvSelectedMode}  |  EOO call {FormatCallsign(SettingsCallsign)}";
             FreedvSessionNotes = string.Equals(FreedvSelectedMode, "RADEV1", StringComparison.OrdinalIgnoreCase)
@@ -692,6 +750,20 @@ public partial class MainWindowViewModel
         FreedvRxStatus = "FreeDV TX stopped";
     }
 
+    public async Task SetFreedvPttPressedAsync(bool isPressed)
+    {
+        _freedvPttRequested = isPressed;
+        if (isPressed)
+        {
+            await StartFreedvTransmitAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            await StopFreedvTransmitSafelyAsync().ConfigureAwait(false);
+            FreedvRxStatus = "FreeDV TX stopped";
+        }
+    }
+
     [RelayCommand]
     private void OpenFreedvDebugFolder()
     {
@@ -708,6 +780,153 @@ public partial class MainWindowViewModel
         catch (Exception ex)
         {
             FreedvDecodedAudioStatus = $"Could not open FreeDV captures: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task ConnectFreedvReporterAsync()
+    {
+        if (_freedvReporterService is null)
+        {
+            FreedvReporterStatus = "FreeDV Reporter service unavailable";
+            return;
+        }
+
+        var config = new FreedvReporterConfiguration(
+            "qso.freedv.org",
+            FormatCallsign(SettingsCallsign),
+            SettingsGridSquare.Trim().ToUpperInvariant(),
+            "ShackStack 1.0",
+            FreedvReporterReportStation,
+            FreedvReporterReceiveOnly);
+        try
+        {
+            await _freedvReporterService.ConnectAsync(config, CancellationToken.None).ConfigureAwait(false);
+            await UpdateFreedvReporterFrequencyAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            FreedvReporterStatus = $"FreeDV Reporter connect failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task DisconnectFreedvReporterAsync()
+    {
+        if (_freedvReporterService is not null)
+        {
+            await _freedvReporterService.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    [RelayCommand]
+    private async Task SendFreedvReporterMessageAsync()
+    {
+        if (_freedvReporterService is not null)
+        {
+            await _freedvReporterService.UpdateMessageAsync(FreedvReporterMessage, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    [RelayCommand]
+    private async Task RefreshFreedvReporterFrequencyAsync()
+    {
+        if (_freedvReporterService is null)
+        {
+            FreedvReporterStatus = "FreeDV Reporter service unavailable";
+            return;
+        }
+
+        if (FreedvUseCurrentRadioFrequency)
+        {
+            RefreshFromRadioSnapshot();
+        }
+
+        await UpdateFreedvReporterFrequencyAsync().ConfigureAwait(false);
+        FreedvReporterStatus = $"Reporter frequency updated: {FreedvActiveFrequencyDisplay}";
+    }
+
+    [RelayCommand]
+    private void OpenFreedvReporterWebsite()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://qso.freedv.org/",
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            FreedvReporterStatus = $"Could not open FreeDV Reporter website: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void UseFreedvReporterStationForLog()
+    {
+        if (SelectedFreedvReporterStation is null)
+        {
+            LongwaveLogStatus = "Select a FreeDV Reporter station first.";
+            return;
+        }
+
+        UseRigForModeLongwaveLog("FREEDV", "59", "59");
+        LongwaveLogCallsign = SelectedFreedvReporterStation.Callsign;
+        if (SelectedFreedvReporterStation.FrequencyHz is > 0)
+        {
+            LongwaveLogFrequencyKhz = $"{SelectedFreedvReporterStation.FrequencyHz.Value / 1000d:0.0}";
+            LongwaveLogBand = DeriveBandFromFrequencyKhz(SelectedFreedvReporterStation.FrequencyHz.Value / 1000d);
+        }
+
+        LongwaveLogGridSquare = SelectedFreedvReporterStation.GridSquare;
+        LongwaveLogStatus = $"Loaded FreeDV Reporter station {SelectedFreedvReporterStation.Callsign} for logging.";
+    }
+
+    [RelayCommand]
+    private async Task WorkFreedvReporterSpotAsync()
+    {
+        if (SelectedFreedvReporterStation is null)
+        {
+            FreedvReporterStatus = "Select a FreeDV Reporter station first.";
+            return;
+        }
+
+        if (SelectedFreedvReporterStation.FrequencyHz is not > 0)
+        {
+            FreedvReporterStatus = $"Reporter station {SelectedFreedvReporterStation.Callsign} has no usable frequency.";
+            return;
+        }
+
+        var station = SelectedFreedvReporterStation;
+        var modeLabel = NormalizeFreedvReporterMode(station.ModeText);
+        if (!string.IsNullOrWhiteSpace(modeLabel))
+        {
+            FreedvSelectedMode = modeLabel;
+        }
+
+        FreedvUseCurrentRadioFrequency = true;
+        var radioMode = GetFreedvDataModeForFrequency(station.FrequencyHz.Value);
+        try
+        {
+            if (_radioService is null || CanConnect)
+            {
+                FreedvReporterStatus = $"Work spot loaded for {station.Callsign}; radio is not connected, tune manually to {FormatFrequencyMHz(station.FrequencyHz.Value)} MHz {FormatModeDisplay(radioMode)}.";
+                FreedvSessionNotes = $"Selected reporter spot {station.Callsign} {FormatFrequencyMHz(station.FrequencyHz.Value)} MHz {FreedvSelectedMode}.";
+                return;
+            }
+
+            await _radioService.SetModeAsync(radioMode, CancellationToken.None).ConfigureAwait(false);
+            await _radioService.SetFrequencyAsync(station.FrequencyHz.Value, CancellationToken.None).ConfigureAwait(false);
+            RadioStatusSummary = $"FreeDV reporter spot tuned: {station.FrequencyHz.Value:N0} Hz {FormatModeDisplay(radioMode)}";
+            FreedvReporterStatus = $"Ready to work {station.Callsign} on {FormatFrequencyMHz(station.FrequencyHz.Value)} MHz {FreedvSelectedMode}.";
+            FreedvSessionNotes = $"Reporter spot selected: {station.Callsign} {station.GridSquare}  |  {FormatFrequencyMHz(station.FrequencyHz.Value)} MHz {FormatModeDisplay(radioMode)}  |  {FreedvSelectedMode}.";
+        }
+        catch (Exception ex)
+        {
+            RadioStatusSummary = $"FreeDV reporter tune failed: {ex.Message}";
+            FreedvReporterStatus = $"Could not tune reporter spot {station.Callsign}: {ex.Message}";
         }
     }
 
@@ -930,6 +1149,7 @@ public partial class MainWindowViewModel
                 FormatCallsign(SettingsCallsign)),
             CancellationToken.None);
         await _freedvDigitalVoiceHost.StartAsync(CancellationToken.None);
+        await UpdateFreedvReporterFrequencyAsync().ConfigureAwait(false);
         FreedvSessionNotes = $"FreeDV receiver running on {frequencyLabel}. RX offset {FreedvRxFrequencyOffsetHz:+0;-0;0} Hz.";
     }
 
@@ -984,6 +1204,24 @@ public partial class MainWindowViewModel
         }
     }
 
+    private static RadioMode GetFreedvDataModeForFrequency(long hz) =>
+        hz < 10_000_000 ? RadioMode.LsbData : RadioMode.UsbData;
+
+    private string NormalizeFreedvReporterMode(string? modeText)
+    {
+        if (string.IsNullOrWhiteSpace(modeText) || string.Equals(modeText, "---", StringComparison.OrdinalIgnoreCase))
+        {
+            return "RADEV1";
+        }
+
+        var normalized = modeText.Trim().ToUpperInvariant();
+        return FreedvModeOptions.FirstOrDefault(mode => string.Equals(mode, normalized, StringComparison.OrdinalIgnoreCase))
+            ?? "RADEV1";
+    }
+
+    private static string FormatFrequencyMHz(long hz) =>
+        (hz / 1_000_000d).ToString("0.000000", System.Globalization.CultureInfo.InvariantCulture);
+
     private async Task SetRadioForFreedvAudioDataModeAsync()
     {
         if (_radioService is null || CanConnect)
@@ -1014,6 +1252,7 @@ public partial class MainWindowViewModel
 
     private async Task StopFreedvTransmitSafelyAsync()
     {
+        _freedvPttRequested = false;
         try
         {
             if (_radioService is not null)
@@ -1037,6 +1276,15 @@ public partial class MainWindowViewModel
         }
 
         IsFreedvTransmitting = false;
+        if (_freedvReporterService is not null)
+        {
+            await _freedvReporterService.UpdateTransmitAsync(FreedvSelectedMode, false, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    partial void OnIsFreedvTransmittingChanged(bool value)
+    {
+        FreedvPttButtonText = value ? "Release PTT" : "PTT";
     }
 
     private async Task TuneRadioForRttyAsync(string frequencyLabel)
@@ -1423,6 +1671,183 @@ public partial class MainWindowViewModel
                 FreedvDecodedAudioStatus = $"FreeDV speech monitor failed: {ex.Message}";
             });
         }
+    }
+
+    private void RebuildFreedvReporterStations(IReadOnlyList<FreedvReporterStation> stations)
+    {
+        var selectedSid = SelectedFreedvReporterStation?.Sid;
+        var nextItems = stations
+            .Select(station => new FreedvReporterStationItem(
+                station.Sid,
+                station.Callsign,
+                station.GridSquare,
+                station.FrequencyHz is > 0 ? $"{station.FrequencyHz.Value / 1_000_000d:0.000000} MHz" : "---",
+                string.IsNullOrWhiteSpace(station.Mode) ? "---" : station.Mode,
+                station.IsTransmitting ? "TX" : (station.ReceiveOnly ? "RX only" : "Idle"),
+                string.IsNullOrWhiteSpace(station.LastHeardCallsign)
+                    ? "---"
+                    : station.LastHeardSnrDb is double snr
+                        ? $"{station.LastHeardCallsign} {snr:+0;-0;0} dB {station.LastHeardMode}"
+                        : station.LastHeardCallsign,
+                station.Message,
+                FormatReporterUpdatedText(station.LastUpdatedUtc),
+                station.FrequencyHz,
+                station.IsTransmitting))
+            .ToArray();
+
+        for (var index = 0; index < nextItems.Length; index++)
+        {
+            var nextItem = nextItems[index];
+            var existing = FreedvReporterStations.FirstOrDefault(item =>
+                string.Equals(item.Sid, nextItem.Sid, StringComparison.Ordinal));
+            if (existing is null)
+            {
+                FreedvReporterStations.Insert(Math.Min(index, FreedvReporterStations.Count), nextItem);
+                continue;
+            }
+
+            existing.UpdateFrom(nextItem);
+            var currentIndex = FreedvReporterStations.IndexOf(existing);
+            if (currentIndex >= 0 && currentIndex != index)
+            {
+                FreedvReporterStations.Move(currentIndex, index);
+            }
+        }
+
+        for (var index = FreedvReporterStations.Count - 1; index >= 0; index--)
+        {
+            var existing = FreedvReporterStations[index];
+            if (!nextItems.Any(item => string.Equals(item.Sid, existing.Sid, StringComparison.Ordinal)))
+            {
+                FreedvReporterStations.RemoveAt(index);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(selectedSid))
+        {
+            SelectedFreedvReporterStation = FreedvReporterStations.FirstOrDefault(item =>
+                string.Equals(item.Sid, selectedSid, StringComparison.Ordinal));
+        }
+    }
+
+    private async Task UpdateFreedvReporterFrequencyAsync()
+    {
+        if (_freedvReporterService is null)
+        {
+            return;
+        }
+
+        var hz = CurrentFrequencyHz;
+        if (!FreedvUseCurrentRadioFrequency && TryParseUiFrequencyHz(FreedvSelectedFrequency, out var selectedHz))
+        {
+            hz = selectedHz;
+        }
+
+        if (hz > 0)
+        {
+            await _freedvReporterService.UpdateFrequencyAsync(hz, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    private async Task ReportFreedvDecodedCallsignAsync(string callsign, string mode, double snrDb)
+    {
+        if (_freedvReporterService is null)
+        {
+            return;
+        }
+
+        var normalizedCallsign = NormalizeFreedvRadeCallsign(callsign);
+        if (normalizedCallsign is null)
+        {
+            return;
+        }
+
+        await _freedvReporterService.ReportReceiveAsync(normalizedCallsign, mode, snrDb, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private static string? NormalizeFreedvRadeCallsign(string? callsign)
+    {
+        if (string.IsNullOrWhiteSpace(callsign))
+        {
+            return null;
+        }
+
+        var normalized = FormatCallsign(callsign);
+        if (normalized.Length is < 3 or > 12)
+        {
+            return null;
+        }
+
+        var hasLetter = false;
+        var hasDigit = false;
+        var lastWasSlash = false;
+        for (var i = 0; i < normalized.Length; i++)
+        {
+            var ch = normalized[i];
+            var isLetter = ch is >= 'A' and <= 'Z';
+            var isDigit = ch is >= '0' and <= '9';
+            if (isLetter)
+            {
+                hasLetter = true;
+            }
+            else if (isDigit)
+            {
+                hasDigit = true;
+            }
+            else if (ch == '/')
+            {
+                if (i == 0 || i == normalized.Length - 1 || lastWasSlash)
+                {
+                    return null;
+                }
+            }
+            else
+            {
+                return null;
+            }
+
+            lastWasSlash = ch == '/';
+        }
+
+        return hasLetter && hasDigit ? normalized : null;
+    }
+
+    private static string FormatReporterUpdatedText(DateTimeOffset? updatedUtc)
+    {
+        if (updatedUtc is null)
+        {
+            return "---";
+        }
+
+        var age = DateTimeOffset.UtcNow - updatedUtc.Value;
+        if (age.TotalSeconds < 90)
+        {
+            return $"{Math.Max(0, (int)age.TotalSeconds)}s";
+        }
+
+        if (age.TotalMinutes < 90)
+        {
+            return $"{Math.Max(1, (int)age.TotalMinutes)}m";
+        }
+
+        return updatedUtc.Value.ToLocalTime().ToString("HH:mm");
+    }
+
+    partial void OnFreedvUseCurrentRadioFrequencyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(FreedvActiveFrequencyDisplay));
+        _ = UpdateFreedvReporterFrequencyAsync();
+    }
+
+    partial void OnFreedvSelectedFrequencyChanged(string value)
+    {
+        OnPropertyChanged(nameof(FreedvActiveFrequencyDisplay));
+        _ = UpdateFreedvReporterFrequencyAsync();
+    }
+
+    partial void OnModeDisplayChanged(string value)
+    {
+        OnPropertyChanged(nameof(FreedvActiveFrequencyDisplay));
     }
 
     private string? SaveFreedvDecodedSpeechFrame(Pcm16AudioClip clip)

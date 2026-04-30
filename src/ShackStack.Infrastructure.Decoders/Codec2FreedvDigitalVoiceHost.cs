@@ -16,7 +16,7 @@ public sealed class Codec2FreedvDigitalVoiceHost : IFreedvDigitalVoiceHost, IDis
     private readonly DecoderAudioPump _speechPump;
     private readonly IAudioService _audioService;
 
-    private FreedvDigitalVoiceConfiguration _configuration = new("700D", "Current radio frequency", true);
+    private FreedvDigitalVoiceConfiguration _configuration = new("RADEV1", "Current radio frequency", true);
     private AudioRoute? _transmitRoute;
     private bool _isRunning;
     private bool _isTransmitting;

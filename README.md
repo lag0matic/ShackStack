@@ -40,6 +40,10 @@ The 1.0 release is published from `main`. Older cleanup and beta branches remain
 | Longwave | Functional integration for spots, logbook-aware logging, and recent contact sync. |
 | POTA | Functional hunting/staging workflow through the Voice/Longwave path. |
 
+## User Manual
+
+Operator workflow notes live in `docs/USER_MANUAL.md`. Use that as the practical "how do I run this at the radio?" guide for desks, setup, FreeDV Reporter, logging, shutdown checks, and mode-specific caveats.
+
 ## In Progress / Rough Edges
 
 - CW decode remains experimental. The Python adaptive worker is the only current CW RX path; old `ggmorse` bridge work has been removed to keep the surface honest.

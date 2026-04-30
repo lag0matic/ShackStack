@@ -50,6 +50,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IRttyDecoderHost? _rttyDecoderHost;
     private readonly IKeyboardModeDecoderHost? _keyboardModeDecoderHost;
     private readonly IFreedvDigitalVoiceHost? _freedvDigitalVoiceHost;
+    private readonly IFreedvReporterService? _freedvReporterService;
     private readonly ISstvDecoderHost? _sstvDecoderHost;
     private readonly ISstvTransmitService? _sstvTransmitService;
     private readonly IWefaxDecoderHost? _wefaxDecoderHost;
@@ -68,6 +69,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IDisposable? _keyboardModeDecodeSubscription;
     private readonly IDisposable? _freedvTelemetrySubscription;
     private readonly IDisposable? _freedvSpeechSubscription;
+    private readonly IDisposable? _freedvReporterSubscription;
     private readonly IDisposable? _sstvTelemetrySubscription;
     private readonly IDisposable? _sstvImageSubscription;
     private readonly IDisposable? _wefaxTelemetrySubscription;
@@ -122,6 +124,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         IRttyDecoderHost? rttyDecoderHost = null,
         IKeyboardModeDecoderHost? keyboardModeDecoderHost = null,
         IFreedvDigitalVoiceHost? freedvDigitalVoiceHost = null,
+        IFreedvReporterService? freedvReporterService = null,
         ISstvDecoderHost? sstvDecoderHost = null,
         ISstvTransmitService? sstvTransmitService = null,
         IWefaxDecoderHost? wefaxDecoderHost = null,
@@ -141,6 +144,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _rttyDecoderHost = rttyDecoderHost;
         _keyboardModeDecoderHost = keyboardModeDecoderHost;
         _freedvDigitalVoiceHost = freedvDigitalVoiceHost;
+        _freedvReporterService = freedvReporterService;
         _sstvDecoderHost = sstvDecoderHost;
         _sstvTransmitService = sstvTransmitService;
         _wefaxDecoderHost = wefaxDecoderHost;
@@ -307,9 +311,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 Dispatcher.UIThread.Post(() =>
                 {
-                    RxLevelPercent = Math.Clamp((int)Math.Round(levels.RxLevel * 100f), 0, 100);
-                    TxLevelPercent = Math.Clamp((int)Math.Round(levels.TxLevel * 100f), 0, 100);
-                    MicLevelPercent = Math.Clamp((int)Math.Round(levels.MicLevel * 100f), 0, 100);
+                    SetAudioLevelPercentages(levels);
                 });
             }));
         }
@@ -473,16 +475,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 Dispatcher.UIThread.Post(() =>
                 {
                     FreedvRxStatus = telemetry.Status;
-                    var radeCallsign = string.IsNullOrWhiteSpace(telemetry.RadeCallsign)
-                        ? string.Empty
-                        : $"  |  RADE call {telemetry.RadeCallsign}";
+                    var normalizedRadeCallsign = NormalizeFreedvRadeCallsign(telemetry.RadeCallsign);
+                    var invalidRadeCallsign = !string.IsNullOrWhiteSpace(telemetry.RadeCallsign) && normalizedRadeCallsign is null;
+                    var radeCallsign = normalizedRadeCallsign is not null
+                        ? $"  |  RADE call {normalizedRadeCallsign}"
+                        : invalidRadeCallsign
+                            ? "  |  RADE call invalid"
+                            : string.Empty;
                     FreedvSignalSummary =
                         $"Signal {FormatTelemetryPercent(telemetry.SignalLevelPercent)}  |  " +
                         $"Sync {FormatTelemetryPercent(telemetry.SyncPercent)}  |  " +
                         $"SNR {telemetry.SnrDb:0.0} dB";
-                    if (!string.IsNullOrWhiteSpace(telemetry.RadeCallsign))
+                    if (normalizedRadeCallsign is not null)
                     {
-                        FreedvLastRadeCallsign = telemetry.RadeCallsign.Trim().ToUpperInvariant();
+                        FreedvLastRadeCallsign = normalizedRadeCallsign;
+                        _ = ReportFreedvDecodedCallsignAsync(normalizedRadeCallsign, telemetry.ModeLabel, telemetry.SnrDb);
+                    }
+                    else if (invalidRadeCallsign && string.Equals(FreedvLastRadeCallsign, "None decoded", StringComparison.OrdinalIgnoreCase))
+                    {
+                        FreedvLastRadeCallsign = "Invalid EOO";
                     }
 
                     FreedvSessionNotes =
@@ -496,6 +507,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _freedvSpeechSubscription = freedvDigitalVoiceHost.SpeechStream.Subscribe(new Observer<Pcm16AudioClip>(clip =>
             {
                 _ = PlayFreedvSpeechFrameAsync(clip);
+            }));
+        }
+
+        if (freedvReporterService is not null)
+        {
+            _freedvReporterSubscription = freedvReporterService.SnapshotStream.Subscribe(new Observer<FreedvReporterSnapshot>(snapshot =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    FreedvReporterStatus = snapshot.Status;
+                    FreedvReporterStationCount = snapshot.Stations.Count;
+                    RebuildFreedvReporterStations(snapshot.Stations);
+                });
             }));
         }
 
@@ -972,6 +996,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _keyboardModeDecodeSubscription?.Dispose();
         _freedvTelemetrySubscription?.Dispose();
         _freedvSpeechSubscription?.Dispose();
+        _freedvReporterSubscription?.Dispose();
         _wsjtxTelemetrySubscription?.Dispose();
         _wsjtxDecodeSubscription?.Dispose();
         _sstvTelemetrySubscription?.Dispose();
@@ -996,6 +1021,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         RunShutdownStep(token => _keyboardModeDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _freedvDigitalVoiceHost?.StopTransmitAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _freedvDigitalVoiceHost?.StopAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownStep(token => _freedvReporterService?.DisconnectAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _sstvDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _wefaxDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _wsjtxModeHost?.StopAsync(token) ?? Task.CompletedTask, ct);
