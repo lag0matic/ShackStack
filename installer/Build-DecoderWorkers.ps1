@@ -147,6 +147,17 @@ if (Test-Path $gplFreedvProject) {
             }
         }
     }
+
+    $freedvBuildOutput = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplCodec2Freedv\bin\Release\net9.0"
+    if (Test-Path $freedvBuildOutput) {
+        foreach ($artifact in @("libcodec2.dll", "librade.dll", "lpcnet_demo.exe", "libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll")) {
+            $artifactPath = Join-Path $freedvBuildOutput $artifact
+            $distPath = Join-Path $freedvDist $artifact
+            if ((-not (Test-Path $distPath)) -and (Test-Path $artifactPath)) {
+                Copy-Item -Force $artifactPath $distPath
+            }
+        }
+    }
 }
 
 if (Test-Path $nativeSstvProject) {
