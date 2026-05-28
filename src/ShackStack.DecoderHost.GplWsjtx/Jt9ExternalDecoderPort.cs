@@ -27,12 +27,6 @@ internal sealed class Jt9ExternalDecoderPort
 
     public static Jt9ExternalDecoderPort? CreateDefault()
     {
-        var bundledBin = Path.Combine(
-            AppContext.BaseDirectory,
-            "wsjtx-tools",
-            "runtime",
-            "bin",
-            "jt9.exe");
         var localBin = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "ShackStack",
@@ -43,10 +37,12 @@ internal sealed class Jt9ExternalDecoderPort
         var candidates = new[]
         {
             Environment.GetEnvironmentVariable("SHACKSTACK_JT9_PATH"),
-            bundledBin,
-            localBin,
-            @"C:\WSJT\wsjtx\bin\jt9.exe",
-        };
+        }
+            .Concat(ResolveBundledCandidates())
+            .Concat([
+                localBin,
+                @"C:\WSJT\wsjtx\bin\jt9.exe",
+            ]);
 
         foreach (var candidate in candidates)
         {
@@ -58,6 +54,29 @@ internal sealed class Jt9ExternalDecoderPort
         }
 
         return null;
+    }
+
+    private static IEnumerable<string> ResolveBundledCandidates()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            yield return Path.Combine(current.FullName, "wsjtx-tools", "runtime", "bin", "jt9.exe");
+
+            if (File.Exists(Path.Combine(current.FullName, "ShackStack.sln")))
+            {
+                yield return Path.Combine(
+                    current.FullName,
+                    "src",
+                    "ShackStack.Desktop",
+                    "wsjtx-tools",
+                    "runtime",
+                    "bin",
+                    "jt9.exe");
+            }
+
+            current = current.Parent;
+        }
     }
 
     public Jt9DecodeCycleResult DecodeCycle(

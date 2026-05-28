@@ -71,7 +71,16 @@ public sealed class CivSession : IAsyncDisposable
                 while (!_reconcileCts.IsCancellationRequested)
                 {
                     await Task.Delay(interval, _reconcileCts.Token).ConfigureAwait(false);
-                    await reconcile(_reconcileCts.Token).ConfigureAwait(false);
+                    try
+                    {
+                        await reconcile(_reconcileCts.Token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or IOException)
+                    {
+                        // CI-V can miss an occasional response while the operator is tuning
+                        // or another subsystem is querying the radio. Keep the reconciliation
+                        // loop alive so VFO/mode polling resumes on the next tick.
+                    }
                 }
             }
             catch (OperationCanceledException)

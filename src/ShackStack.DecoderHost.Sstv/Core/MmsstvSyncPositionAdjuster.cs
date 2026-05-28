@@ -1,12 +1,42 @@
 namespace ShackStack.DecoderHost.Sstv.Core;
 
 /// <summary>
-/// Harvested from MMSSTV's TMmsstv::AdjustSyncPos.
-/// This helper converts a raw sync-peak position inside one wrapped line into
-/// the mode-shaped base-offset correction MMSSTV applies before redrawing.
+/// Harvested from MMSSTV's TMmsstv::SyncSSTV and AdjustSyncPos paths.
+/// MMSSTV uses a smaller correction when receive first starts, then applies
+/// mode-shaped nudges only when re-syncing/redrawing already-staged rows.
 /// </summary>
 internal static class MmsstvSyncPositionAdjuster
 {
+    public static int AdjustInitialStart(
+        int rawSyncPosition,
+        SstvModeProfile profile,
+        double offsetPreviewSamples,
+        int lineWidthSamples,
+        int hillTapQuarter = 0)
+    {
+        var adjusted = (int)(rawSyncPosition - offsetPreviewSamples);
+        adjusted = -adjusted;
+
+        switch (profile.Id)
+        {
+            case SstvModeId.Scottie1:
+            case SstvModeId.Scottie2:
+            case SstvModeId.ScottieDx:
+                if (adjusted < 0)
+                {
+                    adjusted += lineWidthSamples;
+                }
+                break;
+        }
+
+        if (hillTapQuarter > 0)
+        {
+            adjusted -= hillTapQuarter;
+        }
+
+        return adjusted;
+    }
+
     public static int Adjust(
         int rawSyncPosition,
         SstvModeProfile profile,

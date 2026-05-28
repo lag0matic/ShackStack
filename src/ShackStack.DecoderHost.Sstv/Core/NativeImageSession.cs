@@ -2,7 +2,7 @@ namespace ShackStack.DecoderHost.Sstv.Core;
 
 internal sealed class NativeImageSession
 {
-    private const int WorkingSampleRate = SstvWorkingConfig.WorkingSampleRate;
+    private static readonly int WorkingSampleRate = SstvWorkingConfig.WorkingSampleRate;
     private const double MinLineActivity = 0.0035;
     private const int MmsstvSlantCorrectionMinRows = 16;
     private const int MmsstvSyncUnset = int.MaxValue;
@@ -134,6 +134,7 @@ internal sealed class NativeImageSession
     public string? FirstChannelDebug => _firstChannelDebug;
     public string? MmsstvSlantDebug => _mmsstvSlantDebug;
     public string? MmsstvSyncAdjustDebug => _mmsstvSyncAdjustDebug;
+    public bool MmsstvAutoStopRequested { get; private set; }
 
     private bool UsesMmsstvBufferedDraw
         => UseMmsstvFullRxForRgb && IsMmsstvFullRxProfile(Profile);
@@ -757,6 +758,7 @@ internal sealed class NativeImageSession
                 MmsstvStagedSyncRows.Count,
                 useRxBuffer: true,
                 highAccuracy: true,
+                applyResyncModeCorrections: false,
                 hillTapQuarter: MmsstvHilbertDelayQuarter(),
                 out var baseOffset))
         {
@@ -935,7 +937,9 @@ internal sealed class NativeImageSession
         var mult = Math.Max(1, lineWidth / 320);
         var autoSyncDiff = Math.Min(mult * 3, 45 * WorkingSampleRate / 11025);
         var offsetPreview = (int)(_geometry.DrawOffsetPreviewSamples * _mmsstvDrawScale);
-        var autoSlantSyncThreshold = 5 * mult;
+        // MMSSTV widens this to 5*m_Mult only while the slant tool (KRSA) is
+        // active. In normal live RX it uses 2*m_Mult for auto-sync decisions.
+        var autoSyncStableThreshold = 2 * mult;
         _mmsstvAutoStopPos = _mmsstvSyncPos - offsetPreview;
         var halfWidth = lineWidth / 2;
         if (_mmsstvAutoStopPos > halfWidth)
@@ -972,10 +976,10 @@ internal sealed class NativeImageSession
                     && syncSpan > 5000)
                 {
                     var delta = _mmsstvAutoStopPos - _mmsstvAutoStopPositions[15];
-                    if (Math.Abs(delta) <= autoSlantSyncThreshold)
+                    if (Math.Abs(delta) <= autoSyncStableThreshold)
                     {
                         delta = _mmsstvAutoStopPos - _mmsstvAutoSyncPos;
-                        if (Math.Abs(delta) >= autoSlantSyncThreshold)
+                        if (Math.Abs(delta) >= autoSyncStableThreshold)
                         {
                             ApplyMmsstvAutoSyncSkip(_mmsstvAutoStopPos, lineWidth);
                         }
@@ -985,6 +989,10 @@ internal sealed class NativeImageSession
                 if (_mmsstvAutoStop && (nearCount < 2 || syncSpan < 8192))
                 {
                     _mmsstvAutoStopCount++;
+                    if (_mmsstvAutoStopCount >= 8)
+                    {
+                        MmsstvAutoStopRequested = true;
+                    }
                 }
             }
             else
@@ -1282,6 +1290,7 @@ internal sealed class NativeImageSession
                 MmsstvStagedSyncRows.Count,
                 useRxBuffer: true,
                 highAccuracy: true,
+                applyResyncModeCorrections: true,
                 hillTapQuarter: MmsstvHilbertDelayQuarter(),
                 out baseOffset))
         {
@@ -2366,6 +2375,7 @@ internal sealed class NativeImageSession
                 syncRows.Count,
                 useRxBuffer: true,
                 highAccuracy: true,
+                applyResyncModeCorrections: false,
                 hillTapQuarter: MmsstvHilbertDelayQuarter(),
                 out var baseOffset))
         {

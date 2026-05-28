@@ -130,7 +130,7 @@ public partial class App : Application
 
         try
         {
-            using var shutdownCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            using var shutdownCts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
             _startup?.StopServicesAsync(
                 _appContext ?? new ShackStack.Desktop.Bootstrap.AppContext(),
                 shutdownCts.Token).GetAwaiter().GetResult();

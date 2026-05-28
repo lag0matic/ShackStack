@@ -9,6 +9,7 @@ internal sealed class MmsstvAfcTracker
     private readonly MmsstvSmoother _lockAverage = new();
     private int _afcBegin;
     private int _afcEnd;
+    private int _configuredGuard;
 
     public int AfcCount { get; private set; }
     public double AfcData { get; private set; }
@@ -28,12 +29,15 @@ internal sealed class MmsstvAfcTracker
 
     public void Reset()
     {
+        // CSSTVDEM::InitAFC resets the lock smoother but leaves the short
+        // m_Avg helper configured; then it restores the lock to the sync value.
+        _lockAverage.SetCount(_lockAverage.Capacity);
         AfcCount = 0;
-        AfcData = 0.0;
-        AfcLock = 0.0;
+        AfcData = SyncValue;
+        AfcLock = SyncValue;
         AfcDiff = 0.0;
         AfcFlag = 0;
-        AfcGuard = 0;
+        AfcGuard = _configuredGuard;
         AfcDisable = 0;
         ToneOffsetHz = 0.0;
     }
@@ -46,17 +50,11 @@ internal sealed class MmsstvAfcTracker
         BandwidthScale = parameters.BandwidthScale;
         _afcBegin = parameters.AfcBeginSamples;
         _afcEnd = parameters.AfcEndSamples;
-        AfcGuard = parameters.Guard;
+        _configuredGuard = parameters.Guard;
         AfcInterval = parameters.Interval;
         _average.SetCount(parameters.AverageSamples);
         _lockAverage.SetCount(parameters.LockAverageSamples);
-        AfcData = SyncValue;
-        AfcLock = SyncValue;
-        AfcFlag = 0;
-        AfcDiff = 0.0;
-        AfcCount = 0;
-        AfcDisable = 0;
-        ToneOffsetHz = 0.0;
+        Reset();
     }
 
     public void Update(double demodValue)

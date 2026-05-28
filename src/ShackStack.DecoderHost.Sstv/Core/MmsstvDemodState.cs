@@ -279,6 +279,10 @@ internal sealed class MmsstvDemodState
 
     public void EnterStartedMode()
     {
+        // CSSTVDEM::Start begins by running InitAFC(), which resets AFC and
+        // retunes the shared sync tone filters to zero offset for the new RX.
+        AfcTracker.Reset();
+        SyncToneBank.InitTone(0);
         SyncMode = (MmsstvDemodSyncMode)(-1);
         Sync = 0;
         Skip = 0;

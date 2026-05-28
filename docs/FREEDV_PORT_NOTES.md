@@ -31,7 +31,7 @@ For RADEV1, the upstream path is:
 
 ```text
 speech PCM -> lpcnet_demo -features -> rade_tx -> real modem audio -> HF SSB radio
-real modem audio -> Hilbert analytic IQ -> rade_rx -> lpcnet_demo -fargan-synthesis -> speech PCM
+real modem audio as complex(real=pcm, imag=0) -> rade_rx -> lpcnet_demo -fargan-synthesis -> speech PCM
 ```
 
 RADE end-of-over metadata is carried with `rade_tx_set_eoo_callsign`,
@@ -57,6 +57,7 @@ Current first pass adds:
 - FreeDV desk UI and main-window launch pad
 - RADEV1 RX and TX bridge through `librade.dll` plus `lpcnet_demo.exe`
 - RADEV1 end-of-over callsign telemetry
+- Persistent `lpcnet_demo.exe` feature/synthesis helpers so LPCNet/FARGAN state survives across frames
 
 The sidecar looks for Codec2 via:
 
@@ -72,15 +73,34 @@ The sidecar looks for RADEV1 via:
 
 `lpcnet_demo.exe` must sit beside `librade.dll`.
 
+## Native RADE Build
+
+`tools/Build-FreeDvRadeNative.ps1` builds the RADE runtime from `radae_nopy`
+under `.tmp-freedv-native`. The script keeps the port source-true while applying
+two Windows integration patches:
+
+- Build Opus through MSYS2/MinGW so the upstream configure/make flow works from
+  PowerShell.
+- Flush `lpcnet_demo.exe` stdout after each feature/speech frame. Upstream batch
+  file mode is fine, but ShackStack keeps the process alive and streams frames
+  through stdin/stdout to preserve vocoder state.
+
+`installer/Build-DecoderWorkers.ps1` calls that script with `-SkipIfBuilt` and
+prefers `.tmp-freedv-native\radae_nopy-build-mingw\src` when packaging
+`librade.dll` and `lpcnet_demo.exe`.
+
 ## Verified Harnesses
 
 - `tools/Run-FreeDvRadeHarness.ps1`: RADEV1 receive from known upstream/sample WAVs.
 - `tools/Run-FreeDvRadeCallsignHarness.ps1`: upstream RADE EOO callsign round-trip, currently `6/6 PASSED`.
 - `tools/Run-FreeDvRadeTxLoopbackHarness.ps1`: ShackStack RADEV1 TX modem output loops back through ShackStack RADEV1 RX, decodes speech, syncs, and recovers the EOO callsign.
+- `Recording (17).wav` RADEV1 round-trip produced
+  `C:\Users\lag0m\ShackStack\freedv-debug\roundtrip_radev1_decoded_from_recording17_streaming_native.wav`
+  with the persistent native helper path.
 
 ## Next Port Steps
 
 1. Validate RADEV1 RX/TX on live RF with real FreeDV stations.
-2. Reduce RADEV1 latency by replacing per-batch `lpcnet_demo.exe` spawning with a persistent helper or direct in-process FARGAN/LPCNet calls.
+2. If persistent process streaming still leaves artifacts on clean samples, port the LPCNet/FARGAN calls directly into a native bridge DLL instead of using `lpcnet_demo.exe`.
 3. Add clearer operator UI for RADEV1 callsign/EOO events once live behavior is proven.
 4. Keep legacy HF modes practical: `700D`, `700E`, `700C`, `1600`; defer LPCNet-heavy `2020/2020B` until the RADEV1 path is stable.

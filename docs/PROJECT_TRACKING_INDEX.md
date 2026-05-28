@@ -1,6 +1,6 @@
 # Project Tracking Index
 
-Last refreshed: 2026-04-30.
+Last refreshed: 2026-05-11.
 
 Use these documents when planning the next ShackStack work session.
 
@@ -15,6 +15,7 @@ Use these documents when planning the next ShackStack work session.
 | `DEPLOYMENT_NOTES.md` | Installer/build/deployment notes. |
 | `FREEDV_PORT_NOTES.md` | Codec2/FreeDV integration notes. |
 | `SSTV_REGRESSION_HARNESS.md` | Synthetic SSTV RX regression command, current cases, artifacts, and pass criteria. |
+| `HANDOFF_2026-05-11.md` | Windows reinstall handoff: backup checklist, dirty worktree state, ignored artifact/source-cache warnings, build commands, validation commands, known gotchas, and next work. |
 
 Historical handoff, harvest, and one-off research notes are intentionally not part of the tracked 1.0 documentation set. Keep source-backed implementation details in the relevant sidecar README or a current dated status document when they are still actionable.
 

@@ -12,6 +12,7 @@ internal sealed class MmsstvFskIdDecoder
     private readonly List<float> _samples = [];
     private string? _lastCallsign;
     private int _lastAcceptedAbsoluteSample = -1;
+    private int _nextSearchAbsoluteSample;
     private int _absoluteSampleBase;
 
     public MmsstvFskIdDecoder(int sampleRate)
@@ -26,6 +27,7 @@ internal sealed class MmsstvFskIdDecoder
         _samples.Clear();
         _lastCallsign = null;
         _lastAcceptedAbsoluteSample = -1;
+        _nextSearchAbsoluteSample = 0;
         _absoluteSampleBase = 0;
     }
 
@@ -62,15 +64,18 @@ internal sealed class MmsstvFskIdDecoder
     {
         var guardSamples = MillisecondsToSamples(FskGuardMs);
         var intervalSamples = MillisecondsToSamples(FskIntervalMs);
+        var guardCarrierSamples = Math.Max(1, guardSamples / 2);
         var minPayloadSamples = intervalSamples * 6 * 4;
-        if (_samples.Count < guardSamples + intervalSamples + minPayloadSamples)
+        if (_samples.Count < guardSamples + guardCarrierSamples + intervalSamples + minPayloadSamples)
         {
             return null;
         }
 
         var stepSamples = Math.Max(1, MillisecondsToSamples(4));
-        var latestStart = _samples.Count - guardSamples - intervalSamples - minPayloadSamples;
-        for (var start = 0; start <= latestStart; start += stepSamples)
+        var maxPayloadSamples = intervalSamples * 6 * 20;
+        var firstStart = Math.Max(0, _nextSearchAbsoluteSample - _absoluteSampleBase);
+        var latestStart = _samples.Count - guardSamples - guardCarrierSamples - intervalSamples - minPayloadSamples;
+        for (var start = firstStart; start <= latestStart; start += stepSamples)
         {
             var absoluteStart = _absoluteSampleBase + start;
             if (_lastAcceptedAbsoluteSample >= 0 && absoluteStart <= _lastAcceptedAbsoluteSample + _sampleRate)
@@ -78,19 +83,12 @@ internal sealed class MmsstvFskIdDecoder
                 continue;
             }
 
-            if (!IsSpaceGuard(start, guardSamples))
+            if (!IsSpaceGuard(start, guardCarrierSamples))
             {
                 continue;
             }
 
-            var leadStart = start + guardSamples;
-            if (ReadBit(leadStart, intervalSamples) != 1)
-            {
-                continue;
-            }
-
-            var symbolStart = leadStart + intervalSamples;
-            var callsign = TryDecodePayload(symbolStart, intervalSamples);
+            var callsign = TryDecodeAfterGuard(start + guardCarrierSamples, guardSamples, intervalSamples);
             if (callsign is null)
             {
                 continue;
@@ -98,7 +96,32 @@ internal sealed class MmsstvFskIdDecoder
 
             _lastCallsign = callsign;
             _lastAcceptedAbsoluteSample = absoluteStart;
+            _nextSearchAbsoluteSample = absoluteStart + _sampleRate;
             return callsign;
+        }
+
+        _nextSearchAbsoluteSample = _absoluteSampleBase + Math.Max(0, latestStart - maxPayloadSamples);
+        return null;
+    }
+
+    private string? TryDecodeAfterGuard(int startSearch, int searchSamples, int intervalSamples)
+    {
+        var searchStepSamples = Math.Max(1, intervalSamples / 4);
+        var latestLeadStart = Math.Min(
+            startSearch + searchSamples,
+            _samples.Count - intervalSamples);
+        for (var leadStart = startSearch; leadStart <= latestLeadStart; leadStart += searchStepSamples)
+        {
+            if (ReadBit(leadStart, intervalSamples) != 1)
+            {
+                continue;
+            }
+
+            var callsign = TryDecodePayload(leadStart + intervalSamples, intervalSamples);
+            if (callsign is not null)
+            {
+                return callsign;
+            }
         }
 
         return null;
@@ -137,7 +160,7 @@ internal sealed class MmsstvFskIdDecoder
                 }
 
                 var callsign = new string(buffer[..count]).Trim().ToUpperInvariant();
-                return LooksLikeCallsign(callsign) ? callsign : null;
+                return callsign.Length == 0 ? null : callsign;
             }
 
             if (symbol > 0x3f)
@@ -203,32 +226,4 @@ internal sealed class MmsstvFskIdDecoder
 
     private int MillisecondsToSamples(int ms)
         => Math.Max(1, (int)Math.Round(ms * _sampleRate / 1000.0));
-
-    private static bool LooksLikeCallsign(string value)
-    {
-        if (value.Length is < 3 or > 16)
-        {
-            return false;
-        }
-
-        var hasDigit = false;
-        var hasLetter = false;
-        foreach (var c in value)
-        {
-            if (char.IsAsciiDigit(c))
-            {
-                hasDigit = true;
-            }
-            else if (char.IsAsciiLetterUpper(c))
-            {
-                hasLetter = true;
-            }
-            else if (c != '/')
-            {
-                return false;
-            }
-        }
-
-        return hasDigit && hasLetter;
-    }
 }

@@ -12,7 +12,8 @@ from typing import Callable, Optional
 
 import numpy as np
 from PIL import Image
-from scipy.signal import butter, sosfilt, sosfilt_zi, hilbert
+from scipy.signal._filter_design import butter
+from scipy.signal._signaltools import hilbert, sosfilt, sosfilt_zi
 
 log = logging.getLogger(__name__)
 

@@ -349,7 +349,7 @@ public sealed class AudioService : IAudioService, IDisposable
                 _decodedMonitorDeviceId = route.MonitorDeviceId;
                 _decodedMonitorBuffer = new BufferedWaveProvider(format)
                 {
-                    BufferDuration = TimeSpan.FromSeconds(3),
+                    BufferDuration = TimeSpan.FromSeconds(5),
                     DiscardOnBufferOverflow = true,
                 };
                 _decodedMonitorPlaybackStarted = false;
@@ -362,7 +362,7 @@ public sealed class AudioService : IAudioService, IDisposable
             ApplyPcm16BoundaryRamp(monitorBuffer, format, ref _decodedMonitorLastPcm16Frame);
             _decodedMonitorBuffer!.AddSamples(monitorBuffer, 0, monitorBuffer.Length);
             if (!_decodedMonitorPlaybackStarted
-                && _decodedMonitorBuffer.BufferedDuration >= TimeSpan.FromMilliseconds(160))
+                && _decodedMonitorBuffer.BufferedDuration >= TimeSpan.FromMilliseconds(480))
             {
                 _decodedMonitorPlayback!.Play();
                 _decodedMonitorPlaybackStarted = true;

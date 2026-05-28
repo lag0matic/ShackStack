@@ -6,9 +6,9 @@ public sealed class SstvTransmitClipBuilder
     private const double TrailSilenceSeconds = 0.15;
     private readonly int _sampleRate;
 
-    public SstvTransmitClipBuilder(int sampleRate = SstvWorkingConfig.WorkingSampleRate)
+    public SstvTransmitClipBuilder(int? sampleRate = null)
     {
-        _sampleRate = sampleRate;
+        _sampleRate = sampleRate ?? SstvWorkingConfig.WorkingSampleRate;
     }
 
     public SstvTransmitClip Build(string mode, byte[] rgb24, int width, int height, MmsstvTxOptions? options = null)

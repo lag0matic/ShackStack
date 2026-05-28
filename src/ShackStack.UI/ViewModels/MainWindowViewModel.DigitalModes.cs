@@ -10,6 +10,9 @@ namespace ShackStack.UI.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    private static readonly TimeSpan FreedvHeardReportCooldown = TimeSpan.FromMinutes(5);
+
+    private readonly Dictionary<string, DateTimeOffset> _freedvHeardReportTimes = new(StringComparer.OrdinalIgnoreCase);
     private bool _freedvPttRequested;
 
     [ObservableProperty]
@@ -108,16 +111,10 @@ public partial class MainWindowViewModel
     private string rttySelectedProfile = "170 Hz / 45.45 baud";
 
     [ObservableProperty]
-    private IReadOnlyList<string> rttyFrequencyOptions =
-    [
-        "14.080 MHz USB",
-        "14.083 MHz USB",
-        "7.080 MHz LSB",
-        "3.580 MHz LSB"
-    ];
+    private IReadOnlyList<string> rttyFrequencyOptions = ModeFrequencyCatalog.GetLabels(ModeFrequencyCatalog.Rtty);
 
     [ObservableProperty]
-    private string rttySelectedFrequency = "14.080 MHz USB";
+    private string rttySelectedFrequency = ModeFrequencyCatalog.GetDefaultLabel(ModeFrequencyCatalog.Rtty);
 
     [ObservableProperty]
     private bool rttyDecodeCurrentRadioFrequency = true;
@@ -150,16 +147,10 @@ public partial class MainWindowViewModel
     private string keyboardSelectedMode = "BPSK31";
 
     [ObservableProperty]
-    private IReadOnlyList<string> keyboardFrequencyOptions =
-    [
-        "14.070 MHz USB-D",
-        "7.070 MHz LSB-D",
-        "21.070 MHz USB-D",
-        "28.120 MHz USB-D"
-    ];
+    private IReadOnlyList<string> keyboardFrequencyOptions = ModeFrequencyCatalog.GetLabels(ModeFrequencyCatalog.Keyboard);
 
     [ObservableProperty]
-    private string keyboardSelectedFrequency = "14.070 MHz USB-D";
+    private string keyboardSelectedFrequency = ModeFrequencyCatalog.GetDefaultLabel(ModeFrequencyCatalog.Keyboard);
 
     [ObservableProperty]
     private bool keyboardUseCurrentRadioFrequency = true;
@@ -203,16 +194,10 @@ public partial class MainWindowViewModel
     private string freedvSelectedMode = "RADEV1";
 
     [ObservableProperty]
-    private IReadOnlyList<string> freedvFrequencyOptions =
-    [
-        "14.236 MHz USB-D",
-        "7.177 MHz LSB-D",
-        "21.313 MHz USB-D",
-        "28.330 MHz USB-D"
-    ];
+    private IReadOnlyList<string> freedvFrequencyOptions = ModeFrequencyCatalog.GetLabels(ModeFrequencyCatalog.Freedv);
 
     [ObservableProperty]
-    private string freedvSelectedFrequency = "14.236 MHz USB-D";
+    private string freedvSelectedFrequency = ModeFrequencyCatalog.GetDefaultLabel(ModeFrequencyCatalog.Freedv);
 
     [ObservableProperty]
     private bool freedvUseCurrentRadioFrequency;
@@ -1638,7 +1623,20 @@ public partial class MainWindowViewModel
 
     private async Task PlayFreedvSpeechFrameAsync(Pcm16AudioClip clip)
     {
-        var duration = clip.PcmBytes.Length / (double)(clip.SampleRate * clip.Channels * 2);
+        var ct = _freedvSpeechPlaybackCts.Token;
+        try
+        {
+            await _freedvSpeechPlaybackGate.WaitAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            var duration = clip.PcmBytes.Length / (double)(clip.SampleRate * clip.Channels * 2);
             var debugPath = SaveFreedvDecodedSpeechFrame(clip);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -1646,30 +1644,44 @@ public partial class MainWindowViewModel
                 FreedvDecodedAudioStatus = string.IsNullOrWhiteSpace(debugPath)
                     ? $"Decoded speech frame: {duration:0.00}s @ {clip.SampleRate} Hz"
                     : $"Decoded speech frame: {duration:0.00}s @ {clip.SampleRate} Hz | saved {Path.GetFileName(debugPath)}";
-        });
+            }, Avalonia.Threading.DispatcherPriority.Normal, ct);
 
-        if (_audioService is null)
-        {
-            return;
-        }
+            if (_audioService is null)
+            {
+                return;
+            }
 
-        try
-        {
-            await _audioService.PlayDecodedMonitorPcmAsync(BuildFreedvMonitorAudioRoute(), clip, CancellationToken.None).ConfigureAwait(false);
-            await Dispatcher.UIThread.InvokeAsync(() =>
+            try
             {
-                FreedvLastDecodedSpeechPath = debugPath ?? "Decoded speech was not saved.";
-                FreedvDecodedAudioStatus = string.IsNullOrWhiteSpace(debugPath)
-                    ? $"Decoded speech playing: {duration:0.00}s @ {clip.SampleRate} Hz"
-                    : $"Decoded speech playing: {duration:0.00}s @ {clip.SampleRate} Hz | saved {debugPath}";
-            });
+                await _audioService.PlayDecodedMonitorPcmAsync(BuildFreedvMonitorAudioRoute(), clip, ct).ConfigureAwait(false);
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    FreedvLastDecodedSpeechPath = debugPath ?? "Decoded speech was not saved.";
+                    FreedvDecodedAudioStatus = string.IsNullOrWhiteSpace(debugPath)
+                        ? $"Decoded speech playing: {duration:0.00}s @ {clip.SampleRate} Hz"
+                        : $"Decoded speech playing: {duration:0.00}s @ {clip.SampleRate} Hz | saved {debugPath}";
+                }, Avalonia.Threading.DispatcherPriority.Normal, ct);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    FreedvDecodedAudioStatus = $"FreeDV speech monitor failed: {ex.Message}";
+                });
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            await Dispatcher.UIThread.InvokeAsync(() =>
+            try
             {
-                FreedvDecodedAudioStatus = $"FreeDV speech monitor failed: {ex.Message}";
-            });
+                _freedvSpeechPlaybackGate.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
         }
     }
 
@@ -1762,7 +1774,26 @@ public partial class MainWindowViewModel
             return;
         }
 
-        await _freedvReporterService.ReportReceiveAsync(normalizedCallsign, mode, snrDb, CancellationToken.None).ConfigureAwait(false);
+        var modeLabel = string.IsNullOrWhiteSpace(mode) ? FreedvSelectedMode : mode.Trim();
+        var reportKey = $"{normalizedCallsign}|{modeLabel}";
+        var now = DateTimeOffset.UtcNow;
+        if (_freedvHeardReportTimes.TryGetValue(reportKey, out var lastReport) &&
+            now - lastReport < FreedvHeardReportCooldown)
+        {
+            return;
+        }
+
+        _freedvHeardReportTimes[reportKey] = now;
+        try
+        {
+            await _freedvReporterService.ReportReceiveAsync(normalizedCallsign, modeLabel, snrDb, CancellationToken.None);
+            FreedvReporterStatus = $"Heard report sent: {normalizedCallsign} {modeLabel} ({snrDb:0.0} dB)";
+        }
+        catch (Exception ex)
+        {
+            _freedvHeardReportTimes.Remove(reportKey);
+            FreedvReporterStatus = $"FreeDV heard report failed: {ex.Message}";
+        }
     }
 
     private static string? NormalizeFreedvRadeCallsign(string? callsign)

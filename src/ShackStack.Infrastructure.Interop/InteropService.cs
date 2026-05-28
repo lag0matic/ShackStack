@@ -5,7 +5,7 @@ using ShackStack.Infrastructure.Interop.Flrig;
 
 namespace ShackStack.Infrastructure.Interop;
 
-public sealed class InteropService : IInteropService
+public sealed class InteropService : IInteropService, IDisposable
 {
     private readonly FlrigMethodDispatcher _dispatcher = new();
     private readonly SimpleSubject<InteropEvent> _events = new();
@@ -15,6 +15,7 @@ public sealed class InteropService : IInteropService
     private readonly IDisposable _dispatcherSubscription;
     private FlrigHttpServer? _server;
     private bool _started;
+    private int _disposed;
 
     public InteropService(IAppSettingsStore settingsStore, IRadioService radioService)
     {
@@ -72,5 +73,25 @@ public sealed class InteropService : IInteropService
 
         _started = false;
         _events.OnNext(new InteropEvent("flrig", "stopped"));
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            StopAsync(CancellationToken.None).Wait(TimeSpan.FromSeconds(2));
+        }
+        catch
+        {
+            // Best-effort shutdown only.
+        }
+
+        _dispatcherSubscription.Dispose();
+        _radioSubscription.Dispose();
     }
 }

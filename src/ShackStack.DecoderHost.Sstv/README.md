@@ -27,6 +27,5 @@ Design constraints:
 - GPL/MMSSTV-derived behavior must stay documented honestly
 
 Related docs:
-- `docs/SSTV_MMSSTV_HARVEST.md`
-- `docs/SSTV_MMSSTV_BASELINE_2026-04-24.md`
+- `docs/SSTV_MMSSTV_SOURCE_REFERENCE.md`
 - `docs/SSTV_REGRESSION_HARNESS.md`

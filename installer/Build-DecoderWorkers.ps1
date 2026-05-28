@@ -6,6 +6,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $pythonRoot = Join-Path $repoRoot "src\ShackStack.DecoderWorkers.Python"
 $toolsRoot = Join-Path $pythonRoot "Tools"
 $referencesRoot = Join-Path $pythonRoot "references"
+$runtimeHookPath = Join-Path $pythonRoot "pyinstaller_runtime_hook.py"
 $distRoot = Join-Path $repoRoot "src\ShackStack.Desktop\DecoderWorkers"
 $pyiRoot = Join-Path $pythonRoot ".pyinstaller"
 $workRoot = Join-Path $pyiRoot "build"
@@ -22,10 +23,38 @@ $gplRttyProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplFldigiRtty\
 $gplPskProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplFldigiPsk\ShackStack.DecoderHost.GplFldigiPsk.csproj"
 $gplFreedvProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.GplCodec2Freedv\ShackStack.DecoderHost.GplCodec2Freedv.csproj"
 $nativeSstvProject = Join-Path $repoRoot "src\ShackStack.DecoderHost.Sstv\ShackStack.DecoderHost.Sstv.csproj"
+$freedvRadeBuildScript = Join-Path $repoRoot "tools\Build-FreeDvRadeNative.ps1"
 
 New-Item -ItemType Directory -Force -Path $distRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $workRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $specRoot | Out-Null
+
+$pyInstallerCommand = Get-Command pyinstaller -ErrorAction Stop
+$pythonExe = Join-Path (Split-Path -Parent (Split-Path -Parent $pyInstallerCommand.Source)) "python.exe"
+$pythonDependencyCheck = @'
+from scipy.signal._filter_design import butter
+from scipy.signal._peak_finding import find_peaks
+from scipy.signal._signaltools import correlate, hilbert, medfilt, medfilt2d, resample_poly, sosfilt, sosfilt_zi
+from scipy.signal._spectral_py import stft
+import numpy
+from PIL import Image
+print('Python decoder worker build dependencies OK')
+'@
+
+& $pythonExe -c $pythonDependencyCheck
+if ($LASTEXITCODE -ne 0) {
+    $requirementsPath = Join-Path $pythonRoot "requirements-build.txt"
+    throw "Python decoder worker build dependencies are missing. Install them with: $pythonExe -m pip install -r $requirementsPath"
+}
+
+$scipyDistnPath = (& $pythonExe -c "import pathlib, scipy.stats._distn_infrastructure as m; print(pathlib.Path(m.__file__))").Trim()
+if (Test-Path $scipyDistnPath) {
+    $scipyDistnSource = Get-Content -Raw -Path $scipyDistnPath
+    $scipyDistnPatched = $scipyDistnSource -replace "(?m)^del obj\r?$", "if 'obj' in locals():`r`n    del obj"
+    if ($scipyDistnPatched -ne $scipyDistnSource) {
+        Set-Content -Path $scipyDistnPath -Value $scipyDistnPatched -NoNewline
+    }
+}
 
 $targetsToClean = @(
     "cw_sidecar_worker",
@@ -62,7 +91,7 @@ foreach ($worker in $workers) {
         "--workpath", $workRoot
         "--specpath", $specRoot
         "--paths", $pythonRoot
-        "--hidden-import", "scipy._cyutility"
+        "--runtime-hook", $runtimeHookPath
         "--exclude-module", "torch"
         "--exclude-module", "matplotlib"
         "--exclude-module", "pytest"
@@ -80,7 +109,7 @@ foreach ($worker in $workers) {
 
     $pyInstallerArgs += $scriptPath
 
-    & pyinstaller @pyInstallerArgs
+    & $pyInstallerCommand.Source @pyInstallerArgs
 }
 
 if (Test-Path $gplWsjtxProject) {
@@ -88,7 +117,7 @@ if (Test-Path $gplWsjtxProject) {
     & dotnet publish $gplWsjtxProject `
         -c Release `
         -r win-x64 `
-        --self-contained false `
+        --self-contained true `
         -o $gplDist
 }
 
@@ -97,7 +126,7 @@ if (Test-Path $gplRttyProject) {
     & dotnet publish $gplRttyProject `
         -c Release `
         -r win-x64 `
-        --self-contained false `
+        --self-contained true `
         -o $rttyDist
 }
 
@@ -106,7 +135,7 @@ if (Test-Path $gplPskProject) {
     & dotnet publish $gplPskProject `
         -c Release `
         -r win-x64 `
-        --self-contained false `
+        --self-contained true `
         -o $pskDist
 }
 
@@ -115,7 +144,7 @@ if (Test-Path $gplFreedvProject) {
     & dotnet publish $gplFreedvProject `
         -c Release `
         -r win-x64 `
-        --self-contained false `
+        --self-contained true `
         -o $freedvDist
 
     $codec2BuildSrc = Join-Path $repoRoot ".tmp-codec2-mingw-build\src"
@@ -126,19 +155,30 @@ if (Test-Path $gplFreedvProject) {
                 Copy-Item -Force $artifactPath (Join-Path $freedvDist $artifact)
             }
         }
+    }
 
-        foreach ($runtimeDll in @("libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll")) {
-            $runtimePath = Join-Path "C:\msys64\ucrt64\bin" $runtimeDll
-            if (Test-Path $runtimePath) {
-                Copy-Item -Force $runtimePath (Join-Path $freedvDist $runtimeDll)
-            }
+    foreach ($runtimeDll in @("libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll")) {
+        $runtimePath = Join-Path "C:\msys64\ucrt64\bin" $runtimeDll
+        if (Test-Path $runtimePath) {
+            Copy-Item -Force $runtimePath (Join-Path $freedvDist $runtimeDll)
         }
     }
 
-    $radeBuildSrc = Get-ChildItem -Path $repoRoot -Directory -Filter ".tmp-radae-nopy-build*" -ErrorAction SilentlyContinue |
-        ForEach-Object { Join-Path $_.FullName "src" } |
-        Where-Object { Test-Path (Join-Path $_ "librade.dll") } |
-        Select-Object -First 1
+    if (Test-Path $freedvRadeBuildScript) {
+        & $freedvRadeBuildScript -SkipIfBuilt
+    }
+
+    $preferredRadeBuildSrc = Join-Path $repoRoot ".tmp-freedv-native\radae_nopy-build-mingw\src"
+    $radeBuildSrc = if (Test-Path (Join-Path $preferredRadeBuildSrc "librade.dll")) {
+        $preferredRadeBuildSrc
+    }
+    else {
+        Get-ChildItem -Path $repoRoot -Directory -Filter ".tmp-radae-nopy-build*" -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName "src" } |
+            Where-Object { Test-Path (Join-Path $_ "librade.dll") } |
+            Select-Object -First 1
+    }
+
     if ($radeBuildSrc -and (Test-Path $radeBuildSrc)) {
         foreach ($artifact in @("librade.dll", "lpcnet_demo.exe")) {
             $artifactPath = Join-Path $radeBuildSrc $artifact
@@ -165,7 +205,7 @@ if (Test-Path $nativeSstvProject) {
     & dotnet publish $nativeSstvProject `
         -c Release `
         -r win-x64 `
-        --self-contained false `
+        --self-contained true `
         -o $sstvDist
 }
 

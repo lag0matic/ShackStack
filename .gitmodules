@@ -1,0 +1,3 @@
+[submodule "vendor/mmsstv"]
+	path = vendor/mmsstv
+	url = https://github.com/n5ac/mmsstv.git

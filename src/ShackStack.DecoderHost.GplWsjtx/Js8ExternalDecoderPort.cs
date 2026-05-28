@@ -54,24 +54,51 @@ internal sealed class Js8ExternalDecoderPort
 
     private static IEnumerable<string> ResolveBundledCandidates()
     {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var startDirectory in GetSearchStartDirectories())
         {
-            yield return Path.Combine(current.FullName, "js8call-tools", "runtime", "bin", "jt9.exe");
-
-            if (File.Exists(Path.Combine(current.FullName, "ShackStack.sln")))
+            var current = new DirectoryInfo(startDirectory);
+            while (current is not null)
             {
-                yield return Path.Combine(
-                    current.FullName,
-                    "src",
-                    "ShackStack.Desktop",
-                    "js8call-tools",
-                    "runtime",
-                    "bin",
-                    "jt9.exe");
-            }
+                var bundledCandidate = Path.Combine(current.FullName, "js8call-tools", "runtime", "bin", "jt9.exe");
+                if (seen.Add(bundledCandidate))
+                {
+                    yield return bundledCandidate;
+                }
 
-            current = current.Parent;
+                if (File.Exists(Path.Combine(current.FullName, "ShackStack.sln")))
+                {
+                    var repoCandidate = Path.Combine(
+                        current.FullName,
+                        "src",
+                        "ShackStack.Desktop",
+                        "js8call-tools",
+                        "runtime",
+                        "bin",
+                        "jt9.exe");
+                    if (seen.Add(repoCandidate))
+                    {
+                        yield return repoCandidate;
+                    }
+                }
+
+                current = current.Parent;
+            }
+        }
+    }
+
+    private static IEnumerable<string> GetSearchStartDirectories()
+    {
+        yield return AppContext.BaseDirectory;
+        yield return Directory.GetCurrentDirectory();
+        var processPath = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(processPath))
+        {
+            var processDirectory = Path.GetDirectoryName(processPath);
+            if (!string.IsNullOrWhiteSpace(processDirectory))
+            {
+                yield return processDirectory;
+            }
         }
     }
 
@@ -188,8 +215,12 @@ internal sealed class Js8ExternalDecoderPort
         return string.Join(" ", arguments);
     }
 
-    public static bool IsJs8Mode(string modeLabel) =>
-        modeLabel.StartsWith("JS8", StringComparison.OrdinalIgnoreCase);
+    public static bool IsJs8Mode(string modeLabel)
+    {
+        var normalized = NormalizeModeLabel(modeLabel);
+        return normalized.StartsWith("JS8", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains(" JS8", StringComparison.OrdinalIgnoreCase);
+    }
 
     public static int GetInputSamplesPerCycle(string modeLabel) =>
         GetSubmodeName(modeLabel) switch
@@ -211,23 +242,29 @@ internal sealed class Js8ExternalDecoderPort
 
     private static string GetSubmodeName(string modeLabel)
     {
-        if (modeLabel.Contains("Fast", StringComparison.OrdinalIgnoreCase))
+        var normalized = NormalizeModeLabel(modeLabel);
+        if (normalized.Contains("Fast", StringComparison.OrdinalIgnoreCase))
         {
             return "Fast";
         }
 
-        if (modeLabel.Contains("Turbo", StringComparison.OrdinalIgnoreCase))
+        if (normalized.Contains("Turbo", StringComparison.OrdinalIgnoreCase))
         {
             return "Turbo";
         }
 
-        if (modeLabel.Contains("Slow", StringComparison.OrdinalIgnoreCase))
+        if (normalized.Contains("Slow", StringComparison.OrdinalIgnoreCase))
         {
             return "Slow";
         }
 
         return "Normal";
     }
+
+    private static string NormalizeModeLabel(string modeLabel) =>
+        modeLabel
+            .Trim()
+            .TrimStart('\uFEFF', '\u200B', '\u200C', '\u200D', '\u200E', '\u200F');
 
     private static Jt9DecodedLine? ParseDecodeLine(string line, string dictionaryDirectory)
     {

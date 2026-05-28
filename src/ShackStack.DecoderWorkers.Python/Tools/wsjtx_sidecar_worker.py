@@ -5,12 +5,19 @@ import json
 import math
 import re
 import sys
+import warnings
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
+warnings.filterwarnings(
+    "ignore",
+    message="pkg_resources is deprecated as an API.*",
+    category=UserWarning,
+)
+
 import numpy as np
-from scipy.signal import resample_poly
+from scipy.signal._signaltools import resample_poly
 
 
 TARGET_SR = 12_000

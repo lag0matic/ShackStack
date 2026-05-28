@@ -125,13 +125,6 @@ internal sealed class MmsstvReceiveBuffer
 
     public void SetSkipSamples(int sampleCount)
     {
-        if (sampleCount < 0)
-        {
-            _skipSamples = 0;
-            InsertLostSamples(-sampleCount);
-            return;
-        }
-
         _skipSamples = sampleCount;
     }
 
@@ -180,10 +173,21 @@ internal sealed class MmsstvReceiveBuffer
 
         var picture = ToBufferLevel(-raw);
         var sync = ToSyncLevel(syncEnvelope);
-        if (_skipSamples > 0)
+        if (_skipSamples != 0)
         {
-            _skipSamples--;
-            SkippedSamplesConsumed++;
+            if (_skipSamples > 0)
+            {
+                _skipSamples--;
+                SkippedSamplesConsumed++;
+                return;
+            }
+
+            for (; _skipSamples < 0; _skipSamples++)
+            {
+                WriteBufferedSample(picture, sync: 0);
+                LostSamplesInserted++;
+            }
+
             return;
         }
 

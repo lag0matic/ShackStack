@@ -20,16 +20,10 @@ from typing import Callable, Optional
 
 import numpy as np
 from PIL import Image
-from scipy.signal import (
-    butter,
-    correlate,
-    find_peaks,
-    hilbert,
-    medfilt,
-    sosfilt,
-    sosfilt_zi,
-    stft,
-)
+from scipy.signal._filter_design import butter
+from scipy.signal._peak_finding import find_peaks
+from scipy.signal._signaltools import correlate, hilbert, medfilt, sosfilt, sosfilt_zi
+from scipy.signal._spectral_py import stft
 
 from .wefax_engine import IOC, LPM, WefaxEncoder
 

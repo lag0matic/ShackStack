@@ -20,7 +20,8 @@ import logging
 import numpy as np
 from dataclasses import dataclass
 from collections import deque
-from scipy.signal import butter, sosfilt
+from scipy.signal._filter_design import butter
+from scipy.signal._signaltools import sosfilt
 
 log = logging.getLogger(__name__)
 
@@ -270,7 +271,7 @@ class CwDecoder:
             first = float(samples[0]) if len(samples) else 0.0
             self._bp_state = np.zeros((n_sections, 2), dtype=np.float32)
             if first:
-                from scipy.signal import sosfilt_zi
+                from scipy.signal._signaltools import sosfilt_zi
                 self._bp_state = sosfilt_zi(self._bp_sos) * first
         filtered, self._bp_state = sosfilt(self._bp_sos, samples,
                                             zi=self._bp_state)

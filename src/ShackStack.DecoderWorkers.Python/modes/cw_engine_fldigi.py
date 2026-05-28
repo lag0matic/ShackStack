@@ -5,7 +5,8 @@ from collections import deque
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.signal import butter, resample_poly, sosfilt, sosfilt_zi
+from scipy.signal._filter_design import butter
+from scipy.signal._signaltools import resample_poly, sosfilt, sosfilt_zi
 
 from modes.cw_engine import CwDecodeEvent, MORSE_DECODE
 

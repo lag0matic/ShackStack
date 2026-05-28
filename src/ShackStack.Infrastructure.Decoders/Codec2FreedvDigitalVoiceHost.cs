@@ -18,6 +18,7 @@ public sealed class Codec2FreedvDigitalVoiceHost : IFreedvDigitalVoiceHost, IDis
 
     private FreedvDigitalVoiceConfiguration _configuration = new("RADEV1", "Current radio frequency", true);
     private AudioRoute? _transmitRoute;
+    private string? _lastWorkerStderr;
     private bool _isRunning;
     private bool _isTransmitting;
 
@@ -208,6 +209,7 @@ public sealed class Codec2FreedvDigitalVoiceHost : IFreedvDigitalVoiceHost, IDis
 
     private Task HandleStderrLineAsync(string line)
     {
+        _lastWorkerStderr = line;
         _telemetry.OnNext(new FreedvDigitalVoiceTelemetry(
             _isRunning,
             $"Worker stderr: {line}",
@@ -266,9 +268,12 @@ public sealed class Codec2FreedvDigitalVoiceHost : IFreedvDigitalVoiceHost, IDis
         _isRunning = false;
         _isTransmitting = false;
         _ = _audioService.StopTransmitAsync(CancellationToken.None);
+        var status = string.IsNullOrWhiteSpace(_lastWorkerStderr)
+            ? "Codec2 FreeDV worker exited"
+            : $"Codec2 FreeDV worker exited: {_lastWorkerStderr}";
         _telemetry.OnNext(new FreedvDigitalVoiceTelemetry(
             false,
-            "Codec2 FreeDV worker exited",
+            status,
             "Codec2 FreeDV sidecar",
             _configuration.ModeLabel,
             0,

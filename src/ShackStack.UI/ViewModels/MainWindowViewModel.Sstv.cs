@@ -30,16 +30,10 @@ public partial class MainWindowViewModel
     private string sstvSelectedMode = "Auto Detect";
 
     [ObservableProperty]
-    private IReadOnlyList<string> sstvFrequencyOptions =
-    [
-        "14.230 MHz USB-D",
-        "14.233 MHz USB-D",
-        "7.171 MHz LSB-D",
-        "3.845 MHz LSB-D"
-    ];
+    private IReadOnlyList<string> sstvFrequencyOptions = ModeFrequencyCatalog.GetLabels(ModeFrequencyCatalog.Sstv);
 
     [ObservableProperty]
-    private string sstvSelectedFrequency = "14.230 MHz USB-D";
+    private string sstvSelectedFrequency = ModeFrequencyCatalog.GetDefaultLabel(ModeFrequencyCatalog.Sstv);
 
     [ObservableProperty]
     private string sstvRxStatus = "SSTV receiver ready";
@@ -52,6 +46,9 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     private string sstvDecodedFskIdCallsign = string.Empty;
+
+    [ObservableProperty]
+    private bool sstvReceiveIsRunning;
 
     [ObservableProperty]
     private Bitmap? sstvPreviewBitmap;
@@ -231,6 +228,7 @@ public partial class MainWindowViewModel
             return;
         }
 
+        SstvReceiveIsRunning = false;
         _ = _sstvDecoderHost.StopAsync(CancellationToken.None);
     }
 
@@ -254,6 +252,7 @@ public partial class MainWindowViewModel
             _ = _sstvDecoderHost.ResetAsync(CancellationToken.None);
         }
 
+        SstvReceiveIsRunning = false;
         SstvRxStatus = "SSTV receiver ready";
         SstvImageStatus = "No image captured yet";
         SstvSessionNotes = SstvIdleSessionNotes;
@@ -1148,6 +1147,7 @@ public partial class MainWindowViewModel
         var config = new SstvDecoderConfiguration(NormalizeSstvModeSelection(SstvSelectedMode), SstvSelectedFrequency);
         await _sstvDecoderHost.ConfigureAsync(config, CancellationToken.None);
         await _sstvDecoderHost.StartAsync(CancellationToken.None);
+        SstvReceiveIsRunning = true;
     }
 
     private async Task ForceStartSstvReceiveCoreAsync()
@@ -1161,6 +1161,7 @@ public partial class MainWindowViewModel
         var config = new SstvDecoderConfiguration(NormalizeSstvModeSelection(SstvSelectedMode), SstvSelectedFrequency);
         await _sstvDecoderHost.ConfigureAsync(config, CancellationToken.None);
         await _sstvDecoderHost.StartAsync(CancellationToken.None);
+        SstvReceiveIsRunning = true;
         await _sstvDecoderHost.ForceStartAsync(CancellationToken.None);
         SstvRxStatus = $"Force-start requested for {config.Mode}";
         SstvSessionNotes = $"ShackStack SSTV native sidecar  |  Signal  ---%  |  Mode {config.Mode}  |  FSKID none";

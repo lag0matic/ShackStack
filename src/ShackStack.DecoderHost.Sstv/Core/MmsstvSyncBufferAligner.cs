@@ -19,6 +19,7 @@ internal static class MmsstvSyncBufferAligner
         int stageLineCount,
         bool useRxBuffer,
         bool highAccuracy,
+        bool applyResyncModeCorrections,
         int hillTapQuarter,
         out int baseOffset)
     {
@@ -39,10 +40,13 @@ internal static class MmsstvSyncBufferAligner
             return false;
         }
 
+        var rowsToUse = applyResyncModeCorrections
+            ? Math.Min(32, Math.Min(stageLineCount, syncRows.Count))
+            : requiredRows;
         var histogram = new int[(int)drawLineWidthSamples + 2];
         var cursor = 0;
 
-        for (var page = 0; page < requiredRows; page++)
+        for (var page = 0; page < rowsToUse; page++)
         {
             var row = syncRows[page];
             if (row is null || row.Length == 0)
@@ -68,14 +72,21 @@ internal static class MmsstvSyncBufferAligner
             }
         }
 
-        baseOffset = MmsstvSyncPositionAdjuster.Adjust(
-            rawSyncPosition: peakPos,
-            profile: profile,
-            sampleRate: sampleRate,
-            offsetPreviewSamples: offsetPreviewSamples,
-            lineWidthSamples: lineWidthSamples,
-            stageLineCount: stageLineCount,
-            hillTapQuarter: hillTapQuarter);
+        baseOffset = applyResyncModeCorrections
+            ? MmsstvSyncPositionAdjuster.Adjust(
+                rawSyncPosition: peakPos,
+                profile: profile,
+                sampleRate: sampleRate,
+                offsetPreviewSamples: offsetPreviewSamples,
+                lineWidthSamples: lineWidthSamples,
+                stageLineCount: stageLineCount,
+                hillTapQuarter: hillTapQuarter)
+            : MmsstvSyncPositionAdjuster.AdjustInitialStart(
+                rawSyncPosition: peakPos,
+                profile: profile,
+                offsetPreviewSamples: offsetPreviewSamples,
+                lineWidthSamples: lineWidthSamples,
+                hillTapQuarter: hillTapQuarter);
         return true;
     }
 

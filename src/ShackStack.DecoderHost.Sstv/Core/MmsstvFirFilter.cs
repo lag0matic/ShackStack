@@ -28,6 +28,19 @@ internal sealed class MmsstvFirFilter
         _writeIndex = 0;
     }
 
+    public void CreatePreservingDelay(int tapCount, FilterType type, double sampleRate, double lowCutHz, double highCutHz, double attenuation, double gain)
+    {
+        var nextTapCount = Math.Max(0, tapCount);
+        var canReuseDelay = nextTapCount == TapCount && _delay.Length == (nextTapCount + 1) * 2;
+        TapCount = nextTapCount;
+        _taps = MakeFilter(TapCount, type, sampleRate, lowCutHz, highCutHz, attenuation, gain);
+        if (!canReuseDelay)
+        {
+            _delay = new double[(TapCount + 1) * 2];
+            _writeIndex = 0;
+        }
+    }
+
     public void Create(int tapCount)
     {
         TapCount = Math.Max(0, tapCount);

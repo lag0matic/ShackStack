@@ -23,24 +23,7 @@ public partial class MainWindowViewModel
     private string wefaxSelectedMode = "IOC 576 / 120 LPM";
 
     [ObservableProperty]
-    private IReadOnlyList<string> wefaxFrequencyOptions =
-    [
-        "NOAA Atlantic 4235.0 kHz USB-D",
-        "NOAA Atlantic 6340.5 kHz USB-D",
-        "NOAA Atlantic 9110.0 kHz USB-D",
-        "NOAA Atlantic 12750.0 kHz USB-D",
-        "NOAA Pacific 4346.0 kHz USB-D",
-        "NOAA Pacific 8682.0 kHz USB-D",
-        "NOAA Pacific 12786.0 kHz USB-D",
-        "NOAA Pacific 17151.2 kHz USB-D",
-        "NOAA Gulf 4317.9 kHz USB-D",
-        "NOAA Gulf 8503.9 kHz USB-D",
-        "NOAA Gulf 12789.9 kHz USB-D",
-        "NOAA Hawaii 9982.5 kHz USB-D",
-        "NOAA Hawaii 11090.0 kHz USB-D",
-        "NOAA Kodiak 8459.0 kHz USB-D",
-        "NOAA Kodiak 12412.5 kHz USB-D",
-    ];
+    private IReadOnlyList<string> wefaxFrequencyOptions = ModeFrequencyCatalog.GetLabels(ModeFrequencyCatalog.Wefax);
 
     [ObservableProperty]
     private string wefaxSelectedFrequency = "NOAA Atlantic 12750.0 kHz USB-D";

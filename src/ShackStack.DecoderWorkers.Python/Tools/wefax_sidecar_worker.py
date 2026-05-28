@@ -4,14 +4,21 @@ import base64
 import json
 import sys
 import threading
+import warnings
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+warnings.filterwarnings(
+    "ignore",
+    message="pkg_resources is deprecated as an API.*",
+    category=UserWarning,
+)
+
 import numpy as np
 from PIL import Image
-from scipy.signal import medfilt2d, resample_poly
+from scipy.signal._signaltools import medfilt2d, resample_poly
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

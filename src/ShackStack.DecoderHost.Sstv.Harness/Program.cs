@@ -2,8 +2,10 @@ using ShackStack.DecoderHost.Sstv.Core;
 using ShackStack.DecoderHost.Sstv.Harness;
 using System.Reflection;
 
-const int sampleRate = SstvWorkingConfig.WorkingSampleRate;
+var sampleRate = SstvWorkingConfig.WorkingSampleRate;
 const int chunkSize = 2_048;
+var probeFilters = ParseOptionValues(args, "--probe");
+var modeFilters = ParseOptionValues(args, "--mode");
 var outputRoot = Path.Combine(
     @"C:\Users\lag0m\Documents\ShackStack.Avalonia",
     ".tmp-sstv-harness");
@@ -28,6 +30,19 @@ if (args.Any(static arg => string.Equals(arg, "--regression", StringComparison.O
     || string.Equals(Environment.GetEnvironmentVariable("SHACKSTACK_HARNESS_REGRESSION"), "1", StringComparison.Ordinal))
 {
     return RunRegressionSuite(outputRoot, sampleRate, chunkSize) ? 0 : 1;
+}
+
+if (args.Any(static arg => string.Equals(arg, "--fskid", StringComparison.OrdinalIgnoreCase))
+    || string.Equals(Environment.GetEnvironmentVariable("SHACKSTACK_HARNESS_FSKID"), "1", StringComparison.Ordinal))
+{
+    RunFskIdLoopbackProbe(outputRoot, sampleRate, chunkSize);
+    return 0;
+}
+
+if (probeFilters.Count > 0 || modeFilters.Count > 0)
+{
+    RunSelectedHarnessProbes(probeFilters, modeFilters, outputRoot, sampleRate, chunkSize);
+    return 0;
 }
 
 var toneCheck = new float[sampleRate / 20];
@@ -75,37 +90,153 @@ foreach (var modeName in modeNames)
         continue;
     }
 
-    RunMode(profile, outputRoot, sampleRate, chunkSize);
+    RunTimedProbe($"mode:{profile.Name}", () => RunMode(profile, outputRoot, sampleRate, chunkSize));
     Console.WriteLine();
 }
 
 if (string.Equals(Environment.GetEnvironmentVariable("SHACKSTACK_HARNESS_STRESS"), "1", StringComparison.Ordinal))
 {
-    RunMmsstvStressScenarios(outputRoot, sampleRate, chunkSize);
+    RunTimedProbe("stress", () => RunMmsstvStressScenarios(outputRoot, sampleRate, chunkSize));
     Console.WriteLine();
 }
 
-RunNativeTxPrepProbe(outputRoot, sampleRate);
+RunTimedProbe("txprep", () => RunNativeTxPrepProbe(outputRoot, sampleRate));
 Console.WriteLine();
 
-RunNativeTxRoundTripProbe(outputRoot, sampleRate, chunkSize);
+RunTimedProbe("txroundtrip", () => RunNativeTxRoundTripProbe(outputRoot, sampleRate, chunkSize));
 Console.WriteLine();
 
-RunFskIdLoopbackProbe(outputRoot, sampleRate, chunkSize);
+RunTimedProbe("fskid", () => RunFskIdLoopbackProbe(outputRoot, sampleRate, chunkSize));
 Console.WriteLine();
 
-RunTxModulatorFeatureProbe(outputRoot, sampleRate);
+RunTimedProbe("txmod", () => RunTxModulatorFeatureProbe(outputRoot, sampleRate));
 Console.WriteLine();
 
-RunReceiverLifecycleScenarios(outputRoot, sampleRate, chunkSize);
+RunTimedProbe("lifecycle", () => RunReceiverLifecycleScenarios(outputRoot, sampleRate, chunkSize));
 Console.WriteLine();
 
-RunAvtReceiverProbe(outputRoot, sampleRate, chunkSize);
+RunTimedProbe("avt", () => RunAvtReceiverProbe(outputRoot, sampleRate, chunkSize));
 Console.WriteLine();
 
-RunAvtStateProbe(sampleRate);
+RunTimedProbe("avtstate", () => RunAvtStateProbe(sampleRate));
 
 return 0;
+
+static HashSet<string> ParseOptionValues(string[] args, string optionName)
+{
+    var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < args.Length; i++)
+    {
+        var arg = args[i];
+        if (arg.StartsWith(optionName + "=", StringComparison.OrdinalIgnoreCase))
+        {
+            AddCommaSeparatedValues(values, arg[(optionName.Length + 1)..]);
+            continue;
+        }
+
+        if (string.Equals(arg, optionName, StringComparison.OrdinalIgnoreCase)
+            && i + 1 < args.Length)
+        {
+            AddCommaSeparatedValues(values, args[++i]);
+        }
+    }
+
+    return values;
+}
+
+static void AddCommaSeparatedValues(HashSet<string> values, string raw)
+{
+    foreach (var value in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        values.Add(value);
+    }
+}
+
+static void RunSelectedHarnessProbes(
+    HashSet<string> probeFilters,
+    HashSet<string> modeFilters,
+    string outputRoot,
+    int sampleRate,
+    int chunkSize)
+{
+    var ranAny = false;
+    var runAllModes = probeFilters.Contains("modes") || probeFilters.Contains("all");
+    if (modeFilters.Count > 0 || runAllModes)
+    {
+        var selectedModes = modeFilters.Count > 0
+            ? modeFilters
+            : new HashSet<string>(
+                new[]
+                {
+                    "Martin 1",
+                    "Martin 2",
+                    "Scottie 1",
+                    "Scottie 2",
+                    "Scottie DX",
+                    "Robot 36",
+                    "PD 50",
+                    "PD 90",
+                    "PD 120",
+                    "PD 160",
+                    "PD 180",
+                    "PD 240",
+                    "PD 290",
+                    "AVT 90",
+                },
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var modeName in selectedModes)
+        {
+            if (!MmsstvModeCatalog.TryResolve(modeName, out var profile))
+            {
+                Console.WriteLine($"=== mode:{modeName} ===");
+                Console.WriteLine("missing profile");
+                continue;
+            }
+
+            ranAny = true;
+            RunTimedProbe($"mode:{profile.Name}", () => RunMode(profile, outputRoot, sampleRate, chunkSize));
+            Console.WriteLine();
+        }
+    }
+
+    ranAny |= RunIfSelected("txprep", probeFilters, () => RunNativeTxPrepProbe(outputRoot, sampleRate));
+    ranAny |= RunIfSelected("txroundtrip", probeFilters, () => RunNativeTxRoundTripProbe(outputRoot, sampleRate, chunkSize));
+    ranAny |= RunIfSelected("fskid", probeFilters, () => RunFskIdLoopbackProbe(outputRoot, sampleRate, chunkSize));
+    ranAny |= RunIfSelected("txmod", probeFilters, () => RunTxModulatorFeatureProbe(outputRoot, sampleRate));
+    ranAny |= RunIfSelected("lifecycle", probeFilters, () => RunReceiverLifecycleScenarios(outputRoot, sampleRate, chunkSize));
+    ranAny |= RunIfSelected("avt", probeFilters, () => RunAvtReceiverProbe(outputRoot, sampleRate, chunkSize));
+    ranAny |= RunIfSelected("avtstate", probeFilters, () => RunAvtStateProbe(sampleRate));
+    ranAny |= RunIfSelected("stress", probeFilters, () => RunMmsstvStressScenarios(outputRoot, sampleRate, chunkSize));
+
+    if (!ranAny)
+    {
+        Console.WriteLine("No matching harness probe selected.");
+        Console.WriteLine("Known probes: modes, txprep, txroundtrip, fskid, txmod, lifecycle, avt, avtstate, stress.");
+    }
+}
+
+static bool RunIfSelected(string probeName, HashSet<string> probeFilters, Action action)
+{
+    if (!probeFilters.Contains(probeName) && !probeFilters.Contains("all"))
+    {
+        return false;
+    }
+
+    RunTimedProbe(probeName, action);
+    Console.WriteLine();
+    return true;
+}
+
+static void RunTimedProbe(string probeName, Action action)
+{
+    var started = DateTimeOffset.Now;
+    Console.WriteLine($"=== probe {probeName} start {started:HH:mm:ss} ===");
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    action();
+    sw.Stop();
+    Console.WriteLine($"=== probe {probeName} done {sw.Elapsed.TotalSeconds:0.0}s ===");
+}
 
 static bool RunRegressionSuite(string outputRoot, int sampleRate, int chunkSize)
 {
@@ -1066,15 +1197,22 @@ static void RunReceiverLifecycleScenarios(string outputRoot, int sampleRate, int
     var cleanEndAudio = WithTrailingSilence(fullAudio, sampleRate, 6.0);
     var dropoutAudio = WithTrailingSilence(TruncateForDropout(fullAudio, sampleRate, 6.5), sampleRate, 6.0);
     var falseStartAudio = WithTrailingSilence(SstvHarnessGenerator.GenerateVisOnlyAudio(profile, sampleRate), sampleRate, 6.0);
+    var continuousAudio = ConcatAudio(
+        fullAudio,
+        Silence(sampleRate, 4.0),
+        fullAudio,
+        Silence(sampleRate, 6.0));
 
     var cleanEnd = RunLifecycleScenario("clean_end", cleanEndAudio, profile, outputRoot, sampleRate, chunkSize);
     var dropout = RunLifecycleScenario("dropout", dropoutAudio, profile, outputRoot, sampleRate, chunkSize);
     var falseStart = RunLifecycleScenario("false_start", falseStartAudio, profile, outputRoot, sampleRate, chunkSize);
+    var continuous = RunLifecycleScenario("continuous_two_images", continuousAudio, profile, outputRoot, sampleRate, chunkSize);
 
     Console.WriteLine("=== Receiver lifecycle scenarios ===");
     PrintLifecycleScenario(cleanEnd);
     PrintLifecycleScenario(dropout);
     PrintLifecycleScenario(falseStart);
+    PrintLifecycleScenario(continuous);
 }
 
 static void RunNativeTxPrepProbe(string outputRoot, int sampleRate)
@@ -1389,6 +1527,7 @@ static LifecycleScenarioResult RunLifecycleScenario(
         statuses.Any(static s => s.Contains("Receiving", StringComparison.OrdinalIgnoreCase)),
         statuses.Any(static s => s.Contains("Transmission ended", StringComparison.OrdinalIgnoreCase)),
         statuses.Any(static s => s.Contains("Image complete", StringComparison.OrdinalIgnoreCase)),
+        statuses.Count(static s => s.Contains("Image complete", StringComparison.OrdinalIgnoreCase)),
         receiver.LatestImagePath,
         profile.Name);
 }
@@ -1402,6 +1541,7 @@ static void PrintLifecycleScenario(LifecycleScenarioResult result)
     Console.WriteLine($"Saw receiving: {result.SawReceiving}");
     Console.WriteLine($"Saw transmission end: {result.SawTransmissionEnd}");
     Console.WriteLine($"Saw image complete: {result.SawImageComplete}");
+    Console.WriteLine($"Image complete count: {result.ImageCompleteCount}");
     Console.WriteLine($"Generated WAV: {result.WavPath}");
     Console.WriteLine($"Scenario log: {result.LogPath}");
     Console.WriteLine(!string.IsNullOrWhiteSpace(result.LatestImagePath)
@@ -1419,9 +1559,29 @@ static float[] TruncateForDropout(float[] audio, int sampleRate, double seconds)
 
 static float[] WithTrailingSilence(float[] audio, int sampleRate, double seconds)
 {
-    var silence = Math.Max(1, (int)Math.Round(seconds * sampleRate));
-    var combined = new float[audio.Length + silence];
+    var silence = Silence(sampleRate, seconds);
+    var combined = new float[audio.Length + silence.Length];
     Array.Copy(audio, combined, audio.Length);
+    return combined;
+}
+
+static float[] Silence(int sampleRate, double seconds)
+{
+    var silence = Math.Max(1, (int)Math.Round(seconds * sampleRate));
+    return new float[silence];
+}
+
+static float[] ConcatAudio(params float[][] parts)
+{
+    var total = parts.Sum(static part => part.Length);
+    var combined = new float[total];
+    var offset = 0;
+    foreach (var part in parts)
+    {
+        Array.Copy(part, 0, combined, offset, part.Length);
+        offset += part.Length;
+    }
+
     return combined;
 }
 
@@ -1580,6 +1740,7 @@ readonly record struct LifecycleScenarioResult(
     bool SawReceiving,
     bool SawTransmissionEnd,
     bool SawImageComplete,
+    int ImageCompleteCount,
     string? LatestImagePath,
     string ExpectedMode);
 

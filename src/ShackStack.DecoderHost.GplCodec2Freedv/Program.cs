@@ -562,6 +562,7 @@ internal static class Program
             {
                 "1600" => "1600",
                 "700C" => "700C",
+                "700D" => "700D",
                 "700E" => "700E",
                 "RADE" => "RADEV1",
                 "RADEV1" => "RADEV1",
@@ -670,12 +671,10 @@ internal static class Program
         private const int RadeUseCEncoder = 0x1;
         private const int RadeVerboseQuiet = 0x8;
         private const int FeatureWidth = 36;
-        private const int FeatureBatchThreshold = FeatureWidth * 36;
-        private const int FeatureSynthesisContextFeatures = FeatureWidth * 36;
-        private const int SpeechCrossfadeSamples = 320;
-        private const int HilbertTaps = 127;
-        private const int HilbertDelay = (HilbertTaps - 1) / 2;
-        private static readonly float[] HilbertCoefficients = CreateHilbertCoefficients();
+        private const int LpcNetFrameSamples = 160;
+        private const int FarganWarmupFrames = 5;
+        private const float RadeTransmitScalingFactor = 16383.0f;
+        private const int RadeEooCallsignMax = 8;
 
         private readonly IntPtr _library;
         private readonly IntPtr _rade;
@@ -696,10 +695,9 @@ internal static class Program
         private readonly RadeSetEooCallsign _setEooCallsign;
         private readonly RadeDecodeCallsign _decodeCallsign;
         private readonly List<float> _pendingFeatures = [];
-        private readonly List<float> _synthesisContextFeatures = [];
         private readonly List<float> _pendingTransmitFeatures = [];
-        private readonly List<float> _hilbertHistory = [];
-        private short[] _speechTail = [];
+        private Process? _featureProcess;
+        private Process? _synthesisProcess;
 
         private RadeFreeDvRuntime(
             IntPtr library,
@@ -763,9 +761,7 @@ internal static class Program
         public void ResetReceiveState()
         {
             _pendingFeatures.Clear();
-            _synthesisContextFeatures.Clear();
-            _hilbertHistory.Clear();
-            _speechTail = [];
+            RestartSynthesisProcess();
         }
 
         public short[] Receive(
@@ -778,7 +774,7 @@ internal static class Program
             out string callsign)
         {
             callsign = string.Empty;
-            var complexIn = RealToAnalyticComplex(demodIn, frequencyOffsetHz, ModemSampleRateHz, ref phaseReal, ref phaseImag);
+            var complexIn = RealToComplex(demodIn, frequencyOffsetHz, ModemSampleRateHz, ref phaseReal, ref phaseImag);
             var featuresOut = new float[Math.Max(FeatureCount, FeatureWidth)];
             var eooOut = new float[Math.Max(EooBitCount, 1)];
             var hasEoo = 0;
@@ -789,12 +785,26 @@ internal static class Program
 
             if (hasEoo != 0 && EooBitCount > 0)
             {
-                var buffer = new byte[16];
+                var buffer = new byte[RadeEooCallsignMax + 1];
                 var length = _decodeCallsign(eooOut, EooBitCount, buffer);
                 if (length > 0)
                 {
                     callsign = System.Text.Encoding.ASCII.GetString(buffer, 0, Math.Min(length, buffer.Length)).TrimEnd('\0', ' ');
                 }
+
+                // The EOO frame is modem metadata, not vocoder speech. Treat it
+                // as a hard over boundary so post-over feature noise does not
+                // synthesize into gibberish.
+                _pendingFeatures.Clear();
+                RestartSynthesisProcess();
+                return [];
+            }
+
+            if (sync == 0)
+            {
+                _pendingFeatures.Clear();
+                RestartSynthesisProcess();
+                return [];
             }
 
             if (nout > 0)
@@ -805,7 +815,7 @@ internal static class Program
                 }
             }
 
-            if (_pendingFeatures.Count < FeatureBatchThreshold)
+            if (_pendingFeatures.Count < FeatureWidth)
             {
                 return [];
             }
@@ -893,131 +903,21 @@ internal static class Program
 
             var features = _pendingFeatures.GetRange(0, usable).ToArray();
             _pendingFeatures.RemoveRange(0, usable);
-            var context = _synthesisContextFeatures.Count > 0
-                ? _synthesisContextFeatures.ToArray()
-                : [];
-            var synthesisFeatures = context.Length == 0
-                ? features
-                : context.Concat(features).ToArray();
-            var contextSamplesToDiscard = (context.Length / FeatureWidth) * 160;
-            UpdateSynthesisContext(features);
-
-            var tempDirectory = Path.Combine(Path.GetTempPath(), "ShackStack", "freedv-rade");
-            Directory.CreateDirectory(tempDirectory);
-            var stem = $"{Environment.ProcessId}_{Guid.NewGuid():N}";
-            var featurePath = Path.Combine(tempDirectory, $"{stem}.f32");
-            var pcmPath = Path.Combine(tempDirectory, $"{stem}.pcm");
-
-            try
+            var process = EnsureSynthesisProcess();
+            if (process is null)
             {
-                WriteFloat32File(featurePath, synthesisFeatures);
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = _lpcnetDemoPath,
-                    Arguments = $"-fargan-synthesis \"{featurePath}\" \"{pcmPath}\"",
-                    WorkingDirectory = Path.GetDirectoryName(_lpcnetDemoPath) ?? AppContext.BaseDirectory,
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
-                };
-
-                using var process = Process.Start(startInfo);
-                if (process is null)
-                {
-                    return [];
-                }
-
-                if (!process.WaitForExit(5000) || process.ExitCode != 0 || !File.Exists(pcmPath))
-                {
-                    try
-                    {
-                        if (!process.HasExited)
-                        {
-                            process.Kill(entireProcessTree: true);
-                        }
-                    }
-                    catch
-                    {
-                    }
-
-                    return [];
-                }
-
-                var bytes = File.ReadAllBytes(pcmPath);
-                var speech = new short[bytes.Length / sizeof(short)];
-                Buffer.BlockCopy(bytes, 0, speech, 0, bytes.Length);
-                if (contextSamplesToDiscard > 0 && speech.Length > contextSamplesToDiscard)
-                {
-                    return CrossfadeSpeechChunk(speech.Skip(contextSamplesToDiscard).ToArray());
-                }
-
-                return CrossfadeSpeechChunk(speech);
-            }
-            finally
-            {
-                TryDelete(featurePath);
-                TryDelete(pcmPath);
-            }
-        }
-
-        private short[] CrossfadeSpeechChunk(short[] speech)
-        {
-            if (speech.Length == 0)
-            {
-                return speech;
-            }
-
-            var tailSamples = Math.Min(speech.Length, SpeechCrossfadeSamples);
-            var nextTail = speech.Skip(speech.Length - tailSamples).ToArray();
-            var emitLength = speech.Length - tailSamples;
-            if (emitLength <= 0)
-            {
-                _speechTail = _speechTail.Concat(speech).TakeLast(SpeechCrossfadeSamples).ToArray();
                 return [];
             }
 
-            var output = new List<short>(emitLength + _speechTail.Length);
-            if (_speechTail.Length > 0)
-            {
-                var fadeSamples = Math.Min(Math.Min(_speechTail.Length, emitLength), SpeechCrossfadeSamples);
-                for (var i = 0; i < fadeSamples; i++)
-                {
-                    var mix = (i + 1) / (float)(fadeSamples + 1);
-                    output.Add((short)Math.Clamp(
-                        (_speechTail[_speechTail.Length - fadeSamples + i] * (1f - mix)) + (speech[i] * mix),
-                        short.MinValue,
-                        short.MaxValue));
-                }
+            var inputBytes = Float32Bytes(features);
+            process.StandardInput.BaseStream.Write(inputBytes);
+            process.StandardInput.BaseStream.Flush();
 
-                for (var i = fadeSamples; i < emitLength; i++)
-                {
-                    output.Add(speech[i]);
-                }
-            }
-            else
-            {
-                output.AddRange(speech.Take(emitLength));
-            }
-
-            _speechTail = nextTail;
-            return output.ToArray();
-        }
-
-        private void UpdateSynthesisContext(float[] features)
-        {
-            if (features.Length == 0)
-            {
-                return;
-            }
-
-            _synthesisContextFeatures.AddRange(features);
-            if (_synthesisContextFeatures.Count <= FeatureSynthesisContextFeatures)
-            {
-                return;
-            }
-
-            _synthesisContextFeatures.RemoveRange(0, _synthesisContextFeatures.Count - FeatureSynthesisContextFeatures);
+            var frameCount = features.Length / FeatureWidth;
+            var outputBytes = ReadExactOrEmpty(process.StandardOutput.BaseStream, frameCount * LpcNetFrameSamples * sizeof(short));
+            var speech = new short[outputBytes.Length / sizeof(short)];
+            Buffer.BlockCopy(outputBytes, 0, speech, 0, outputBytes.Length);
+            return speech;
         }
 
         private float[] ExtractFeatures(short[] speech)
@@ -1033,85 +933,150 @@ internal static class Program
                 Array.Resize(ref speech, usableSamples);
             }
 
-            var tempDirectory = Path.Combine(Path.GetTempPath(), "ShackStack", "freedv-rade");
-            Directory.CreateDirectory(tempDirectory);
-            var stem = $"{Environment.ProcessId}_{Guid.NewGuid():N}";
-            var speechPath = Path.Combine(tempDirectory, $"{stem}.pcm");
-            var featurePath = Path.Combine(tempDirectory, $"{stem}.features.f32");
+            var process = EnsureFeatureProcess();
+            if (process is null)
+            {
+                return [];
+            }
 
+            var speechBytes = new byte[speech.Length * sizeof(short)];
+            Buffer.BlockCopy(speech, 0, speechBytes, 0, speechBytes.Length);
+            process.StandardInput.BaseStream.Write(speechBytes);
+            process.StandardInput.BaseStream.Flush();
+
+            var frameCount = speech.Length / LpcNetFrameSamples;
+            var featureBytes = ReadExactOrEmpty(process.StandardOutput.BaseStream, frameCount * FeatureWidth * sizeof(float));
+            var features = new float[featureBytes.Length / sizeof(float)];
+            Buffer.BlockCopy(featureBytes, 0, features, 0, featureBytes.Length);
+            return features;
+        }
+
+        private Process? EnsureFeatureProcess()
+        {
+            if (_featureProcess is { HasExited: false })
+            {
+                return _featureProcess;
+            }
+
+            _featureProcess?.Dispose();
+            _featureProcess = StartLpcnetProcess("-features - -");
+            return _featureProcess;
+        }
+
+        private Process? EnsureSynthesisProcess()
+        {
+            if (_synthesisProcess is { HasExited: false })
+            {
+                return _synthesisProcess;
+            }
+
+            _synthesisProcess?.Dispose();
+            _synthesisProcess = StartLpcnetProcess("-fargan-synthesis - -");
+            if (_synthesisProcess is null)
+            {
+                return null;
+            }
+
+            // Match FreeDV GUI's fargan_cont() warm-up without sacrificing
+            // the first real received frames to lpcnet_demo's stdin warm-up.
+            _synthesisProcess.StandardInput.BaseStream.Write(new byte[FarganWarmupFrames * FeatureWidth * sizeof(float)]);
+            _synthesisProcess.StandardInput.BaseStream.Flush();
+            return _synthesisProcess;
+        }
+
+        private Process? StartLpcnetProcess(string arguments)
+        {
             try
             {
-                var bytes = new byte[speech.Length * sizeof(short)];
-                Buffer.BlockCopy(speech, 0, bytes, 0, bytes.Length);
-                File.WriteAllBytes(speechPath, bytes);
-
-                var startInfo = new ProcessStartInfo
+                var process = new Process
                 {
-                    FileName = _lpcnetDemoPath,
-                    Arguments = $"-features \"{speechPath}\" \"{featurePath}\"",
-                    WorkingDirectory = Path.GetDirectoryName(_lpcnetDemoPath) ?? AppContext.BaseDirectory,
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = _lpcnetDemoPath,
+                        Arguments = arguments,
+                        WorkingDirectory = Path.GetDirectoryName(_lpcnetDemoPath) ?? AppContext.BaseDirectory,
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        RedirectStandardInput = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                    },
                 };
 
-                using var process = Process.Start(startInfo);
-                if (process is null)
-                {
-                    return [];
-                }
-
-                if (!process.WaitForExit(5000) || process.ExitCode != 0 || !File.Exists(featurePath))
-                {
-                    try
-                    {
-                        if (!process.HasExited)
-                        {
-                            process.Kill(entireProcessTree: true);
-                        }
-                    }
-                    catch
-                    {
-                    }
-
-                    return [];
-                }
-
-                var featureBytes = File.ReadAllBytes(featurePath);
-                var features = new float[featureBytes.Length / sizeof(float)];
-                Buffer.BlockCopy(featureBytes, 0, features, 0, featureBytes.Length);
-                return features;
+                process.Start();
+                _ = Task.Run(() => process.StandardError.ReadToEnd());
+                return process;
             }
-            finally
+            catch
             {
-                TryDelete(speechPath);
-                TryDelete(featurePath);
+                return null;
             }
         }
 
-        private static void WriteFloat32File(string path, float[] values)
+        private void RestartSynthesisProcess()
+        {
+            StopProcess(_synthesisProcess);
+            _synthesisProcess = null;
+        }
+
+        private static byte[] Float32Bytes(float[] values)
         {
             var bytes = new byte[values.Length * sizeof(float)];
             Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
-            File.WriteAllBytes(path, bytes);
+            return bytes;
         }
 
-        private static void TryDelete(string path)
+        private static byte[] ReadExactOrEmpty(Stream stream, int count)
         {
+            if (count <= 0)
+            {
+                return [];
+            }
+
+            var bytes = new byte[count];
+            var offset = 0;
+            while (offset < count)
+            {
+                var read = stream.Read(bytes, offset, count - offset);
+                if (read <= 0)
+                {
+                    return [];
+                }
+
+                offset += read;
+            }
+
+            return bytes;
+        }
+
+        private static void StopProcess(Process? process)
+        {
+            if (process is null)
+            {
+                return;
+            }
+
             try
             {
-                if (File.Exists(path))
+                if (!process.HasExited)
                 {
-                    File.Delete(path);
+                    process.StandardInput.Close();
+                    if (!process.WaitForExit(500))
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
                 }
             }
             catch
             {
             }
+            finally
+            {
+                process.Dispose();
+            }
         }
 
-        private RadeComplexSample[] RealToAnalyticComplex(
+        private static RadeComplexSample[] RealToComplex(
             short[] samples,
             int frequencyOffsetHz,
             int sampleRate,
@@ -1129,31 +1094,15 @@ internal static class Program
             var stepImag = (float)Math.Sin(step);
             for (var i = 0; i < samples.Length; i++)
             {
-                var input = samples[i] / 32767.0f;
-                _hilbertHistory.Add(input);
-                if (_hilbertHistory.Count > HilbertTaps)
-                {
-                    _hilbertHistory.RemoveAt(0);
-                }
-
-                var real = _hilbertHistory.Count > HilbertDelay
-                    ? _hilbertHistory[_hilbertHistory.Count - 1 - HilbertDelay]
-                    : 0.0f;
-                var imag = 0.0f;
-                var availableTaps = Math.Min(HilbertTaps, _hilbertHistory.Count);
-                for (var k = 0; k < availableTaps; k++)
-                {
-                    imag += HilbertCoefficients[k] * _hilbertHistory[_hilbertHistory.Count - 1 - k];
-                }
-
                 var nextReal = (phaseReal * stepReal) - (phaseImag * stepImag);
                 var nextImag = (phaseReal * stepImag) + (phaseImag * stepReal);
                 phaseReal = nextReal;
                 phaseImag = nextImag;
+                var real = samples[i] / 32767.0f;
                 complex[i] = new RadeComplexSample
                 {
-                    Real = (real * phaseReal) - (imag * phaseImag),
-                    Imag = (real * phaseImag) + (imag * phaseReal),
+                    Real = real * phaseReal,
+                    Imag = real * phaseImag,
                 };
             }
 
@@ -1172,33 +1121,15 @@ internal static class Program
             return complex;
         }
 
-        private static float[] CreateHilbertCoefficients()
-        {
-            var coeffs = new float[HilbertTaps];
-            for (var i = 0; i < HilbertTaps; i++)
-            {
-                var n = i - HilbertDelay;
-                if (n == 0 || n % 2 == 0)
-                {
-                    coeffs[i] = 0.0f;
-                    continue;
-                }
-
-                var h = 2.0 / (Math.PI * n);
-                var w = 0.54 - (0.46 * Math.Cos(2.0 * Math.PI * i / (HilbertTaps - 1)));
-                coeffs[i] = (float)(h * w);
-            }
-
-            return coeffs;
-        }
-
         private static short[] ComplexRealToPcm16(RadeComplexSample[] samples, int count)
         {
             var output = new short[Math.Clamp(count, 0, samples.Length)];
             for (var i = 0; i < output.Length; i++)
             {
-                var value = Math.Clamp(samples[i].Real, -1.0f, 1.0f);
-                output[i] = (short)Math.Clamp(Math.Round(value * short.MaxValue), short.MinValue, short.MaxValue);
+                output[i] = (short)Math.Clamp(
+                    Math.Round(samples[i].Real * RadeTransmitScalingFactor),
+                    short.MinValue,
+                    short.MaxValue);
             }
 
             return output;
@@ -1308,6 +1239,8 @@ internal static class Program
 
         public void Dispose()
         {
+            StopProcess(_featureProcess);
+            StopProcess(_synthesisProcess);
             if (_rade != IntPtr.Zero)
             {
                 _close(_rade);

@@ -26,6 +26,7 @@ public sealed class FreedvReporterService : IFreedvReporterService, IDisposable
     private string _lastMode = string.Empty;
     private bool _lastTransmitState;
     private string _lastMessage = string.Empty;
+    private int _disposed;
 
     public IObservable<FreedvReporterSnapshot> SnapshotStream => _snapshots;
 
@@ -450,7 +451,20 @@ public sealed class FreedvReporterService : IFreedvReporterService, IDisposable
 
     public void Dispose()
     {
-        _ = DisconnectCoreAsync();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            DisconnectCoreAsync().Wait(TimeSpan.FromSeconds(2));
+        }
+        catch
+        {
+            // Best-effort shutdown only; process exit must not hang on reporter cleanup.
+        }
+
         _gate.Dispose();
     }
 }

@@ -5,7 +5,14 @@ import json
 import os
 import sys
 import threading
+import warnings
 from typing import Any
+
+warnings.filterwarnings(
+    "ignore",
+    message="pkg_resources is deprecated as an API.*",
+    category=UserWarning,
+)
 
 import numpy as np
 

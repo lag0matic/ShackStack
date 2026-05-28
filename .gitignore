@@ -19,6 +19,7 @@ docs/*
 !docs/RELEASE_1.0_NOTES.md
 !docs/SSTV_REGRESSION_HARNESS.md
 !docs/USER_MANUAL.md
+!docs/HANDOFF_2026-05-11.md
 src/ShackStack.Desktop/DecoderWorkers/
 src/ShackStack.DecoderWorkers.Python/.pyinstaller/
 

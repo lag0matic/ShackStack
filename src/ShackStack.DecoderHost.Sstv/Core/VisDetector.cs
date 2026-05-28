@@ -2,7 +2,7 @@ namespace ShackStack.DecoderHost.Sstv.Core;
 
 internal static class VisDetector
 {
-    private const int WorkingSampleRate = SstvWorkingConfig.WorkingSampleRate;
+    private static readonly int WorkingSampleRate = SstvWorkingConfig.WorkingSampleRate;
     private const double FreqVisBit1 = 1100.0;
     private const double FreqSync = 1200.0;
     private const double FreqVisBit0 = 1300.0;

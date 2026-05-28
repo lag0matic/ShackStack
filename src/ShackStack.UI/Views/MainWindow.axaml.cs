@@ -1,4 +1,6 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using ShackStack.UI.ViewModels;
@@ -327,6 +329,16 @@ public partial class MainWindow : Window
 
         DataContext = null;
         base.OnClosed(e);
+        RequestApplicationShutdown();
+    }
+
+    private void RequestApplicationShutdown()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+            && ReferenceEquals(desktop.MainWindow, this))
+        {
+            desktop.Shutdown();
+        }
     }
 
     private void CloseDeskWindows()

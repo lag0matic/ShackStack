@@ -81,7 +81,7 @@ public sealed class RadioService : IRadioService, IDisposable
             throw;
         }
 
-        _session.StartReconciliationLoop(SyncCurrentStateAsync, ct, TimeSpan.FromSeconds(2));
+        _session.StartReconciliationLoop(SyncCurrentStateBestEffortAsync, ct, TimeSpan.FromSeconds(2));
         StartSmeterLoop(ct);
         StartControlStateLoop(ct);
     }
@@ -709,6 +709,25 @@ public sealed class RadioService : IRadioService, IDisposable
         });
     }
 
+    private async Task SyncCurrentStateBestEffortAsync(CancellationToken ct)
+    {
+        try
+        {
+            await SyncCurrentStateAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or IOException)
+        {
+            try
+            {
+                await SyncMinimalStateAsync(ct).ConfigureAwait(false);
+            }
+            catch (Exception fallbackEx) when (fallbackEx is TimeoutException or InvalidOperationException or IOException)
+            {
+                // Leave the last known UI state in place and try again on the next poll.
+            }
+        }
+    }
+
     private async Task SyncMinimalStateAsync(CancellationToken ct)
     {
         var options = _lastOptions;
@@ -875,7 +894,15 @@ public sealed class RadioService : IRadioService, IDisposable
                 while (!_controlStateCts.IsCancellationRequested)
                 {
                     await Task.Delay(500, _controlStateCts.Token).ConfigureAwait(false);
-                    await PollControlStateAsync(_controlStateCts.Token).ConfigureAwait(false);
+                    try
+                    {
+                        await PollControlStateAsync(_controlStateCts.Token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or IOException)
+                    {
+                        // Keep optional control-state polling alive after a missed CI-V
+                        // response. Frequency reconciliation runs separately.
+                    }
                 }
             }
             catch (OperationCanceledException)

@@ -265,7 +265,7 @@ internal static class Program
         private void ProcessExternalModeCycle(float[] cycle)
         {
             _cycleCount += 1;
-            if (Js8ExternalDecoderPort.IsJs8Mode(_modeLabel))
+            if (Js8ExternalDecoderPort.IsJs8Mode(_modeLabel) || Js8ExternalDecoderPort.IsJs8Mode(_frequencyLabel))
             {
                 ProcessJs8ModeCycle(cycle);
                 return;

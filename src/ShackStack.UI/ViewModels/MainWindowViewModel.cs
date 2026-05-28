@@ -70,6 +70,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IDisposable? _freedvTelemetrySubscription;
     private readonly IDisposable? _freedvSpeechSubscription;
     private readonly IDisposable? _freedvReporterSubscription;
+    private readonly SemaphoreSlim _freedvSpeechPlaybackGate = new(1, 1);
+    private readonly CancellationTokenSource _freedvSpeechPlaybackCts = new();
     private readonly IDisposable? _sstvTelemetrySubscription;
     private readonly IDisposable? _sstvImageSubscription;
     private readonly IDisposable? _wefaxTelemetrySubscription;
@@ -529,6 +531,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 Dispatcher.UIThread.Post(() =>
                 {
+                    SstvReceiveIsRunning = telemetry.IsRunning;
                     SstvRxStatus = telemetry.Status;
                     if (!string.IsNullOrWhiteSpace(telemetry.FskIdCallsign))
                     {
@@ -547,6 +550,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 Dispatcher.UIThread.Post(() =>
                 {
                     SstvImageStatus = frame.Status;
+                    if (string.IsNullOrWhiteSpace(frame.ImagePath) && SstvReceiveIsRunning && SstvHasPreview)
+                    {
+                        return;
+                    }
+
                     UpdateSstvPreview(frame.ImagePath);
                 });
             }));
@@ -978,9 +986,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _cwSendCts?.Cancel();
         _runtimeUiStateSaveCts?.Cancel();
         _sstvTxCts?.Cancel();
+        _freedvSpeechPlaybackCts.Cancel();
         WsjtxTransmitArmedLocal = false;
 
-        using var shutdownCts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        using var shutdownCts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
         StopRuntimeServices(shutdownCts.Token);
 
         _radioSubscription?.Dispose();
@@ -1006,6 +1015,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _cwSendCts?.Dispose();
         _runtimeUiStateSaveCts?.Dispose();
         _sstvTxCts?.Dispose();
+        _freedvSpeechPlaybackCts.Dispose();
+        _freedvSpeechPlaybackGate.Dispose();
 
     }
 
@@ -1016,15 +1027,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         RunShutdownStep(token => _radioService?.StopCwSendAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _audioService?.StopTransmitAsync(token) ?? Task.CompletedTask, ct);
 
-        RunShutdownStep(token => _cwDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
-        RunShutdownStep(token => _rttyDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
-        RunShutdownStep(token => _keyboardModeDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
-        RunShutdownStep(token => _freedvDigitalVoiceHost?.StopTransmitAsync(token) ?? Task.CompletedTask, ct);
-        RunShutdownStep(token => _freedvDigitalVoiceHost?.StopAsync(token) ?? Task.CompletedTask, ct);
-        RunShutdownStep(token => _freedvReporterService?.DisconnectAsync(token) ?? Task.CompletedTask, ct);
-        RunShutdownStep(token => _sstvDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
-        RunShutdownStep(token => _wefaxDecoderHost?.StopAsync(token) ?? Task.CompletedTask, ct);
-        RunShutdownStep(token => _wsjtxModeHost?.StopAsync(token) ?? Task.CompletedTask, ct);
+        RunShutdownSteps(
+        [
+            token => _cwDecoderHost?.StopAsync(token) ?? Task.CompletedTask,
+            token => _rttyDecoderHost?.StopAsync(token) ?? Task.CompletedTask,
+            token => _keyboardModeDecoderHost?.StopAsync(token) ?? Task.CompletedTask,
+            token => _freedvDigitalVoiceHost?.StopTransmitAsync(token) ?? Task.CompletedTask,
+            token => _freedvDigitalVoiceHost?.StopAsync(token) ?? Task.CompletedTask,
+            token => _freedvReporterService?.DisconnectAsync(token) ?? Task.CompletedTask,
+            token => _sstvDecoderHost?.StopAsync(token) ?? Task.CompletedTask,
+            token => _wefaxDecoderHost?.StopAsync(token) ?? Task.CompletedTask,
+            token => _wsjtxModeHost?.StopAsync(token) ?? Task.CompletedTask,
+        ], ct);
 
         RunShutdownStep(token => _audioService?.StopReceiveAsync(token) ?? Task.CompletedTask, ct);
         RunShutdownStep(token => _interopService?.StopAsync(token) ?? Task.CompletedTask, ct);
@@ -1041,11 +1055,42 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             var task = step(ct);
-            task.Wait(TimeSpan.FromSeconds(2));
+            task.Wait(TimeSpan.FromSeconds(1));
         }
         catch
         {
             // Best-effort cleanup: shutdown should not hang on an already-stopped device or worker.
+        }
+    }
+
+    private static void RunShutdownSteps(IEnumerable<Func<CancellationToken, Task>> steps, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested)
+        {
+            return;
+        }
+
+        var tasks = steps
+            .Select(step => Task.Run(() =>
+            {
+                try
+                {
+                    return step(ct);
+                }
+                catch
+                {
+                    return Task.CompletedTask;
+                }
+            }, CancellationToken.None))
+            .ToArray();
+
+        try
+        {
+            Task.WaitAll(tasks, TimeSpan.FromSeconds(3));
+        }
+        catch
+        {
+            // Same policy as the single-step path: keep app shutdown moving.
         }
     }
 
