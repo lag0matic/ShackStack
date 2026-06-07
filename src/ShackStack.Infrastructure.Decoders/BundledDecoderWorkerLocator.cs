@@ -48,22 +48,17 @@ internal static class BundledDecoderWorkerLocator
 
             if (repoRoot is not null)
             {
-                var pythonScript = Path.Combine(
-                    repoRoot,
-                    "src",
-                    "ShackStack.DecoderHost",
-                    "Python",
-                    "Tools",
-                    $"{workerBaseName}.py");
-
-                if (File.Exists(pythonScript))
+                foreach (var pythonScript in ResolveLocalPythonWorkerScripts(repoRoot, workerBaseName))
                 {
-                    return new DecoderWorkerLaunch(
-                        "python",
-                        $"\"{pythonScript}\"",
-                        Path.GetDirectoryName(pythonScript)!,
-                        pythonScript,
-                        true);
+                    if (File.Exists(pythonScript))
+                    {
+                        return new DecoderWorkerLaunch(
+                            "python",
+                            $"\"{pythonScript}\"",
+                            Path.GetDirectoryName(pythonScript)!,
+                            pythonScript,
+                            true);
+                    }
                 }
             }
         }
@@ -130,6 +125,24 @@ internal static class BundledDecoderWorkerLocator
             Path.GetDirectoryName(overridePath) ?? AppContext.BaseDirectory,
             overridePath,
             true);
+    }
+
+    private static IEnumerable<string> ResolveLocalPythonWorkerScripts(string repoRoot, string workerBaseName)
+    {
+        yield return Path.Combine(
+            repoRoot,
+            "src",
+            "ShackStack.DecoderWorkers.Python",
+            "Tools",
+            $"{workerBaseName}.py");
+
+        yield return Path.Combine(
+            repoRoot,
+            "src",
+            "ShackStack.DecoderHost",
+            "Python",
+            "Tools",
+            $"{workerBaseName}.py");
     }
 
     private static DecoderWorkerLaunch ResolveLocalDotnetWorker(string repoRoot, string workerBaseName)

@@ -9,17 +9,14 @@
         MinHeight="680"
         Title="CW Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
-        Background="#0F1117"
-        Foreground="#C4C8D8">
-  <Grid RowDefinitions="Auto,*" Margin="10">
-    <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,10">
+        Background="#050607"
+        Foreground="#D8D8DC"
+        Classes="operatorDesk">
+
+  <Grid RowDefinitions="Auto,*" Margin="8">
+    <Border Grid.Row="0" Classes="panel" CornerRadius="3" Padding="10,8" Margin="0,0,0,8">
       <Grid ColumnDefinitions="*,Auto">
-        <StackPanel Spacing="4">
-          <TextBlock Text="CW Desk" FontSize="20" FontWeight="SemiBold" />
-          <TextBlock Text="Decode shaping, live copy, keyer macros, and CW logging."
-                     Foreground="#AAB1C7"
-                     TextWrapping="Wrap" />
-        </StackPanel>
+        <TextBlock Text="CW Desk" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
         <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
           <Button Content="Start RX" Command="{Binding StartCwDecoderCommand}" Margin="0,0,8,0" />
           <Button Content="Stop RX" Command="{Binding StopCwDecoderCommand}" Margin="0,0,8,0" />
@@ -28,43 +25,40 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="360,*,360" ColumnSpacing="10">
-      <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+    <Grid Grid.Row="1" ColumnDefinitions="348,*,348" ColumnSpacing="8">
+      <Border Grid.Column="0" Classes="panel">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Spacing="10">
-            <TextBlock Text="Receive Shaping" FontSize="16" FontWeight="SemiBold" />
-            <TextBlock Text="These controls shape the current adaptive CW worker: find the tone, hold it with AFC, and constrain WPM tracking so junk does not run away with the decoder."
-                       Foreground="#AAB1C7"
-                       TextWrapping="Wrap" />
+          <StackPanel Spacing="12">
+            <TextBlock Text="Receive Shaping" Classes="sectionTitle" />
 
-            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+            <Border Classes="section">
               <StackPanel Spacing="8">
-                <TextBlock Text="Engine" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <TextBlock Text="Engine" Classes="sectionTitle" />
                 <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="Profile" Foreground="#7F879B" VerticalAlignment="Center" />
-                  <Border Grid.Column="1" Background="#10141C" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="4" Padding="10,6">
-                    <TextBlock Text="{Binding CwDecoderProfile}" Foreground="#DDE7FF" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="0" Text="Profile" Classes="fieldLabel" />
+                  <Border Grid.Column="1" Background="#050608" BorderBrush="#292B31" BorderThickness="1" CornerRadius="3" Padding="10,5">
+                    <TextBlock Text="{Binding CwDecoderProfile}" Classes="fieldValue" VerticalAlignment="Center" />
                   </Border>
                 </Grid>
                 <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="Worker" Foreground="#7F879B" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="1" Text="{Binding CwDecoderWorker}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                  <TextBlock Grid.Column="0" Text="Worker" Classes="fieldLabel" />
+                  <TextBlock Grid.Column="1" Text="{Binding CwDecoderWorker}" Classes="fieldValue" TextWrapping="Wrap" />
                 </Grid>
               </StackPanel>
             </Border>
 
-            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+            <Border Classes="section">
               <StackPanel Spacing="8">
-                <TextBlock Text="Tone And Filter" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <TextBlock Text="Tone And Filter" Classes="sectionTitle" />
                 <Grid ColumnDefinitions="92,130,Auto" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="Pitch" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="0" Text="Pitch" Classes="fieldLabel" />
                   <NumericUpDown Grid.Column="1" Minimum="300" Maximum="1200" Increment="10" Value="{Binding CwPitchHz}" FormatString="F0" Width="120" />
-                  <TextBlock Grid.Column="2" Text="Hz" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="Hz" Classes="fieldValue" VerticalAlignment="Center" />
                 </Grid>
                 <Grid ColumnDefinitions="92,130,Auto" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="Bandwidth" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="0" Text="Bandwidth" Classes="fieldLabel" />
                   <NumericUpDown Grid.Column="1" Minimum="40" Maximum="600" Increment="10" Value="{Binding CwBandwidthHz}" FormatString="F0" Width="120" />
-                  <TextBlock Grid.Column="2" Text="Hz" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="Hz" Classes="fieldValue" VerticalAlignment="Center" />
                 </Grid>
                 <CheckBox Content="Matched filter" IsChecked="{Binding CwMatchedFilterEnabled}" />
                 <TextBlock Text="Matched filter follows fldigi's narrow CW filter shape. Use it for real signals; turn it off only for experiments."
@@ -74,21 +68,21 @@
               </StackPanel>
             </Border>
 
-            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+            <Border Classes="section">
               <StackPanel Spacing="8">
-                <TextBlock Text="Tracking" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <TextBlock Text="Tracking" Classes="sectionTitle" />
                 <CheckBox Content="Auto find tone" IsChecked="{Binding CwAutoToneSearchEnabled}" />
                 <CheckBox Content="AFC" IsChecked="{Binding CwAfcEnabled}" />
                 <Grid ColumnDefinitions="92,130,Auto" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="Search span" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="0" Text="Search span" Classes="fieldLabel" />
                   <NumericUpDown Grid.Column="1" Minimum="50" Maximum="800" Increment="10" Value="{Binding CwToneSearchSpanHz}" FormatString="F0" Width="120" />
-                  <TextBlock Grid.Column="2" Text="Hz" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="Hz" Classes="fieldValue" VerticalAlignment="Center" />
                 </Grid>
                 <CheckBox Content="Track WPM" IsChecked="{Binding CwTrackingEnabled}" />
                 <Grid ColumnDefinitions="92,130,Auto" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="WPM range" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="0" Text="WPM range" Classes="fieldLabel" />
                   <NumericUpDown Grid.Column="1" Minimum="1" Maximum="30" Increment="1" Value="{Binding CwTrackingRangeWpm}" FormatString="F0" Width="120" />
-                  <TextBlock Grid.Column="2" Text="WPM" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="WPM" Classes="fieldValue" VerticalAlignment="Center" />
                 </Grid>
                 <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
                   <TextBlock Grid.Column="0" Text="Limits" Foreground="#7F879B" VerticalAlignment="Top" Margin="0,6,0,0" />
@@ -106,9 +100,9 @@
               </StackPanel>
             </Border>
 
-            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+            <Border Classes="section">
               <StackPanel Spacing="8">
-                <TextBlock Text="Decode Behavior" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <TextBlock Text="Decode Behavior" Classes="sectionTitle" />
                 <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
                   <TextBlock Grid.Column="0" Text="Attack" Foreground="#7F879B" VerticalAlignment="Center" />
                   <ComboBox Grid.Column="1" ItemsSource="{Binding CwAttackOptions}" SelectedItem="{Binding CwSelectedAttack}" />
@@ -135,66 +129,68 @@
         </ScrollViewer>
       </Border>
 
-      <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="10">
-        <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+      <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="8">
+        <Border Grid.Row="0" Classes="panel">
           <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
             <Grid Grid.Row="0" ColumnDefinitions="90,*,90,*,90,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Status" Foreground="#7F879B" />
-              <TextBlock Grid.Column="1" Text="{Binding CwDecoderStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-              <TextBlock Grid.Column="2" Text="Pitch Est" Foreground="#7F879B" />
-              <TextBlock Grid.Column="3" Text="{Binding CwEstimatedPitchDisplay}" Foreground="#C4C8D8" />
-              <TextBlock Grid.Column="4" Text="WPM Est" Foreground="#7F879B" />
-              <TextBlock Grid.Column="5" Text="{Binding CwEstimatedWpmDisplay}" Foreground="#C4C8D8" />
+              <TextBlock Grid.Column="0" Text="Status" Classes="fieldLabel" />
+              <TextBlock Grid.Column="1" Text="{Binding CwDecoderStatus}" Classes="fieldValue" TextWrapping="Wrap" />
+              <TextBlock Grid.Column="2" Text="Pitch Est" Classes="fieldLabel" />
+              <TextBlock Grid.Column="3" Text="{Binding CwEstimatedPitchDisplay}" Classes="fieldValue" />
+              <TextBlock Grid.Column="4" Text="WPM Est" Classes="fieldLabel" />
+              <TextBlock Grid.Column="5" Text="{Binding CwEstimatedWpmDisplay}" Classes="fieldValue" />
             </Grid>
             <Grid Grid.Row="1" ColumnDefinitions="90,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Confidence" Foreground="#7F879B" />
-              <TextBlock Grid.Column="1" Text="{Binding CwDecoderConfidenceDisplay}" Foreground="#C4C8D8" />
+              <TextBlock Grid.Column="0" Text="Confidence" Classes="fieldLabel" />
+              <TextBlock Grid.Column="1" Text="{Binding CwDecoderConfidenceDisplay}" Classes="fieldValue" />
             </Grid>
           </Grid>
         </Border>
 
-        <Border Grid.Row="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+        <Border Grid.Row="1" Classes="panel">
           <Grid RowDefinitions="Auto,*">
             <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-              <TextBlock Text="Decoded Text" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="Decoded Text" Classes="sectionTitle" />
               <Button Grid.Column="1" Content="Clear" Command="{Binding ClearCwDecodedTextCommand}" />
             </Grid>
             <TextBox Grid.Row="1"
                      Text="{Binding CwDecodedText}"
+                     Classes="monospace"
                      AcceptsReturn="True"
                      IsReadOnly="True"
                      TextWrapping="Wrap"
                      FontSize="15" />
           </Grid>
         </Border>
+
       </Grid>
 
-      <Border Grid.Column="2" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+      <Border Grid.Column="2" Classes="panel">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Spacing="10">
-            <TextBlock Text="Keyer And Logging" FontSize="16" FontWeight="SemiBold" />
+          <StackPanel Spacing="12">
+            <TextBlock Text="Keyer And Logging" Classes="sectionTitle" />
 
-            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+            <Border Classes="section">
               <StackPanel Spacing="8">
-                <TextBlock Text="CW Keyer" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <TextBlock Text="CW Keyer" Classes="sectionTitle" />
                 <Grid ColumnDefinitions="82,120,Auto" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="Pitch" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="0" Text="Pitch" Classes="fieldLabel" />
                   <NumericUpDown Grid.Column="1" Minimum="300" Maximum="900" Increment="10" Value="{Binding CwPitchHz}" FormatString="F0" Width="110" />
-                  <TextBlock Grid.Column="2" Text="Hz" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="Hz" Classes="fieldValue" VerticalAlignment="Center" />
                 </Grid>
                 <Grid ColumnDefinitions="82,120,Auto" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="Speed" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="0" Text="Speed" Classes="fieldLabel" />
                   <NumericUpDown Grid.Column="1" Minimum="6" Maximum="48" Increment="1" Value="{Binding CwWpm}" FormatString="F0" Width="110" />
-                  <TextBlock Grid.Column="2" Text="WPM" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="WPM" Classes="fieldValue" VerticalAlignment="Center" />
                 </Grid>
                 <Button Content="Apply Rig CW Settings" Command="{Binding ApplyCwRigSettingsCommand}" HorizontalAlignment="Left" />
-                <TextBlock Text="{Binding CwTxStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding CwTxStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" />
               </StackPanel>
             </Border>
 
-            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+            <Border Classes="section">
               <StackPanel Spacing="8">
-                <TextBlock Text="Quick Macros" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <TextBlock Text="Quick Macros" Classes="sectionTitle" />
                 <TextBlock Text="Macros expand %mycall from settings and %tocall from the CW log callsign field."
                            Foreground="#8E97AC"
                            TextWrapping="Wrap"
@@ -218,9 +214,9 @@
               </StackPanel>
             </Border>
 
-            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+            <Border Classes="section">
               <StackPanel Spacing="8">
-                <TextBlock Text="Send Text" FontWeight="SemiBold" Foreground="#DDE7FF" />
+                <TextBlock Text="Send Text" Classes="sectionTitle" />
                 <TextBox Text="{Binding CwSendText}" AcceptsReturn="True" Height="120" TextWrapping="Wrap" Watermark="Type CW text to send with the rig keyer" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <Button Content="Send" Command="{Binding QueueCwSendTextCommand}" />
@@ -229,10 +225,10 @@
               </StackPanel>
             </Border>
 
-            <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="9">
+            <Border Classes="section">
               <StackPanel Spacing="8">
-                <TextBlock Text="CW / Longwave Log" FontWeight="SemiBold" Foreground="#DDE7FF" />
-                <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+                <TextBlock Text="CW / Longwave Log" Classes="sectionTitle" />
+                <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" />
                 <TextBlock Text="{Binding LongwaveQuickLogSummary}" Foreground="#E9F3FF" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <Grid ColumnDefinitions="70,*" ColumnSpacing="8">
                   <TextBlock Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />

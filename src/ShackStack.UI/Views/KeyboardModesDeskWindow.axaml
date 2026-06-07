@@ -9,15 +9,16 @@
         MinHeight="640"
         Title="Keyboard Modes Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
-        Background="#0F1117"
-        Foreground="#C4C8D8">
-  <Grid RowDefinitions="Auto,*" Margin="10">
-    <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,10">
+        Background="#050607"
+        Foreground="#D8D8DC"
+        Classes="operatorDesk">
+  <Grid RowDefinitions="Auto,*" Margin="8">
+    <Border Grid.Row="0" Classes="panel" Padding="10,8" Margin="0,0,0,8">
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Spacing="4">
-          <TextBlock Text="Keyboard Modes Desk" FontSize="20" FontWeight="SemiBold" />
+          <TextBlock Text="Keyboard Modes Desk" Classes="sectionTitle" />
           <TextBlock Text="PSK31/63 receive using the fldigi-derived GPL chain. Olivia, Contestia, and MFSK can join this desk next."
-                     Foreground="#AAB1C7"
+                     Foreground="#A8A8AE"
                      TextWrapping="Wrap" />
         </StackPanel>
         <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -28,58 +29,58 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="360,*" ColumnSpacing="10">
-      <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+    <Grid Grid.Row="1" ColumnDefinitions="360,*" ColumnSpacing="8">
+      <Border Grid.Column="0" Classes="panel" Padding="10">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Spacing="10">
-            <TextBlock Text="Receive Setup" FontSize="16" FontWeight="SemiBold" />
+          <StackPanel Spacing="8">
+            <TextBlock Text="Receive Setup" Classes="sectionTitle" />
             <TextBlock Text="Use USB-D/LSB-D and tune the PSK trace near the selected audio center. AFC will show the small correction it is tracking."
-                       Foreground="#AAB1C7"
+                       Foreground="#A8A8AE"
                        TextWrapping="Wrap" />
             <CheckBox Content="Use tuned frequency" IsChecked="{Binding KeyboardUseCurrentRadioFrequency}" />
-            <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
+            <Grid ColumnDefinitions="92,*" ColumnSpacing="8">
+              <TextBlock Grid.Column="0" Text="Mode" Foreground="#8E9096" VerticalAlignment="Center" />
               <ComboBox Grid.Column="1" ItemsSource="{Binding KeyboardModeOptions}" SelectedItem="{Binding KeyboardSelectedMode}" />
             </Grid>
-            <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Tune" Foreground="#7F879B" VerticalAlignment="Center" />
+            <Grid ColumnDefinitions="92,*" ColumnSpacing="8">
+              <TextBlock Grid.Column="0" Text="Tune" Foreground="#8E9096" VerticalAlignment="Center" />
               <AutoCompleteBox Grid.Column="1"
                                ItemsSource="{Binding KeyboardFrequencyOptions}"
                                Text="{Binding KeyboardSelectedFrequency}"
                                FilterMode="Contains"
                                MinimumPrefixLength="0" />
             </Grid>
-            <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Audio Hz" Foreground="#7F879B" VerticalAlignment="Center" />
+            <Grid ColumnDefinitions="92,*" ColumnSpacing="8">
+              <TextBlock Grid.Column="0" Text="Audio Hz" Foreground="#8E9096" VerticalAlignment="Center" />
               <TextBox Grid.Column="1" Text="{Binding KeyboardAudioCenterHz}" />
             </Grid>
-            <Border Background="#101827" BorderBrush="#263248" BorderThickness="1" CornerRadius="6" Padding="8">
+            <Border Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="3" Padding="8">
               <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
-                <TextBlock Grid.Row="0" Text="{Binding KeyboardTuneHelperSuggestion}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="0" Text="{Binding KeyboardTuneHelperSuggestion}" Foreground="#D8D8DC" TextWrapping="Wrap" />
                 <Button Grid.Row="1" Content="Apply Tune Helper" Command="{Binding ApplyKeyboardTuneHelperCommand}" HorizontalAlignment="Left" />
               </Grid>
             </Border>
             <CheckBox Content="Reverse BPSK polarity" IsChecked="{Binding KeyboardReversePolarity}" />
-            <Border Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
+            <Border Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="3" Padding="10">
               <StackPanel Spacing="8">
-                <TextBlock Text="Status" FontSize="13" FontWeight="SemiBold" />
-                <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="RX" Foreground="#7F879B" />
-                  <TextBlock Grid.Column="1" Text="{Binding KeyboardRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                <TextBlock Text="Status" Classes="sectionTitle" />
+                <Grid ColumnDefinitions="92,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="RX" Foreground="#8E9096" />
+                  <TextBlock Grid.Column="1" Text="{Binding KeyboardRxStatus}" Foreground="#D8D8DC" TextWrapping="Wrap" />
                 </Grid>
-                <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
-                  <TextBlock Grid.Column="1" Text="{Binding KeyboardSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" FontFamily="Consolas" />
+                <Grid ColumnDefinitions="92,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Session" Foreground="#8E9096" />
+                  <TextBlock Grid.Column="1" Text="{Binding KeyboardSessionNotes}" Foreground="#D8D8DC" TextWrapping="Wrap" FontFamily="Consolas" />
                 </Grid>
               </StackPanel>
             </Border>
-            <Border Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
+            <Border Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="3" Padding="10">
               <StackPanel Spacing="8">
-                <TextBlock Text="Keyboard / Longwave Log" FontSize="13" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding LongwaveQuickLogSummary}" Foreground="#E9F3FF" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="Keyboard / Longwave Log" Classes="sectionTitle" />
+                <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding LongwaveQuickLogSummary}" Foreground="#E8E8EA" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <Grid ColumnDefinitions="74,*" ColumnSpacing="8">
-                  <TextBlock Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="0" Text="Logbook" Foreground="#8E9096" VerticalAlignment="Center" />
                   <ComboBox Grid.Column="1" ItemsSource="{Binding LongwaveLogbooks}" SelectedItem="{Binding SelectedLongwaveLogbook}">
                     <ComboBox.ItemTemplate>
                       <DataTemplate x:DataType="vm:LongwaveLogbookItem">
@@ -89,11 +90,11 @@
                   </ComboBox>
                 </Grid>
                 <Grid ColumnDefinitions="74,*" ColumnSpacing="8">
-                  <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="0" Text="Call" Foreground="#8E9096" VerticalAlignment="Center" />
                   <TextBox Grid.Column="1" Text="{Binding LongwaveLogCallsign}" Watermark="Worked station" />
                 </Grid>
                 <Grid ColumnDefinitions="74,*,*" ColumnSpacing="8">
-                  <TextBlock Grid.Column="0" Text="RST S/R" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="0" Text="RST S/R" Foreground="#8E9096" VerticalAlignment="Center" />
                   <TextBox Grid.Column="1" Text="{Binding LongwaveLogRstSent}" />
                   <TextBox Grid.Column="2" Text="{Binding LongwaveLogRstReceived}" />
                 </Grid>
@@ -109,10 +110,10 @@
         </ScrollViewer>
       </Border>
 
-      <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
-        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
+      <Border Grid.Column="1" Classes="panel" Padding="10">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
           <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-            <TextBlock Text="Decoded Text" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="Decoded Text" Classes="sectionTitle" />
             <Button Grid.Column="1" Content="Clear" Command="{Binding ClearKeyboardDecodedTextCommand}" />
           </Grid>
           <TextBox Grid.Row="1"
@@ -121,13 +122,13 @@
                    IsReadOnly="True"
                    TextWrapping="Wrap"
                    FontSize="15" />
-          <Border Grid.Row="2" Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
+          <Border Grid.Row="2" Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="3" Padding="10">
             <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
-              <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+              <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <StackPanel Spacing="4">
-                  <TextBlock Text="Transmit Prep" FontSize="16" FontWeight="SemiBold" />
+                  <TextBlock Text="Transmit Prep" Classes="sectionTitle" />
                   <TextBlock Text="Build a fldigi-style BPSK31/63 WAV first, then send the prepared audio through the normal radio/PTT path."
-                             Foreground="#AAB1C7"
+                             Foreground="#A8A8AE"
                              TextWrapping="Wrap" />
                 </StackPanel>
                 <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -142,8 +143,8 @@
                        TextWrapping="Wrap"
                        FontSize="15" />
               <Grid Grid.Row="2" RowDefinitions="Auto,Auto" RowSpacing="4">
-                <TextBlock Grid.Row="0" Text="{Binding KeyboardPreparedTransmitStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
-                <TextBlock Grid.Row="1" Text="{Binding KeyboardPreparedTransmitPath}" Foreground="#7F879B" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="0" Text="{Binding KeyboardPreparedTransmitStatus}" Foreground="#D8D8DC" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="1" Text="{Binding KeyboardPreparedTransmitPath}" Foreground="#8E9096" TextWrapping="Wrap" />
               </Grid>
             </Grid>
           </Border>

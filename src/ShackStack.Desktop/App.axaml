@@ -4,5 +4,6 @@
              RequestedThemeVariant="Default">
   <Application.Styles>
     <FluentTheme />
+    <StyleInclude Source="avares://ShackStack.UI/Styles/OperatorPanelStyles.axaml" />
   </Application.Styles>
 </Application>

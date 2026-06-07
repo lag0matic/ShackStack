@@ -130,6 +130,8 @@ class CwFldigiDecoder:
         self._rx_pattern = ""
         self._last_element = 0
         self._space_sent = True
+        self._recent_character_gap = 0.0
+        self._character_gaps_seen = 0
         self._agc_peak = 1.0
         self._noise_floor = 1.0
         self._sig_avg = 0.0
@@ -375,11 +377,13 @@ class CwFldigiDecoder:
         if not force and silence < (char_gap * self._receive_dot):
             return
 
+        ratio_word_gap_samples = word_gap * self._receive_dot
+        learned_word_gap_samples = self._recent_character_gap * 1.85 if self._character_gaps_seen >= 3 else 0.0
+        word_gap_samples = max(ratio_word_gap_samples, learned_word_gap_samples)
         if self._rx_pattern and (
             force
             or (
                 silence >= (char_gap * self._receive_dot)
-                and silence <= (word_gap * self._receive_dot)
                 and self._state == self.RS_AFTER_TONE
             )
         ):
@@ -393,9 +397,18 @@ class CwFldigiDecoder:
             self._rx_pattern = ""
             self._state = self.RS_IDLE
             self._space_sent = False
+            if not force:
+                if self._recent_character_gap <= 0.0:
+                    self._recent_character_gap = float(silence)
+                elif silence <= max(word_gap_samples, self._recent_character_gap * 2.4):
+                    self._recent_character_gap = (0.82 * self._recent_character_gap) + (0.18 * float(silence))
+                self._character_gaps_seen += 1
+            if silence > word_gap_samples and not self._space_sent:
+                self._emit(" ", confidence=0.95, is_space=True)
+                self._space_sent = True
             return
 
-        if silence > (word_gap * self._receive_dot) and not self._space_sent:
+        if silence > word_gap_samples and not self._space_sent:
             self._emit(" ", confidence=0.95, is_space=True)
             self._space_sent = True
 
@@ -430,6 +443,7 @@ class CwFldigiDecoder:
             "Tight": (1.65, 3.35),
             "Normal": (2.0, 4.0),
             "Loose": (2.4, 5.0),
+            "Slow": (2.0, 6.0),
         }.get(self._spacing, (2.0, 4.0))
 
     def _squelch_threshold(self) -> float:

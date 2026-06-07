@@ -6,6 +6,23 @@ using ShackStack.Core.Abstractions.Models;
 namespace ShackStack.UI.ViewModels;
 
 public sealed record ModePreset(string Label, RadioMode Mode, IBrush Brush);
+public sealed record CwSkimmerLaneDisplayState(
+    int LaneId,
+    double AudioToneHz,
+    string Transcript,
+    double Confidence,
+    int LaneAge,
+    double CopyRateCharactersPerSecond,
+    DateTimeOffset LastUpdatedUtc);
+public sealed record CwSkimmerNeuralLaneDisplayState(
+    int LaneId,
+    double AudioToneHz,
+    string NeuralText,
+    string NeuralTokenText,
+    double NeuralBadLaneScore,
+    string NeuralTokenCandidates,
+    string NeuralStatus,
+    DateTimeOffset LastUpdatedUtc);
 public sealed record BandPreset(string Label, long FrequencyHz, IBrush Brush);
 public sealed record FrequencyMarker(string Label);
 public sealed record FilterPreset(string Label, int Slot, IBrush Brush);

@@ -13,10 +13,47 @@
         MinHeight="700"
         Title="{Binding Title}"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
-        Background="#0F1117"
+        Background="#050607"
         Foreground="#C4C8D8"
         mc:Ignorable="d">
   <Window.Styles>
+    <Style Selector="TextBlock.shellTitle">
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="#E8E8EA" />
+    </Style>
+    <Style Selector="TextBlock.shellSubtitle">
+      <Setter Property="Foreground" Value="#9BA3B1" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.shellLabel">
+      <Setter Property="Foreground" Value="#8B92A0" />
+    </Style>
+    <Style Selector="TextBlock.shellValue">
+      <Setter Property="Foreground" Value="#D8D8DC" />
+    </Style>
+    <Style Selector="Border.modePanel">
+      <Setter Property="Background" Value="#0B0C0F" />
+      <Setter Property="BorderBrush" Value="#202126" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="10" />
+      <Setter Property="Margin" Value="0,8,0,0" />
+    </Style>
+    <Style Selector="Border.modeSection">
+      <Setter Property="Background" Value="#08090C" />
+      <Setter Property="BorderBrush" Value="#1B1C21" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="10" />
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="10,3" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
     <Style Selector="TabControl TabItem">
       <Setter Property="MinHeight" Value="24" />
       <Setter Property="Padding" Value="8,3" />
@@ -24,17 +61,17 @@
       <Setter Property="FontSize" Value="11" />
       <Setter Property="Foreground" Value="#8E97AE" />
       <Setter Property="Background" Value="#0D1118" />
-      <Setter Property="BorderBrush" Value="#1E2128" />
+      <Setter Property="BorderBrush" Value="#202126" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
     <Style Selector="TabControl TabItem:selected">
       <Setter Property="Foreground" Value="#F2F6FF" />
-      <Setter Property="Background" Value="#1A2232" />
-      <Setter Property="BorderBrush" Value="#7B8CDE" />
+      <Setter Property="Background" Value="#181A1F" />
+      <Setter Property="BorderBrush" Value="#2D2F36" />
     </Style>
   </Window.Styles>
   <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
-    <Border Grid.Row="0" Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="0,0,0,1" Padding="16,0" Height="42">
+    <Border Grid.Row="0" Background="#050608" BorderBrush="#202126" BorderThickness="0,0,0,1" Padding="16,0" Height="42">
       <Grid ColumnDefinitions="Auto,*,Auto">
         <Image Grid.Column="0"
                Source="avares://ShackStack.Desktop/Assets/shackstack-wordmark.png"
@@ -46,7 +83,7 @@
                    Text="{Binding HeaderCallsign}"
                    FontSize="15"
                    FontWeight="SemiBold"
-                   Foreground="#7B8CDE"
+                   Foreground="#B9BBC2"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center" />
         <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
@@ -69,7 +106,7 @@
       </Grid>
     </Border>
 
-    <Border Grid.Row="1" Background="#0D0F14" BorderBrush="#1E2128" BorderThickness="0,0,0,1" Padding="16,6" Height="98">
+    <Border Grid.Row="1" Background="#08090B" BorderBrush="#202126" BorderThickness="0,0,0,1" Padding="16,6" Height="98">
       <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="18">
         <StackPanel Grid.Column="0" Spacing="2">
           <TextBlock Text="VFO A" Foreground="#666E84" FontSize="11" Margin="4,0,0,0" />
@@ -115,7 +152,7 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <Border Grid.Column="1" Width="1" Background="#1E2128" Margin="0,4" />
+            <Border Grid.Column="1" Width="1" Background="#202126" Margin="0,4" />
             <Button Grid.Column="2" Content="A/B" Command="{Binding ExchangeVfosCommand}" MinHeight="22" Padding="10,2" />
             <Button Grid.Column="3" Content="A=B" Command="{Binding EqualizeVfosCommand}" MinHeight="22" Padding="10,2" />
             <Button Grid.Column="4" Content="Split" Command="{Binding ToggleSplitCommand}" Background="{Binding SplitButtonBrush}" MinHeight="22" Padding="10,2" />
@@ -134,9 +171,9 @@
     </Border>
 
     <Grid Grid.Row="2" Grid.RowSpan="4" Margin="0" IsVisible="{Binding IsOperatingWorkspace}" ColumnDefinitions="2.3*,0.9*" RowDefinitions="*,Auto,Auto,Auto">
-      <Border Grid.Row="0" Grid.Column="0" Background="#060810" BorderBrush="#1E2128" BorderThickness="0,0,1,0" Padding="0">
+      <Border Grid.Row="0" Grid.Column="0" Background="#030405" BorderBrush="#202126" BorderThickness="0,0,1,0" Padding="0">
         <Grid RowDefinitions="Auto,Auto,*,Auto">
-          <Border Grid.Row="0" Background="#0B0E13" BorderBrush="#1E2128" BorderThickness="0,0,0,1" Padding="8,6" Height="138">
+          <Border Grid.Row="0" Background="#060708" BorderBrush="#202126" BorderThickness="0,0,0,1" Padding="8,6" Height="138">
             <Grid ColumnDefinitions="52,*">
               <Grid Grid.Column="0" RowDefinitions="*,*,*,*,*">
                 <TextBlock Grid.Row="0" Text="{Binding SpectrumDbLabels[0]}" Foreground="#647089" FontSize="10" VerticalAlignment="Top" />
@@ -163,7 +200,7 @@
                         HorizontalAlignment="Center"
                         Opacity="0.95" />
                 <Path Data="{Binding SpectrumPathData}"
-                      Stroke="#8AA4FF"
+                      Stroke="#A8ACB8"
                       StrokeThickness="1.5"
                       Stretch="Fill"
                       HorizontalAlignment="Stretch"
@@ -172,13 +209,13 @@
             </Grid>
           </Border>
 
-          <Border Grid.Row="1" Background="#080A0F" BorderBrush="#1E2128" BorderThickness="0,0,0,1" Padding="8,6">
+          <Border Grid.Row="1" Background="#050608" BorderBrush="#202126" BorderThickness="0,0,0,1" Padding="8,6">
             <Grid ColumnDefinitions="Auto,90,Auto,90,24,Auto,Auto,Auto,Auto" ColumnSpacing="8">
               <TextBlock Grid.Column="0" Text="{Binding WaterfallFloorPercent, StringFormat=Floor {0}%}" Foreground="#7F879B" FontSize="10" VerticalAlignment="Center" />
               <Slider Grid.Column="1" Minimum="0" Maximum="95" Value="{Binding WaterfallFloorPercent}" VerticalAlignment="Center" />
               <TextBlock Grid.Column="2" Text="{Binding WaterfallCeilingPercent, StringFormat=Ceiling {0}%}" Foreground="#7F879B" FontSize="10" VerticalAlignment="Center" />
               <Slider Grid.Column="3" Minimum="1" Maximum="100" Value="{Binding WaterfallCeilingPercent}" VerticalAlignment="Center" />
-              <Border Grid.Column="4" Width="1" Background="#1E2128" Margin="4,0" />
+              <Border Grid.Column="4" Width="1" Background="#202126" Margin="4,0" />
               <TextBlock Grid.Column="5" Text="Zoom" Foreground="#7F879B" FontSize="10" VerticalAlignment="Center" />
                 <Button Grid.Column="6" Content="1x" Command="{Binding SetWaterfallZoomCommand}" CommandParameter="1" Background="{Binding Zoom1Brush}" MinWidth="36" Padding="8,2" />
                 <Button Grid.Column="7" Content="2x" Command="{Binding SetWaterfallZoomCommand}" CommandParameter="2" Background="{Binding Zoom2Brush}" MinWidth="36" Padding="8,2" />
@@ -189,7 +226,7 @@
             </Grid>
           </Border>
 
-          <Border Grid.Row="2" Background="#0B0E13" Padding="6">
+          <Border Grid.Row="2" Background="#060708" Padding="6">
             <Grid ColumnDefinitions="52,*">
               <Border Grid.Column="1">
                 <Grid>
@@ -206,12 +243,12 @@
             </Grid>
           </Border>
 
-          <Border Grid.Row="3" Background="#080A0F" BorderBrush="#1E2128" BorderThickness="0,1,0,0" Padding="8,6">
+          <Border Grid.Row="3" Background="#050608" BorderBrush="#202126" BorderThickness="0,1,0,0" Padding="8,6">
             <Grid ColumnDefinitions="52,*">
               <Grid Grid.Column="1" ColumnDefinitions="*,*,*,*,*">
                 <TextBlock Grid.Column="0" Text="{Binding FrequencyMarkers[0]}" Foreground="#7F879B" FontSize="10" HorizontalAlignment="Left" />
                 <TextBlock Grid.Column="1" Text="{Binding FrequencyMarkers[1]}" Foreground="#7F879B" FontSize="10" HorizontalAlignment="Center" />
-                <TextBlock Grid.Column="2" Text="{Binding FrequencyMarkers[2]}" Foreground="#AFC4FF" FontSize="10" HorizontalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="{Binding FrequencyMarkers[2]}" Foreground="#C7CAD2" FontSize="10" HorizontalAlignment="Center" />
                 <TextBlock Grid.Column="3" Text="{Binding FrequencyMarkers[3]}" Foreground="#7F879B" FontSize="10" HorizontalAlignment="Center" />
                 <TextBlock Grid.Column="4" Text="{Binding FrequencyMarkers[4]}" Foreground="#7F879B" FontSize="10" HorizontalAlignment="Right" />
               </Grid>
@@ -220,48 +257,48 @@
         </Grid>
       </Border>
 
-      <Border Grid.Row="0" Grid.RowSpan="4" Grid.Column="1" Background="#0A0C10" Padding="0">
+      <Border Grid.Row="0" Grid.RowSpan="4" Grid.Column="1" Background="#050607" BorderBrush="#20242C" BorderThickness="1,0,0,0" Padding="0">
         <Grid RowDefinitions="Auto,*">
-          <Border Grid.Row="0" BorderBrush="#1E2128" BorderThickness="0,0,0,1" Padding="12,8">
-            <TextBlock Text="Session" FontSize="16" FontWeight="SemiBold" />
+          <Border Grid.Row="0" BorderBrush="#202126" BorderThickness="0,0,0,1" Padding="10,7">
+            <TextBlock Text="Session" Classes="shellTitle" />
           </Border>
 
           <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="12" Margin="12">
+            <StackPanel Spacing="10" Margin="10">
               <TabControl SelectedIndex="{Binding SelectedModePanelTabIndex}">
                 <TabItem Header="Voice">
-                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                  <Border Classes="modePanel">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="Voice Operations" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="Voice" Classes="shellTitle" />
                       <TextBlock Grid.Row="1"
                                  Text="Monitor levels, key PTT, work voice contacts, and keep logging close at hand."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
                       <Grid Grid.Row="2" RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                        <Border Grid.Row="0" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
+                        <Border Grid.Row="0" Classes="modeSection">
                           <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
                             <StackPanel Spacing="8">
-                              <TextBlock Text="Voice Desk" FontSize="15" FontWeight="SemiBold" />
-                              <TextBlock Text="Open voice operating controls, POTA tools, and logging." Foreground="#AAB1C7" TextWrapping="Wrap" />
+                              <TextBlock Text="Voice Desk" Classes="shellTitle" />
+                              <TextBlock Text="Open voice operating controls, POTA tools, and logging." Classes="shellSubtitle" />
                             </StackPanel>
                             <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
                               <Button Content="Open Desk" Click="OnOpenVoiceDeskClicked" Margin="0,0,8,6" />
                             </WrapPanel>
                             <Grid Grid.Row="2" ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="Monitor" Foreground="#7F879B" />
-                              <TextBlock Grid.Column="1" Text="{Binding AudioMonitorState}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                              <TextBlock Grid.Column="0" Text="Monitor" Classes="shellLabel" />
+                              <TextBlock Grid.Column="1" Text="{Binding AudioMonitorState}" Classes="shellValue" TextWrapping="Wrap" />
                             </Grid>
                             <Grid Grid.Row="3" ColumnDefinitions="72,*" ColumnSpacing="10">
-                              <TextBlock Grid.Column="0" Text="TX" Foreground="#7F879B" />
-                              <TextBlock Grid.Column="1" Text="{Binding VoiceTxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+                              <TextBlock Grid.Column="0" Text="TX" Classes="shellLabel" />
+                              <TextBlock Grid.Column="1" Text="{Binding VoiceTxStatus}" Classes="shellValue" TextWrapping="Wrap" />
                             </Grid>
                           </Grid>
                         </Border>
 
-                        <Border Grid.Row="1" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
+                        <Border Grid.Row="1" Classes="modeSection">
                           <StackPanel Spacing="8">
-                            <TextBlock Text="Quick Levels" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="Quick Levels" Classes="shellTitle" />
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                               <TextBlock Grid.Column="0" Text="RX" Foreground="#7F879B" VerticalAlignment="Center" />
                               <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding RxLevelPercent}" Height="10" />
@@ -280,10 +317,10 @@
                           </StackPanel>
                         </Border>
 
-                        <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="10">
+                        <Border Grid.Row="2" Classes="modeSection">
                           <StackPanel Spacing="8">
-                            <TextBlock Text="Quick PTT" FontSize="15" FontWeight="SemiBold" />
-                            <TextBlock Text="Use this for a quick transmission without opening the full operating view." Foreground="#AAB1C7" TextWrapping="Wrap" />
+                            <TextBlock Text="Quick PTT" Classes="shellTitle" />
+                            <TextBlock Text="Use this for a quick transmission without opening the full operating view." Classes="shellSubtitle" />
                             <Border Background="#18202E"
                                     BorderBrush="#2A3550"
                                     BorderThickness="1"
@@ -307,18 +344,18 @@
                 </TabItem>
 
                 <TabItem Header="Digital Voice">
-                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                  <Border Classes="modePanel">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="FreeDV" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="FreeDV" Classes="shellTitle" />
                       <TextBlock Grid.Row="1"
                                  Text="HF digital voice using the official Codec2/FreeDV runtime."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
-                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                      <Border Grid.Row="2" Classes="modeSection">
                         <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
                           <StackPanel Spacing="8">
-                            <TextBlock Text="FreeDV Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="FreeDV Desk" Classes="shellTitle" />
                             <TextBlock Text="Open digital voice controls, Codec2 runtime status, and RX/TX prep."
                                        Foreground="#AAB1C7"
                                        TextWrapping="Wrap" />
@@ -347,23 +384,24 @@
                 </TabItem>
 
                 <TabItem Header="CW" IsVisible="{Binding ShowCwPanel}">
-                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                  <Border Classes="modePanel">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="CW" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="CW" Classes="shellTitle" />
                       <TextBlock Grid.Row="1"
                                  Text="Decode Morse, shape the receive filter, send macros, and log CW contacts."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
-                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                      <Border Grid.Row="2" Classes="modeSection">
                         <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
                           <StackPanel Spacing="8">
-                            <TextBlock Text="CW Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="CW Desk" Classes="shellTitle" />
                             <TextBlock Text="Tune the decoder, watch live copy, send keyer text, and log contacts."
                                        Foreground="#AAB1C7"
                                        TextWrapping="Wrap" />
                           </StackPanel>
                           <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
                             <Button Content="Open CW Desk" Click="OnOpenCwDeskClicked" Margin="0,0,8,6" />
+                            <Button Content="Open CW Experiment" Click="OnOpenCwExperimentDeskClicked" Margin="0,0,8,6" />
                             <Button Content="Start RX" Command="{Binding StartCwDecoderCommand}" Margin="0,0,8,6" />
                             <Button Content="Stop RX" Command="{Binding StopCwDecoderCommand}" Margin="0,0,8,6" />
                           </WrapPanel>
@@ -388,18 +426,18 @@
                 </TabItem>
 
                 <TabItem Header="RTTY">
-                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                  <Border Classes="modePanel">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="RTTY" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="RTTY" Classes="shellTitle" />
                       <TextBlock Grid.Row="1"
                                  Text="Copy Baudot RTTY with manual tuning, polarity control, and audio-center help."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
-                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                      <Border Grid.Row="2" Classes="modeSection">
                         <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
                           <StackPanel Spacing="8">
-                            <TextBlock Text="RTTY Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="RTTY Desk" Classes="shellTitle" />
                             <TextBlock Text="Tune USB-D audio, adjust mark/space behavior, and read live copy."
                                        Foreground="#AAB1C7"
                                        TextWrapping="Wrap" />
@@ -424,18 +462,18 @@
                 </TabItem>
 
                 <TabItem Header="Keyboard">
-                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                  <Border Classes="modePanel">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="Keyboard Modes" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="Keyboard Modes" Classes="shellTitle" />
                       <TextBlock Grid.Row="1"
                                  Text="PSK31/63 receive with fldigi-derived filtering, DCD, Varicode, and AFC tracking."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
-                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                      <Border Grid.Row="2" Classes="modeSection">
                         <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
                           <StackPanel Spacing="8">
-                            <TextBlock Text="Keyboard Modes Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="Keyboard Modes Desk" Classes="shellTitle" />
                             <TextBlock Text="Open PSK copy, audio-center tuning, reverse polarity, and live text."
                                        Foreground="#AAB1C7"
                                        TextWrapping="Wrap" />
@@ -460,20 +498,19 @@
                 </TabItem>
 
                 <TabItem Header="Weak Signal">
-                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                  <Border Classes="modePanel">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="Weak-Signal Digital" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="Weak Signal" Classes="shellTitle" />
                       <TextBlock Grid.Row="1"
                                  Text="Run FT8, FT4, WSPR, and JS8 with cycle timing, decode lists, and transmit staging."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
-                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                      <Border Grid.Row="2" Classes="modeSection">
                         <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
                           <StackPanel Spacing="8">
                             <TextBlock Text="Weak-Signal Desk"
-                                       FontSize="15"
-                                       FontWeight="SemiBold" />
+                                       Classes="shellTitle" />
                             <TextBlock Text="Open weak-signal decode, QSO sequencing, and send controls."
                                        Foreground="#AAB1C7"
                                        TextWrapping="Wrap" />
@@ -501,18 +538,18 @@
                 </TabItem>
 
                 <TabItem Header="WeFAX">
-                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                  <Border Classes="modePanel">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="WeFAX" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="WeFAX" Classes="shellTitle" />
                       <TextBlock Grid.Row="1"
                                  Text="Track weather-fax schedules and capture HF radiofax charts."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
-                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                      <Border Grid.Row="2" Classes="modeSection">
                         <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
                           <StackPanel Spacing="8">
-                            <TextBlock Text="WeFAX Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="WeFAX Desk" Classes="shellTitle" />
                             <TextBlock Text="Receive charts, correct alignment, clean up images, and review the archive."
                                        Foreground="#AAB1C7"
                                        TextWrapping="Wrap" />
@@ -529,7 +566,7 @@
                             <TextBlock Grid.Column="0" Text="Image" Foreground="#7F879B" />
                             <TextBlock Grid.Column="1" Text="{Binding WefaxImageStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" />
                           </Grid>
-                          <Border Grid.Row="4" Background="#111827" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="8">
+                          <Border Grid.Row="4" Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="6" Padding="8">
                             <Grid RowDefinitions="Auto,Auto,*" RowSpacing="6">
                               <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
                                 <TextBlock Text="Broadcast Schedule" Foreground="#DDE7FF" FontWeight="SemiBold" />
@@ -543,7 +580,7 @@
                                        MaxHeight="320">
                                 <ListBox.ItemTemplate>
                                   <DataTemplate x:DataType="vm:WefaxScheduleItem">
-                                    <Border Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="5" Padding="7" Margin="0,0,0,5">
+                                    <Border Background="#08090C" BorderBrush="#202126" BorderThickness="1" CornerRadius="5" Padding="7" Margin="0,0,0,5">
                                       <StackPanel Spacing="2">
                                         <TextBlock Text="{Binding SummaryText}" Foreground="#E5ECFF" FontWeight="SemiBold" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding DetailText}" Foreground="#AAB1C7" FontSize="12" TextWrapping="Wrap" />
@@ -562,18 +599,18 @@
                 </TabItem>
 
                 <TabItem Header="SSTV">
-                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                  <Border Classes="modePanel">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="SSTV" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="SSTV" Classes="shellTitle" />
                       <TextBlock Grid.Row="1"
                                  Text="Receive pictures, compose replies, add overlays, and transmit SSTV images."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
 
-                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                      <Border Grid.Row="2" Classes="modeSection">
                         <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
                           <StackPanel Spacing="8">
-                            <TextBlock Text="SSTV Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="SSTV Desk" Classes="shellTitle" />
                             <TextBlock Text="Decode live images, manage received pictures, build replies, and send SSTV."
                                        Foreground="#AAB1C7"
                                        TextWrapping="Wrap" />
@@ -602,17 +639,17 @@
                 </TabItem>
 
                 <TabItem Header="Longwave">
-                  <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                  <Border Classes="modePanel">
                     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                      <TextBlock Grid.Row="0" Text="Longwave" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Grid.Row="0" Text="Longwave" Classes="shellTitle" />
                       <TextBlock Grid.Row="1"
                                  Text="Manage contacts, logbooks, spots, and manual QSO entries."
                                  Foreground="#AAB1C7"
                                  TextWrapping="Wrap" />
-                      <Border Grid.Row="2" Background="#0C1017" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="12">
+                      <Border Grid.Row="2" Classes="modeSection">
                         <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
                           <StackPanel Spacing="8">
-                            <TextBlock Text="Longwave Desk" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="Longwave Desk" Classes="shellTitle" />
                             <TextBlock Text="Review contacts, manage logbooks, refresh spots, and enter QSOs."
                                        Foreground="#AAB1C7"
                                        TextWrapping="Wrap" />
@@ -643,26 +680,26 @@
       <Border Grid.Row="1"
               Grid.Column="0"
               Background="#0D1017"
-              BorderBrush="#1E2128"
+              BorderBrush="#202126"
               BorderThickness="0,1,0,0"
               Padding="12,8"
               Height="96"
               IsVisible="{Binding ShowBandConditionsPanel}">
         <StackPanel Spacing="6">
           <Grid ColumnDefinitions="132,132,132,132,132,*" ColumnSpacing="8">
-            <Border Grid.Column="0" Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="8,6" MinWidth="132">
+            <Border Grid.Column="0" Background="#050608" BorderBrush="#202126" BorderThickness="1" CornerRadius="6" Padding="8,6" MinWidth="132">
               <TextBlock Text="{Binding SolarFluxDisplay}" Foreground="#D3D7DF" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" />
             </Border>
-            <Border Grid.Column="1" Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="8,6" MinWidth="132">
+            <Border Grid.Column="1" Background="#050608" BorderBrush="#202126" BorderThickness="1" CornerRadius="6" Padding="8,6" MinWidth="132">
               <TextBlock Text="{Binding SunspotsDisplay}" Foreground="#D3D7DF" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" />
             </Border>
-            <Border Grid.Column="2" Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="8,6" MinWidth="132">
+            <Border Grid.Column="2" Background="#050608" BorderBrush="#202126" BorderThickness="1" CornerRadius="6" Padding="8,6" MinWidth="132">
               <TextBlock Text="{Binding AIndexDisplay}" Foreground="#D3D7DF" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" />
             </Border>
-            <Border Grid.Column="3" Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="8,6" MinWidth="132">
+            <Border Grid.Column="3" Background="#050608" BorderBrush="#202126" BorderThickness="1" CornerRadius="6" Padding="8,6" MinWidth="132">
               <TextBlock Text="{Binding KIndexDisplay}" Foreground="#D3D7DF" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" />
             </Border>
-            <Border Grid.Column="4" Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="8,6" MinWidth="132">
+            <Border Grid.Column="4" Background="#050608" BorderBrush="#202126" BorderThickness="1" CornerRadius="6" Padding="8,6" MinWidth="132">
               <TextBlock Text="{Binding XRayDisplay}" Foreground="#D3D7DF" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" />
             </Border>
             <TextBlock Grid.Column="5" Text="{Binding BandConditionsUpdated}" Foreground="#6F778A" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center" />
@@ -676,7 +713,7 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:BandConditionCellViewModel">
-                <Border Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="8,6" Width="167" MinWidth="167">
+                <Border Background="#050608" BorderBrush="#202126" BorderThickness="1" CornerRadius="6" Padding="8,6" Width="167" MinWidth="167">
                   <StackPanel Spacing="4">
                     <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="4">
                       <TextBlock Grid.Column="0" Text="D" Foreground="#7F879B" FontSize="10" HorizontalAlignment="Center" />
@@ -701,8 +738,8 @@
 
       <Border Grid.Row="2"
               Grid.Column="0"
-              Background="#080A0F"
-              BorderBrush="#1E2128"
+              Background="#050608"
+              BorderBrush="#202126"
               BorderThickness="0,1,0,0"
               Padding="10,5"
               Height="44">
@@ -714,7 +751,7 @@
             <Button Content="2" Command="{Binding SetPreampCommand}" CommandParameter="2" Background="{Binding Preamp2Brush}" MinWidth="28" Padding="8,2" />
           </StackPanel>
 
-          <Border Grid.Column="1" Width="1" Background="#1E2128" Margin="0,6" />
+          <Border Grid.Column="1" Width="1" Background="#202126" Margin="0,6" />
 
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
             <Button Content="ATT" Command="{Binding ToggleAttenuatorCommand}" Background="{Binding AttenuatorButtonBrush}" MinWidth="64" Padding="10,2" />
@@ -722,7 +759,7 @@
             <Button Content="RETUNE" Command="{Binding RetuneCommand}" MinWidth="76" Padding="10,2" />
           </StackPanel>
 
-          <Border Grid.Column="3" Width="1" Background="#1E2128" Margin="0,6" />
+          <Border Grid.Column="3" Width="1" Background="#202126" Margin="0,6" />
 
           <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
             <TextBlock Text="Filter" Foreground="#666E84" FontSize="10" VerticalAlignment="Center" />
@@ -743,7 +780,7 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <Border Width="1" Background="#1E2128" Margin="2,6" />
+            <Border Width="1" Background="#202126" Margin="2,6" />
             <Button Content="Sharp"
                     Command="{Binding SetFilterShapeCommand}"
                     CommandParameter="sharp"
@@ -762,8 +799,8 @@
 
       <Border Grid.Row="3"
               Grid.Column="0"
-              Background="#0A0C10"
-              BorderBrush="#1E2128"
+              Background="#050608"
+              BorderBrush="#202126"
               BorderThickness="0,1,0,0"
               Padding="10,5"
               Height="64">
@@ -792,7 +829,7 @@
                          MinWidth="28"
                          TextAlignment="Right" />
             </Grid>
-            <Border Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="6,4">
+            <Border Background="#050608" BorderBrush="#202126" BorderThickness="1" CornerRadius="6" Padding="6,4">
               <Grid RowDefinitions="Auto,Auto">
                 <ItemsControl ItemsSource="{Binding SmeterSegmentBrushes}">
                   <ItemsControl.ItemsPanel>
@@ -878,7 +915,7 @@
     </Grid>
 
     <Grid Grid.Row="2" Margin="16" IsVisible="{Binding IsSettingsWorkspace}" ColumnDefinitions="1.05*,1.15*,0.95*">
-      <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+      <Border Grid.Column="0" Background="#0B0C0F" BorderBrush="#202126" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
         <StackPanel Spacing="8">
           <TextBlock Text="Station And Radio" FontSize="18" FontWeight="SemiBold" />
           <TextBlock Text="Station identity and direct radio control settings live here."
@@ -899,7 +936,7 @@
         </StackPanel>
       </Border>
 
-      <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+      <Border Grid.Column="1" Background="#0B0C0F" BorderBrush="#202126" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
         <StackPanel Spacing="8">
           <TextBlock Text="Audio Settings" FontSize="18" FontWeight="SemiBold" />
           <TextBlock Text="Choose the radio and PC audio routes used by the app."
@@ -953,7 +990,7 @@
         </StackPanel>
       </Border>
 
-        <Border Grid.Column="2" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12">
+        <Border Grid.Column="2" Background="#0B0C0F" BorderBrush="#202126" BorderThickness="1" CornerRadius="8" Padding="12">
           <StackPanel Spacing="8">
             <TextBlock Text="Display And Interop" FontSize="18" FontWeight="SemiBold" />
             <TextBlock Text="{Binding SettingsPath, StringFormat=Path: {0}}" Foreground="#C4C8D8" TextWrapping="Wrap" />
@@ -990,7 +1027,7 @@
     </Grid>
 
     <Grid Grid.Row="2" Margin="16" IsVisible="{Binding IsDiagnosticsWorkspace}" ColumnDefinitions="1.2*,1.2*,1*">
-      <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+      <Border Grid.Column="0" Background="#0B0C0F" BorderBrush="#202126" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
         <StackPanel Spacing="8">
           <TextBlock Text="Radio Diagnostics" FontSize="18" FontWeight="SemiBold" />
           <TextBlock Text="Direct CI-V control health and current rig connection details."
@@ -1018,7 +1055,7 @@
         </StackPanel>
       </Border>
 
-      <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+      <Border Grid.Column="1" Background="#0B0C0F" BorderBrush="#202126" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
         <StackPanel Spacing="8">
           <TextBlock Text="Audio Diagnostics" FontSize="18" FontWeight="SemiBold" />
           <TextBlock Text="Current audio routing and live voice-path state."
@@ -1052,7 +1089,7 @@
         </StackPanel>
       </Border>
 
-      <Border Grid.Column="2" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="12">
+      <Border Grid.Column="2" Background="#0B0C0F" BorderBrush="#202126" BorderThickness="1" CornerRadius="8" Padding="12">
         <StackPanel Spacing="8">
           <TextBlock Text="Interop And Conditions" FontSize="18" FontWeight="SemiBold" />
           <TextBlock Text="External FLRig compatibility status and the band-conditions background service."
@@ -1079,7 +1116,7 @@
       </Border>
     </Grid>
 
-    <Border Grid.Row="6" Background="#080A0D" BorderBrush="#1E2128" BorderThickness="0,1,0,0" Padding="12,8">
+    <Border Grid.Row="6" Background="#080A0D" BorderBrush="#202126" BorderThickness="0,1,0,0" Padding="12,8">
       <Grid ColumnDefinitions="*,Auto">
         <Border Grid.Column="0" />
         <TextBlock Grid.Column="1"

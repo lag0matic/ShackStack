@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private VoiceDeskWindow? _voiceDeskWindow;
     private FreedvDeskWindow? _freedvDeskWindow;
     private CwDeskWindow? _cwDeskWindow;
+    private CwExperimentDeskWindow? _cwExperimentDeskWindow;
     private RttyDeskWindow? _rttyDeskWindow;
     private KeyboardModesDeskWindow? _keyboardModesDeskWindow;
     private WefaxDeskWindow? _wefaxDeskWindow;
@@ -195,6 +196,22 @@ public partial class MainWindow : Window
         _cwDeskWindow.Show(this);
     }
 
+    private void OnOpenCwExperimentDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_cwExperimentDeskWindow is { IsVisible: true })
+        {
+            _cwExperimentDeskWindow.Activate();
+            return;
+        }
+
+        _cwExperimentDeskWindow = new CwExperimentDeskWindow
+        {
+            DataContext = DataContext,
+        };
+        _cwExperimentDeskWindow.Closed += (_, _) => _cwExperimentDeskWindow = null;
+        _cwExperimentDeskWindow.Show(this);
+    }
+
     private void OnOpenRttyDeskClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_rttyDeskWindow is { IsVisible: true })
@@ -347,6 +364,7 @@ public partial class MainWindow : Window
         CloseDeskWindow(_voiceDeskWindow);
         CloseDeskWindow(_freedvDeskWindow);
         CloseDeskWindow(_cwDeskWindow);
+        CloseDeskWindow(_cwExperimentDeskWindow);
         CloseDeskWindow(_rttyDeskWindow);
         CloseDeskWindow(_keyboardModesDeskWindow);
         CloseDeskWindow(_wefaxDeskWindow);
@@ -358,6 +376,7 @@ public partial class MainWindow : Window
         _voiceDeskWindow = null;
         _freedvDeskWindow = null;
         _cwDeskWindow = null;
+        _cwExperimentDeskWindow = null;
         _rttyDeskWindow = null;
         _keyboardModesDeskWindow = null;
         _wefaxDeskWindow = null;

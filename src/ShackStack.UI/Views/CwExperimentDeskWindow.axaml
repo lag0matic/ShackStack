@@ -1,0 +1,153 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ShackStack.UI.ViewModels"
+        x:Class="ShackStack.UI.Views.CwExperimentDeskWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1160"
+        Height="760"
+        MinWidth="980"
+        MinHeight="620"
+        Title="CW Experiment Desk"
+        Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
+        Background="#050607"
+        Foreground="#D8D8DC"
+        Classes="operatorDesk">
+
+  <Grid RowDefinitions="Auto,*" Margin="8">
+    <Border Grid.Row="0" Classes="panel" CornerRadius="3" Padding="10,8" Margin="0,0,0,8">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="CW Experiment" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+          <Button Content="Start Scout" Command="{Binding StartCwSkimmerCommand}" Margin="0,0,8,0" />
+          <Button Content="Stop" Command="{Binding StopCwSkimmerCommand}" Margin="0,0,8,0" />
+          <Button Content="Reset" Command="{Binding ResetCwSkimmerCommand}" />
+        </WrapPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="308,*" ColumnSpacing="8">
+      <Border Grid.Column="0" Classes="panel">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="12">
+            <TextBlock Text="Skimmer Scout" Classes="sectionTitle" />
+
+            <Border Classes="section">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Lane Search" Classes="sectionTitle" />
+                <Grid ColumnDefinitions="86,138,Auto" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Low" Classes="fieldLabel" />
+                  <NumericUpDown Grid.Column="1" Minimum="50" Maximum="3000" Increment="25" Value="{Binding CwSkimmerLowerAudioHz}" FormatString="F0" Width="130" />
+                  <TextBlock Grid.Column="2" Text="Hz" Classes="fieldValue" VerticalAlignment="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="86,138,Auto" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="High" Classes="fieldLabel" />
+                  <NumericUpDown Grid.Column="1" Minimum="150" Maximum="4000" Increment="25" Value="{Binding CwSkimmerUpperAudioHz}" FormatString="F0" Width="130" />
+                  <TextBlock Grid.Column="2" Text="Hz" Classes="fieldValue" VerticalAlignment="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="86,138,Auto" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Spacing" Classes="fieldLabel" />
+                  <NumericUpDown Grid.Column="1" Minimum="15" Maximum="250" Increment="5" Value="{Binding CwSkimmerLaneSpacingHz}" FormatString="F0" Width="130" />
+                  <TextBlock Grid.Column="2" Text="Hz" Classes="fieldValue" VerticalAlignment="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="86,138,Auto" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Lanes" Classes="fieldLabel" />
+                  <NumericUpDown Grid.Column="1" Minimum="1" Maximum="32" Increment="1" Value="{Binding CwSkimmerMaxLanes}" FormatString="F0" Width="130" />
+                </Grid>
+                <CheckBox Content="Neural second pass" IsChecked="{Binding CwSkimmerNeuralSecondPassEnabled}" />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="section">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Status" Classes="sectionTitle" />
+                <Grid ColumnDefinitions="86,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Worker" Classes="fieldLabel" />
+                  <TextBlock Grid.Column="1" Text="{Binding CwSkimmerWorker}" Classes="fieldValue" TextWrapping="Wrap" />
+                </Grid>
+                <Grid ColumnDefinitions="86,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="State" Classes="fieldLabel" />
+                  <TextBlock Grid.Column="1" Text="{Binding CwSkimmerStatus}" Classes="fieldValue" TextWrapping="Wrap" />
+                </Grid>
+                <Grid ColumnDefinitions="86,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Strongest" Classes="fieldLabel" />
+                  <TextBlock Grid.Column="1" Text="{Binding CwSkimmerStrongestToneDisplay}" Classes="fieldValue" />
+                </Grid>
+                <Grid ColumnDefinitions="86,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="SNR" Classes="fieldLabel" />
+                  <TextBlock Grid.Column="1" Text="{Binding CwSkimmerStrongestSnrDisplay}" Classes="fieldValue" />
+                </Grid>
+                <Grid ColumnDefinitions="86,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Lanes" Classes="fieldLabel" />
+                  <TextBlock Grid.Column="1" Text="{Binding CwSkimmerCandidateCount}" Classes="fieldValue" />
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="section">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Sample Recorder" Classes="sectionTitle" />
+                <WrapPanel Orientation="Horizontal">
+                  <Button Content="Start Recorder" Command="{Binding StartCwSkimmerRecorderCommand}" Margin="0,0,8,6" />
+                  <Button Content="Stop" Command="{Binding StopCwSkimmerRecorderCommand}" Margin="0,0,8,6" />
+                  <Button Content="Snapshot" Command="{Binding CaptureCwSkimmerSnapshotCommand}" Margin="0,0,0,6" />
+                </WrapPanel>
+                <Grid ColumnDefinitions="86,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="Saved" Classes="fieldLabel" />
+                  <TextBlock Grid.Column="1" Text="{Binding CwSkimmerRecorderSampleCount}" Classes="fieldValue" />
+                </Grid>
+                <TextBlock Text="{Binding CwSkimmerRecorderStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding CwSkimmerRecorderPath}" Foreground="#8B92A0" TextWrapping="Wrap" FontSize="11" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <Grid Grid.Column="1" RowDefinitions="*,150,220" RowSpacing="8">
+        <Border Grid.Row="0" Classes="panel">
+          <Grid RowDefinitions="Auto,*">
+            <TextBlock Grid.Row="0" Text="Lane Copy" Classes="sectionTitle" Margin="0,0,0,8" />
+            <TextBox Grid.Row="1"
+                     Text="{Binding CwSkimmerTranscript}"
+                     Classes="monospace"
+                     AcceptsReturn="True"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     FontSize="16" />
+          </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Classes="panel">
+          <Grid RowDefinitions="Auto,*">
+            <TextBlock Grid.Row="0" Text="Neural Second Pass" Classes="sectionTitle" Margin="0,0,0,8" />
+            <TextBox Grid.Row="1"
+                     Text="{Binding CwSkimmerNeuralTranscript}"
+                     Classes="monospace"
+                     AcceptsReturn="True"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     FontSize="13" />
+          </Grid>
+        </Border>
+
+        <Border Grid.Row="2" Classes="panel">
+          <Grid RowDefinitions="Auto,*">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10" Margin="0,0,0,8">
+              <TextBlock Grid.Column="0" Text="Scout Diagnostics" Classes="sectionTitle" />
+              <TextBlock Grid.Column="1" Text="{Binding CwSkimmerStrongestToneDisplay}" Classes="fieldValue" />
+              <TextBlock Grid.Column="2" Text="{Binding CwSkimmerStrongestSnrDisplay}" Classes="fieldValue" />
+              <TextBlock Grid.Column="3" Text="{Binding CwSkimmerCandidateCount}" Classes="fieldValue" />
+            </Grid>
+            <TextBox Grid.Row="1"
+                     Text="{Binding CwSkimmerCandidates}"
+                     Classes="monospace"
+                     AcceptsReturn="True"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     FontSize="13" />
+          </Grid>
+        </Border>
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>

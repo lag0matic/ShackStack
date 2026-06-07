@@ -22,6 +22,7 @@ namespace ShackStack.UI.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private const string SstvIdleSessionNotes = "ShackStack SSTV native sidecar  |  Signal  ---%  |  Mode Auto Detect  |  FSKID none";
+    private const int MaxCwSkimmerCandidateLogLines = 240;
 
     private static readonly TimeSpan RadioConnectUiTimeout = TimeSpan.FromSeconds(12);
     private static readonly byte[] WsjtxDirectedAlertWave = CreateWsjtxDirectedAlertWave();
@@ -47,6 +48,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IBandConditionsService? _bandConditionsService;
     private readonly IInteropService? _interopService;
     private readonly ICwDecoderHost? _cwDecoderHost;
+    private readonly ICwSkimmerDecoderHost? _cwSkimmerDecoderHost;
     private readonly IRttyDecoderHost? _rttyDecoderHost;
     private readonly IKeyboardModeDecoderHost? _keyboardModeDecoderHost;
     private readonly IFreedvDigitalVoiceHost? _freedvDigitalVoiceHost;
@@ -57,12 +59,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IWsjtxModeHost? _wsjtxModeHost;
     private readonly ILongwaveService? _longwaveService;
     private readonly IDisposable? _radioSubscription;
+    private IDisposable? _cwSkimmerRecorderAudioSubscription;
     private readonly IDisposable? _audioLevelSubscription;
     private readonly IDisposable? _spectrumSubscription;
     private readonly IDisposable? _bandConditionsSubscription;
     private readonly IDisposable? _interopSubscription;
     private readonly IDisposable? _cwTelemetrySubscription;
     private readonly IDisposable? _cwDecodeSubscription;
+    private readonly IDisposable? _cwSkimmerTelemetrySubscription;
+    private readonly IDisposable? _cwSkimmerCandidateSubscription;
     private readonly IDisposable? _rttyTelemetrySubscription;
     private readonly IDisposable? _rttyDecodeSubscription;
     private readonly IDisposable? _keyboardModeTelemetrySubscription;
@@ -110,6 +115,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private bool _isUpdatingNoiseReductionLevelFromRadio;
     private DateTimeOffset _noiseReductionInteractionUntilUtc;
     private readonly HashSet<string> _longwaveLoggedContactKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, CwSkimmerLaneDisplayState> _cwSkimmerLaneStates = new();
+    private readonly Dictionary<int, CwSkimmerNeuralLaneDisplayState> _cwSkimmerNeuralLaneStates = new();
+    private readonly Queue<string> _cwSkimmerCandidateLogLines = new();
 
     public MainWindowViewModel(
         AppSettings settings,
@@ -123,6 +131,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ILongwaveService? longwaveService = null,
         IInteropService? interopService = null,
         ICwDecoderHost? cwDecoderHost = null,
+        ICwSkimmerDecoderHost? cwSkimmerDecoderHost = null,
         IRttyDecoderHost? rttyDecoderHost = null,
         IKeyboardModeDecoderHost? keyboardModeDecoderHost = null,
         IFreedvDigitalVoiceHost? freedvDigitalVoiceHost = null,
@@ -143,6 +152,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _longwaveService = longwaveService;
         _interopService = interopService;
         _cwDecoderHost = cwDecoderHost;
+        _cwSkimmerDecoderHost = cwSkimmerDecoderHost;
         _rttyDecoderHost = rttyDecoderHost;
         _keyboardModeDecoderHost = keyboardModeDecoderHost;
         _freedvDigitalVoiceHost = freedvDigitalVoiceHost;
@@ -521,6 +531,135 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     FreedvReporterStatus = snapshot.Status;
                     FreedvReporterStationCount = snapshot.Stations.Count;
                     RebuildFreedvReporterStations(snapshot.Stations);
+                });
+            }));
+        }
+
+        if (cwSkimmerDecoderHost is not null)
+        {
+            _cwSkimmerTelemetrySubscription = cwSkimmerDecoderHost.TelemetryStream.Subscribe(new Observer<CwSkimmerTelemetry>(telemetry =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    CwSkimmerStatus = telemetry.Status;
+                    CwSkimmerWorker = telemetry.ActiveWorker;
+                    CwSkimmerCandidateCount = telemetry.CandidateCount;
+                    CwSkimmerStrongestToneDisplay = telemetry.StrongestToneHz > 0 ? $"{telemetry.StrongestToneHz:0} Hz" : "---";
+                    CwSkimmerStrongestSnrDisplay = telemetry.StrongestSnrDb > 0 ? $"{telemetry.StrongestSnrDb:0.0} dB" : "---";
+                    IsCwSkimmerRunning = telemetry.IsRunning;
+                });
+            }));
+
+            _cwSkimmerCandidateSubscription = cwSkimmerDecoderHost.CandidateStream.Subscribe(new Observer<CwSkimmerCandidate>(candidate =>
+            {
+                RecordCwSkimmerCandidate(candidate);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!string.IsNullOrWhiteSpace(candidate.LaneTranscript))
+                    {
+                        var laneId = candidate.LaneId > 0 ? candidate.LaneId : 0;
+                        _cwSkimmerLaneStates[laneId] = new CwSkimmerLaneDisplayState(
+                            laneId,
+                            candidate.AudioToneHz,
+                            candidate.LaneTranscript,
+                            candidate.Confidence,
+                            candidate.LaneAge,
+                            candidate.CopyRateCharactersPerSecond,
+                            DateTimeOffset.UtcNow);
+
+                        var staleLaneCutoff = DateTimeOffset.UtcNow.AddSeconds(-30);
+                        foreach (var staleLaneId in _cwSkimmerLaneStates
+                                     .Where(pair => pair.Value.LastUpdatedUtc < staleLaneCutoff)
+                                     .Select(static pair => pair.Key)
+                                     .ToArray())
+                        {
+                            _cwSkimmerLaneStates.Remove(staleLaneId);
+                        }
+
+                        CwSkimmerTranscript = string.Join(
+                            Environment.NewLine,
+                            _cwSkimmerLaneStates.Values
+                                .Where(static lane =>
+                                    lane.LaneAge >= 3
+                                    && lane.Confidence >= 0.33
+                                    && lane.Transcript.Length >= 2
+                                    && lane.CopyRateCharactersPerSecond <= 4.0)
+                                .OrderBy(static lane => lane.AudioToneHz)
+                                .ThenBy(static lane => lane.LaneId)
+                                .Take(8)
+                                .Select(static lane => $"Lane {lane.LaneId} {lane.AudioToneHz:0} Hz ({lane.Confidence:P0}, {lane.CopyRateCharactersPerSecond:0.0} cps): {lane.Transcript}"));
+                    }
+
+                    var hasNeuralData = !string.IsNullOrWhiteSpace(candidate.NeuralText)
+                        || !string.IsNullOrWhiteSpace(candidate.NeuralTokenText)
+                        || !string.IsNullOrWhiteSpace(candidate.NeuralStatus);
+                    if (hasNeuralData)
+                    {
+                        var laneId = candidate.LaneId > 0 ? candidate.LaneId : 0;
+                        _cwSkimmerNeuralLaneStates[laneId] = new CwSkimmerNeuralLaneDisplayState(
+                            laneId,
+                            candidate.AudioToneHz,
+                            candidate.NeuralText,
+                            candidate.NeuralTokenText,
+                            candidate.NeuralBadLaneScore,
+                            candidate.NeuralTokenCandidates,
+                            candidate.NeuralStatus,
+                            DateTimeOffset.UtcNow);
+
+                        var staleNeuralCutoff = DateTimeOffset.UtcNow.AddSeconds(-40);
+                        foreach (var staleLaneId in _cwSkimmerNeuralLaneStates
+                                     .Where(pair => pair.Value.LastUpdatedUtc < staleNeuralCutoff)
+                                     .Select(static pair => pair.Key)
+                                     .ToArray())
+                        {
+                            _cwSkimmerNeuralLaneStates.Remove(staleLaneId);
+                        }
+
+                        CwSkimmerNeuralTranscript = string.Join(
+                            Environment.NewLine,
+                            _cwSkimmerNeuralLaneStates.Values
+                                .OrderBy(static lane => lane.AudioToneHz)
+                                .ThenBy(static lane => lane.LaneId)
+                                .Take(8)
+                                .Select(static lane =>
+                                {
+                                    var token = string.IsNullOrWhiteSpace(lane.NeuralTokenText) ? "-" : lane.NeuralTokenText;
+                                    var raw = string.IsNullOrWhiteSpace(lane.NeuralText) ? "-" : lane.NeuralText;
+                                    var status = string.IsNullOrWhiteSpace(lane.NeuralStatus) ? string.Empty : $" | {lane.NeuralStatus}";
+                                    var candidates = string.IsNullOrWhiteSpace(lane.NeuralTokenCandidates) ? string.Empty : $" | candidates {lane.NeuralTokenCandidates}";
+                                    return $"Lane {lane.LaneId} {lane.AudioToneHz:0} Hz bad {lane.NeuralBadLaneScore:P0}: tokens {token} | raw {raw}{candidates}{status}";
+                                }));
+                    }
+
+                    var lanePrefix = candidate.LaneId > 0
+                        ? $"lane {candidate.LaneId} ({candidate.AudioToneHz:0} Hz, age {candidate.LaneAge})"
+                        : $"lane {candidate.AudioToneHz:0} Hz";
+                    var hasCopy = !string.IsNullOrWhiteSpace(candidate.Text) || !string.IsNullOrWhiteSpace(candidate.LaneTranscript);
+                    if (candidate.Confidence < 0.33 && !hasCopy)
+                    {
+                        return;
+                    }
+
+                    var envelopeSuffix = candidate.ToneProbability > 0
+                        ? $" | tone {candidate.ToneProbability:P0}, bw {candidate.OccupiedBandwidthHz:0} Hz"
+                        : string.Empty;
+                    var timingSuffix = string.IsNullOrWhiteSpace(candidate.TimingHint)
+                        ? string.Empty
+                        : $" | {candidate.TimingHint}";
+                    var copyKind = candidate.IsProvisionalText ? "guess" : "copy";
+                    var decodedSuffix = string.IsNullOrWhiteSpace(candidate.Text)
+                        ? string.Empty
+                        : $" | {copyKind} {candidate.Text}";
+                    var text = string.IsNullOrWhiteSpace(candidate.ScoutText)
+                        ? lanePrefix
+                        : $"{lanePrefix}: {candidate.ScoutText}{envelopeSuffix}{timingSuffix}{decodedSuffix}";
+                    _cwSkimmerCandidateLogLines.Enqueue(text);
+                    while (_cwSkimmerCandidateLogLines.Count > MaxCwSkimmerCandidateLogLines)
+                    {
+                        _cwSkimmerCandidateLogLines.Dequeue();
+                    }
+
+                    CwSkimmerCandidates = string.Join(Environment.NewLine, _cwSkimmerCandidateLogLines);
                 });
             }));
         }
@@ -993,12 +1132,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         StopRuntimeServices(shutdownCts.Token);
 
         _radioSubscription?.Dispose();
+        _cwSkimmerRecorderAudioSubscription?.Dispose();
         _audioLevelSubscription?.Dispose();
         _spectrumSubscription?.Dispose();
         _bandConditionsSubscription?.Dispose();
         _interopSubscription?.Dispose();
         _cwTelemetrySubscription?.Dispose();
         _cwDecodeSubscription?.Dispose();
+        _cwSkimmerTelemetrySubscription?.Dispose();
+        _cwSkimmerCandidateSubscription?.Dispose();
         _rttyTelemetrySubscription?.Dispose();
         _rttyDecodeSubscription?.Dispose();
         _keyboardModeTelemetrySubscription?.Dispose();

@@ -32,6 +32,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IFreedvReporterService, FreedvReporterService>();
         services.AddSingleton<ICwDecoderHost>(provider =>
             new PythonCwDecoderHost(provider.GetRequiredService<IAudioService>()));
+        services.AddSingleton<ICwSkimmerDecoderHost>(provider =>
+            new PythonCwSkimmerDecoderHost(provider.GetRequiredService<IAudioService>()));
         services.AddSingleton<IRttyDecoderHost, FldigiRttyDecoderHost>();
         services.AddSingleton<IKeyboardModeDecoderHost, FldigiPskDecoderHost>();
         services.AddSingleton<IFreedvDigitalVoiceHost, Codec2FreedvDigitalVoiceHost>();
@@ -64,6 +66,7 @@ public static class ServiceCollectionExtensions
             var longwaveService = provider.GetRequiredService<ILongwaveService>();
             var interopService = provider.GetRequiredService<IInteropService>();
             var cwDecoderHost = provider.GetRequiredService<ICwDecoderHost>();
+            var cwSkimmerDecoderHost = provider.GetRequiredService<ICwSkimmerDecoderHost>();
             var rttyDecoderHost = provider.GetRequiredService<IRttyDecoderHost>();
             var keyboardModeDecoderHost = provider.GetRequiredService<IKeyboardModeDecoderHost>();
             var freedvDigitalVoiceHost = provider.GetRequiredService<IFreedvDigitalVoiceHost>();
@@ -84,6 +87,7 @@ public static class ServiceCollectionExtensions
                 longwaveService,
                 interopService,
                 cwDecoderHost,
+                cwSkimmerDecoderHost,
                 rttyDecoderHost,
                 keyboardModeDecoderHost,
                 freedvDigitalVoiceHost,

@@ -14,6 +14,7 @@ $specRoot = Join-Path $pyiRoot "spec"
 
 $workers = @(
     "cw_sidecar_worker",
+    "cw_skimmer_sidecar_worker",
     "wefax_sidecar_worker",
     "wsjtx_sidecar_worker"
 )
@@ -58,6 +59,7 @@ if (Test-Path $scipyDistnPath) {
 
 $targetsToClean = @(
     "cw_sidecar_worker",
+    "cw_skimmer_sidecar_worker",
     "rtty_sidecar_worker",
     "psk_sidecar_worker",
     "freedv_codec2_sidecar",

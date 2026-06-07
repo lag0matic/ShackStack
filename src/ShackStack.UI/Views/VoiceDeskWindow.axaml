@@ -10,51 +10,52 @@
         MinHeight="720"
         Title="Voice Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
-        Background="#0F1117"
-        Foreground="#C4C8D8">
-  <Grid RowDefinitions="Auto,*" Margin="10">
-    <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,10">
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+        Background="#050607"
+        Foreground="#D8D8DC"
+        Classes="operatorDesk">
+  <Grid RowDefinitions="Auto,*" Margin="8">
+    <Border Grid.Row="0" Classes="panel" Padding="10,8" Margin="0,0,0,8">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
         <StackPanel Spacing="4">
-          <TextBlock Text="Voice Desk" FontSize="19" FontWeight="SemiBold" />
-          <TextBlock Text="Roomier voice ops with live monitor, hunt workflow, and logging in one place." Foreground="#AAB1C7" TextWrapping="Wrap" />
+          <TextBlock Text="Voice Desk" Classes="sectionTitle" />
+          <TextBlock Text="Roomier voice ops with live monitor, hunt workflow, and logging in one place." Foreground="#A8A8AE" TextWrapping="Wrap" />
         </StackPanel>
         <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Right">
-          <TextBlock Text="{Binding VoiceTxStatus}" Foreground="#99A3BF" TextWrapping="Wrap" MaxWidth="340" TextAlignment="Right" />
-          <TextBlock Text="{Binding AudioMonitorState, StringFormat=Monitor: {0}}" Foreground="#AAB1C7" HorizontalAlignment="Right" />
+          <TextBlock Text="{Binding VoiceTxStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" MaxWidth="340" TextAlignment="Right" />
+          <TextBlock Text="{Binding AudioMonitorState, StringFormat=Monitor: {0}}" Foreground="#A8A8AE" HorizontalAlignment="Right" />
         </StackPanel>
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="0.9*,1.35*" ColumnSpacing="10">
+    <Grid Grid.Row="1" ColumnDefinitions="0.9*,1.35*" ColumnSpacing="8">
       <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="10">
-          <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="8">
+          <Border Classes="panel" Padding="10">
             <StackPanel Spacing="8">
-              <TextBlock Text="Live Audio" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="Live Audio" Classes="sectionTitle" />
               <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="RX" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="RX" Foreground="#8E9096" VerticalAlignment="Center" />
                 <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding RxLevelPercent}" Height="10" />
-                <TextBlock Grid.Column="2" Text="{Binding RxLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
+                <TextBlock Grid.Column="2" Text="{Binding RxLevelPercent, StringFormat={}{0}%}" Foreground="#D8D8DC" VerticalAlignment="Center" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
               </Grid>
               <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="Mic" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Mic" Foreground="#8E9096" VerticalAlignment="Center" />
                 <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MicLevelPercent}" Height="10" />
-                <TextBlock Grid.Column="2" Text="{Binding MicLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
+                <TextBlock Grid.Column="2" Text="{Binding MicLevelPercent, StringFormat={}{0}%}" Foreground="#D8D8DC" VerticalAlignment="Center" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
               </Grid>
               <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="TX" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="TX" Foreground="#8E9096" VerticalAlignment="Center" />
                 <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding TxLevelPercent}" Height="10" />
-                <TextBlock Grid.Column="2" Text="{Binding TxLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
+                <TextBlock Grid.Column="2" Text="{Binding TxLevelPercent, StringFormat={}{0}%}" Foreground="#D8D8DC" VerticalAlignment="Center" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
               </Grid>
             </StackPanel>
           </Border>
 
-          <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Border Classes="panel" Padding="10">
             <StackPanel Spacing="8">
-              <TextBlock Text="Mic Controls" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="Mic Controls" Classes="sectionTitle" />
               <Grid ColumnDefinitions="88,120,Auto" ColumnSpacing="12">
-                <TextBlock Grid.Column="0" Text="Mic Gain" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Mic Gain" Foreground="#8E9096" VerticalAlignment="Center" />
                 <NumericUpDown Grid.Column="1"
                                Minimum="0"
                                Maximum="100"
@@ -63,10 +64,10 @@
                                FormatString="F0"
                                Width="120"
                                HorizontalAlignment="Left" />
-                <TextBlock Grid.Column="2" Text="%" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="%" Foreground="#D8D8DC" VerticalAlignment="Center" />
               </Grid>
               <Grid ColumnDefinitions="88,120,Auto" ColumnSpacing="12">
-                <TextBlock Grid.Column="0" Text="Comp" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Comp" Foreground="#8E9096" VerticalAlignment="Center" />
                 <NumericUpDown Grid.Column="1"
                                Minimum="0"
                                Maximum="10"
@@ -75,10 +76,10 @@
                                FormatString="F0"
                                Width="120"
                                HorizontalAlignment="Left" />
-                <TextBlock Grid.Column="2" Text="Level" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="Level" Foreground="#D8D8DC" VerticalAlignment="Center" />
               </Grid>
               <Grid ColumnDefinitions="88,120,Auto" ColumnSpacing="12">
-                <TextBlock Grid.Column="0" Text="RF Power" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="RF Power" Foreground="#8E9096" VerticalAlignment="Center" />
                 <NumericUpDown Grid.Column="1"
                                Minimum="0"
                                Maximum="100"
@@ -87,7 +88,7 @@
                                FormatString="F0"
                                Width="120"
                                HorizontalAlignment="Left" />
-                <TextBlock Grid.Column="2" Text="%" Foreground="#C4C8D8" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="%" Foreground="#D8D8DC" VerticalAlignment="Center" />
               </Grid>
               <Button Content="Apply Rig Voice Settings"
                       Command="{Binding ApplyVoiceRigSettingsCommand}"
@@ -95,13 +96,13 @@
             </StackPanel>
           </Border>
 
-          <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Border Classes="panel" Padding="10">
             <StackPanel Spacing="8">
-              <TextBlock Text="Transmit" FontSize="16" FontWeight="SemiBold" />
-              <TextBlock Text="Key PTT while hunting or logging." Foreground="#AAB1C7" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding VoiceTxStatus}" Foreground="#99A3BF" TextWrapping="Wrap" />
-              <Border Background="#18202E"
-                      BorderBrush="#2A3550"
+              <TextBlock Text="Transmit" Classes="sectionTitle" />
+              <TextBlock Text="Key PTT while hunting or logging." Foreground="#A8A8AE" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding VoiceTxStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" />
+              <Border Background="#15161B"
+                      BorderBrush="#2B2D34"
                       BorderThickness="1"
                       CornerRadius="6"
                       Padding="14,10"
@@ -112,32 +113,32 @@
                       PointerReleased="OnPttReleased"
                       PointerCaptureLost="OnPttCaptureLost">
                 <TextBlock Text="{Binding PttState, StringFormat=PTT ({0})}"
-                           Foreground="#D8E2FF"
+                           Foreground="#E8E8EA"
                            HorizontalAlignment="Center" />
               </Border>
             </StackPanel>
           </Border>
 
-          <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Border Classes="panel" Padding="10">
             <StackPanel Spacing="8">
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <StackPanel Grid.Column="0" Spacing="2">
-                  <TextBlock Text="Voice POTA Spots" FontSize="16" FontWeight="SemiBold" />
-                  <TextBlock Text="Pick a spot, work it, or post a fresh spot from the current log fields." Foreground="#AAB1C7" TextWrapping="Wrap" />
+                  <TextBlock Text="Voice POTA Spots" Classes="sectionTitle" />
+                  <TextBlock Text="Pick a spot, work it, or post a fresh spot from the current log fields." Foreground="#A8A8AE" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshLongwaveSpotsCommand}" MinWidth="88" />
               </Grid>
-              <TextBlock Text="{Binding LongwaveStatus}" Foreground="#7F879B" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding LongwaveStatus}" Foreground="#8E9096" TextWrapping="Wrap" />
               <Grid ColumnDefinitions="Auto,150" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="Band" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Band" Foreground="#8E9096" VerticalAlignment="Center" />
                 <ComboBox Grid.Column="1"
                           ItemsSource="{Binding VoiceLongwaveBandFilterOptions}"
                           SelectedItem="{Binding SelectedVoiceLongwaveBandFilter}" />
               </Grid>
               <ListBox ItemsSource="{Binding VoiceLongwavePotaSpots}"
                        SelectedItem="{Binding SelectedVoiceLongwavePotaSpot}"
-                       Background="#0A0D13"
-                       BorderBrush="#1E2128"
+                       Background="#030405"
+                       BorderBrush="#202126"
                        BorderThickness="1"
                        MaxHeight="260">
                 <ListBox.Styles>
@@ -159,8 +160,8 @@
                   <DataTemplate x:DataType="vm:LongwaveSpotSummaryItem">
                     <Border Background="{Binding RowBackground}" Padding="4,2" Margin="0" CornerRadius="2">
                       <Grid ColumnDefinitions="58,72,82,*" ColumnSpacing="4">
-                        <TextBlock Grid.Column="0" Text="{Binding Band}" Foreground="#AAB1C7" FontSize="11" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Grid.Column="1" Text="{Binding FrequencyText}" Foreground="#AFC4FF" FontSize="11" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="0" Text="{Binding Band}" Foreground="#A8A8AE" FontSize="11" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Text="{Binding FrequencyText}" Foreground="#C7CAD2" FontSize="11" TextTrimming="CharacterEllipsis" />
                         <TextBlock Grid.Column="2" Text="{Binding ActivatorCallsign}" Foreground="{Binding MessageForeground}" FontSize="11" TextTrimming="CharacterEllipsis" />
                         <TextBlock Grid.Column="3" Text="{Binding SummaryText}" Foreground="{Binding MessageForeground}" FontSize="11" TextTrimming="CharacterEllipsis" />
                       </Grid>
@@ -168,7 +169,7 @@
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
-              <Border Background="#0C1017" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="8">
+              <Border Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="6" Padding="8">
                 <StackPanel Spacing="6">
                   <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                     <TextBox Grid.Column="0" Text="{Binding VoicePotaSpotCallsign}" Watermark="Activator call" />
@@ -194,15 +195,15 @@
         </StackPanel>
       </ScrollViewer>
 
-      <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+      <Border Grid.Column="1" Classes="panel" Padding="10">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Spacing="8">
-                <TextBlock Text="Voice Logging" FontSize="16" FontWeight="SemiBold" />
-                <TextBlock Text="Use this for POTA hunts or any other voice QSO. Logging here stays general on purpose." Foreground="#AAB1C7" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#7F879B" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding LongwaveQuickLogSummary}" Foreground="#E9F3FF" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="Voice Logging" Classes="sectionTitle" />
+                <TextBlock Text="Use this for POTA hunts or any other voice QSO. Logging here stays general on purpose." Foreground="#A8A8AE" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#8E9096" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding LongwaveQuickLogSummary}" Foreground="#E8E8EA" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
-                  <TextBlock Grid.Row="0" Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="Logbook" Foreground="#8E9096" VerticalAlignment="Center" />
                   <ComboBox Grid.Row="0" Grid.Column="1"
                             ItemsSource="{Binding LongwaveLogbooks}"
                             SelectedItem="{Binding SelectedLongwaveLogbook}">
@@ -212,38 +213,38 @@
                       </DataTemplate>
                     </ComboBox.ItemTemplate>
                   </ComboBox>
-                  <TextBlock Grid.Row="1" Grid.Column="0" Text="Operator" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Text="Operator" Foreground="#8E9096" VerticalAlignment="Center" />
                   <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LongwaveLogOperatorCallsign}" />
-                  <TextBlock Grid.Row="2" Grid.Column="0" Text="Callsign" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="2" Grid.Column="0" Text="Callsign" Foreground="#8E9096" VerticalAlignment="Center" />
                   <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                     <TextBox Grid.Column="0" Text="{Binding LongwaveLogCallsign}" />
                     <Button Grid.Column="1" Content="Lookup" Command="{Binding AutofillLongwaveLookupCommand}" MinWidth="74" />
                   </Grid>
-                  <TextBlock Grid.Row="3" Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="3" Grid.Column="0" Text="Mode" Foreground="#8E9096" VerticalAlignment="Center" />
                   <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding LongwaveLogMode}" />
-                  <TextBlock Grid.Row="4" Grid.Column="0" Text="Band" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="4" Grid.Column="0" Text="Band" Foreground="#8E9096" VerticalAlignment="Center" />
                   <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding LongwaveLogBand}" />
-                  <TextBlock Grid.Row="5" Grid.Column="0" Text="Freq kHz" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="5" Grid.Column="0" Text="Freq kHz" Foreground="#8E9096" VerticalAlignment="Center" />
                   <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding LongwaveLogFrequencyKhz}" />
-                  <TextBlock Grid.Row="6" Grid.Column="0" Text="RST S/R" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="6" Grid.Column="0" Text="RST S/R" Foreground="#8E9096" VerticalAlignment="Center" />
                   <Grid Grid.Row="6" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="8">
                     <TextBox Grid.Column="0" Text="{Binding LongwaveLogRstSent}" />
                     <TextBox Grid.Column="1" Text="{Binding LongwaveLogRstReceived}" />
                   </Grid>
-                  <TextBlock Grid.Row="7" Grid.Column="0" Text="Park" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="7" Grid.Column="0" Text="Park" Foreground="#8E9096" VerticalAlignment="Center" />
                   <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding LongwaveLogParkReference}" />
-                  <TextBlock Grid.Row="8" Grid.Column="0" Text="Grid" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="8" Grid.Column="0" Text="Grid" Foreground="#8E9096" VerticalAlignment="Center" />
                   <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding LongwaveLogGridSquare}" />
-                  <TextBlock Grid.Row="9" Grid.Column="0" Text="Name" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="9" Grid.Column="0" Text="Name" Foreground="#8E9096" VerticalAlignment="Center" />
                   <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding LongwaveLogName}" />
-                  <TextBlock Grid.Row="10" Grid.Column="0" Text="QTH" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="10" Grid.Column="0" Text="QTH" Foreground="#8E9096" VerticalAlignment="Center" />
                   <TextBox Grid.Row="10" Grid.Column="1" Text="{Binding LongwaveLogQth}" />
-                  <TextBlock Grid.Row="11" Grid.Column="0" Text="County/State" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="11" Grid.Column="0" Text="County/State" Foreground="#8E9096" VerticalAlignment="Center" />
                   <Grid Grid.Row="11" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="8">
                     <TextBox Grid.Column="0" Text="{Binding LongwaveLogCounty}" />
                     <TextBox Grid.Column="1" Text="{Binding LongwaveLogState}" />
                   </Grid>
-                  <TextBlock Grid.Row="12" Grid.Column="0" Text="Country" Foreground="#7F879B" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="12" Grid.Column="0" Text="Country" Foreground="#8E9096" VerticalAlignment="Center" />
                   <Grid Grid.Row="12" Grid.Column="1" ColumnDefinitions="*,88" ColumnSpacing="8">
                     <TextBox Grid.Column="0" Text="{Binding LongwaveLogCountry}" />
                     <TextBox Grid.Column="1" Text="{Binding LongwaveLogDxcc}" Watermark="DXCC" />
@@ -255,8 +256,8 @@
                   <Button Content="Save Changes" Command="{Binding UpdateSelectedLongwaveContactCommand}" IsVisible="{Binding IsEditingLongwaveContact}" MinWidth="108" />
                   <Button Content="New Contact" Command="{Binding NewLongwaveContactCommand}" MinWidth="104" />
                 </StackPanel>
-                <Border Background="#18202E"
-                        BorderBrush="#2A3550"
+                <Border Background="#15161B"
+                        BorderBrush="#2B2D34"
                         BorderThickness="1"
                         CornerRadius="6"
                         Padding="12,8"
@@ -267,10 +268,10 @@
                         PointerReleased="OnPttReleased"
                         PointerCaptureLost="OnPttCaptureLost">
                   <TextBlock Text="{Binding PttState, StringFormat=PTT ({0})}"
-                             Foreground="#D8E2FF"
+                             Foreground="#E8E8EA"
                              HorizontalAlignment="Center" />
                 </Border>
-                <TextBlock Text="{Binding VoiceTxStatus}" Foreground="#99A3BF" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding VoiceTxStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" />
               </StackPanel>
             </ScrollViewer>
       </Border>

@@ -9,30 +9,31 @@
         MinHeight="640"
         Title="JS8 Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
-        Background="#0F1117"
-        Foreground="#C4C8D8">
-  <Grid RowDefinitions="Auto,*" Margin="10">
-    <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,10">
+        Background="#050607"
+        Foreground="#D8D8DC"
+        Classes="operatorDesk">
+  <Grid RowDefinitions="Auto,*" Margin="8">
+    <Border Grid.Row="0" Classes="panel" Padding="10,8" Margin="0,0,0,8">
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Spacing="3">
-          <TextBlock Text="JS8 Desk" FontSize="20" FontWeight="SemiBold" />
+          <TextBlock Text="JS8 Desk" Classes="sectionTitle" />
           <TextBlock Text="Chat-style weak-signal messaging with live decodes, quick replies, and slot-timed transmit staging."
-                     Foreground="#8E97AC"
+                     Foreground="#8E9096"
                      TextWrapping="Wrap" />
         </StackPanel>
         <Button Grid.Column="1" Content="Clear List" Command="{Binding ClearWsjtxMessagesCommand}" VerticalAlignment="Center" />
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="1.4*,0.7*" ColumnSpacing="10">
-      <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+    <Grid Grid.Row="1" ColumnDefinitions="1.4*,0.7*" ColumnSpacing="8">
+      <Border Grid.Column="0" Classes="panel" Padding="10">
         <Grid RowDefinitions="Auto,*" RowSpacing="8">
           <Grid Grid.Row="0" ColumnDefinitions="72,*" ColumnSpacing="10">
-            <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1" Text="{Binding WsjtxSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" />
+            <TextBlock Grid.Column="0" Text="Session" Foreground="#8E9096" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{Binding WsjtxSessionNotes}" Foreground="#D8D8DC" TextWrapping="Wrap" />
           </Grid>
 
-          <Border Grid.Row="1" Background="#080B12" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="8">
+          <Border Grid.Row="1" Background="#030405" BorderBrush="#202126" BorderThickness="1" CornerRadius="3" Padding="8">
             <Grid RowDefinitions="Auto,*" RowSpacing="5">
               <Grid Grid.Row="0" ColumnDefinitions="58,58,46,46,64,*" ColumnSpacing="6">
                 <TextBlock Grid.Column="0" Text="Time" Foreground="#6F778A" FontSize="11" />
@@ -85,16 +86,16 @@
       </Border>
 
       <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="10">
-          <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="8">
+          <Border Classes="panel" Padding="10">
             <StackPanel Spacing="8">
-              <TextBlock Text="Receive Control" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="Receive Control" Classes="sectionTitle" />
               <Grid ColumnDefinitions="80,*" ColumnSpacing="10">
-                <TextBlock Grid.Column="0" Text="Submode" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Submode" Foreground="#8E9096" VerticalAlignment="Center" />
                 <ComboBox Grid.Column="1" ItemsSource="{Binding Js8ModeOptions}" SelectedItem="{Binding Js8SelectedMode}" />
               </Grid>
               <Grid ColumnDefinitions="80,*" ColumnSpacing="10">
-                <TextBlock Grid.Column="0" Text="Band" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Band" Foreground="#8E9096" VerticalAlignment="Center" />
                 <ComboBox Grid.Column="1" ItemsSource="{Binding Js8FrequencyOptions}" SelectedItem="{Binding Js8SelectedFrequency}" />
               </Grid>
               <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
@@ -102,17 +103,17 @@
                 <Button Content="Stop RX" Command="{Binding StopWsjtxReceiveCommand}" Margin="0,0,8,6" />
                 <Button Content="Reset" Command="{Binding ResetWsjtxSessionCommand}" Margin="0,0,8,6" />
               </WrapPanel>
-              <TextBlock Text="{Binding Js8SelectedDecodeSummary}" Foreground="#AFC4FF" TextWrapping="Wrap" FontSize="11" />
+              <TextBlock Text="{Binding Js8SelectedDecodeSummary}" Foreground="#C7CAD2" TextWrapping="Wrap" FontSize="11" />
               <Button Content="Use Selected Decode"
                       Command="{Binding UseSelectedJs8DecodeCommand}"
                       HorizontalAlignment="Left"
                       Padding="10,4" />
-              <Border Background="#080B12" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="8">
+              <Border Background="#030405" BorderBrush="#202126" BorderThickness="1" CornerRadius="3" Padding="8">
                 <StackPanel Spacing="7">
-                  <TextBlock Text="Audio Offsets" FontSize="13" FontWeight="SemiBold" Foreground="#C4C8D8" />
-                  <TextBlock Text="{Binding WsjtxRxTrackStatus}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
+                  <TextBlock Text="Audio Offsets" Classes="sectionTitle" Foreground="#D8D8DC" />
+                  <TextBlock Text="{Binding WsjtxRxTrackStatus}" Foreground="#8E9096" TextWrapping="Wrap" FontSize="10.5" />
                   <Grid ColumnDefinitions="76,80,*" ColumnSpacing="8">
-                    <TextBlock Grid.Column="0" Text="RX Hz" Foreground="#7F879B" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="0" Text="RX Hz" Foreground="#8E9096" VerticalAlignment="Center" />
                     <TextBox Grid.Column="1"
                              Text="{Binding WsjtxRxAudioFrequencyHz}"
                              HorizontalContentAlignment="Center"
@@ -123,7 +124,7 @@
                             Padding="10,4" />
                   </Grid>
                   <Grid ColumnDefinitions="76,80,*" ColumnSpacing="8">
-                    <TextBlock Grid.Column="0" Text="TX Hz" Foreground="#7F879B" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="0" Text="TX Hz" Foreground="#8E9096" VerticalAlignment="Center" />
                     <TextBox Grid.Column="1"
                              Text="{Binding WsjtxTxAudioFrequencyHz}"
                              HorizontalContentAlignment="Center"
@@ -135,9 +136,9 @@
                   </Grid>
                   <CheckBox IsChecked="{Binding WsjtxHoldTxFrequency}"
                             Content="Hold TX offset while selecting other decodes"
-                            Foreground="#C4C8D8"
+                            Foreground="#D8D8DC"
                             FontSize="10.5" />
-                  <TextBlock Text="{Binding WsjtxTxTrackStatus}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
+                  <TextBlock Text="{Binding WsjtxTxTrackStatus}" Foreground="#8E9096" TextWrapping="Wrap" FontSize="10.5" />
                   <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
                     <Button Content="-100" Command="{Binding NudgeWsjtxTxOffsetDown100Command}" Margin="0,0,6,6" Padding="8,4" />
                     <Button Content="-50" Command="{Binding NudgeWsjtxTxOffsetDown50Command}" Margin="0,0,6,6" Padding="8,4" />
@@ -151,29 +152,29 @@
             </StackPanel>
           </Border>
 
-          <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Border Classes="panel" Padding="10">
             <StackPanel Spacing="8">
-              <TextBlock Text="Status" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="Status" Classes="sectionTitle" />
               <Grid ColumnDefinitions="80,*" ColumnSpacing="10">
-                <TextBlock Grid.Column="0" Text="RX" Foreground="#7F879B" />
+                <TextBlock Grid.Column="0" Text="RX" Foreground="#8E9096" />
                 <TextBlock Grid.Column="1" Text="{Binding WsjtxRxStatus}" TextWrapping="Wrap" />
               </Grid>
               <Grid ColumnDefinitions="80,*" ColumnSpacing="10">
-                <TextBlock Grid.Column="0" Text="Clock" Foreground="#7F879B" />
+                <TextBlock Grid.Column="0" Text="Clock" Foreground="#8E9096" />
                 <TextBlock Grid.Column="1" Text="{Binding WsjtxClockStatus}" TextWrapping="Wrap" />
               </Grid>
               <Grid ColumnDefinitions="80,*" ColumnSpacing="10">
-                <TextBlock Grid.Column="0" Text="Cycle" Foreground="#7F879B" />
+                <TextBlock Grid.Column="0" Text="Cycle" Foreground="#8E9096" />
                 <TextBlock Grid.Column="1" Text="{Binding WsjtxCycleDisplay}" TextWrapping="Wrap" />
               </Grid>
             </StackPanel>
           </Border>
 
-          <Border Background="#111827" BorderBrush="#24304A" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Border Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="3" Padding="10">
             <StackPanel Spacing="8">
-              <TextBlock Text="Compose Staging" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="Compose Staging" Classes="sectionTitle" />
               <Grid ColumnDefinitions="76,*" ColumnSpacing="10">
-                <TextBlock Grid.Column="0" Text="Target" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Target" Foreground="#8E9096" VerticalAlignment="Center" />
                 <TextBox Grid.Column="1"
                          Text="{Binding Js8TargetCallsign, UpdateSourceTrigger=PropertyChanged}"
                          Watermark="Selected station call"
@@ -181,7 +182,7 @@
               </Grid>
               <TextBlock Text="{Binding Js8TargetSummary}" Foreground="#9BE7FF" TextWrapping="Wrap" FontSize="11" />
               <Grid ColumnDefinitions="76,*" ColumnSpacing="10">
-                <TextBlock Grid.Column="0" Text="Message" Foreground="#7F879B" VerticalAlignment="Top" />
+                <TextBlock Grid.Column="0" Text="Message" Foreground="#8E9096" VerticalAlignment="Top" />
                 <TextBox Grid.Column="1"
                          Text="{Binding Js8ComposeText, UpdateSourceTrigger=PropertyChanged}"
                          Watermark="Type JS8 text or choose a quick message"
@@ -200,20 +201,20 @@
                 <Button Content="Clear" Command="{Binding ClearJs8ComposeCommand}" Margin="0,0,8,6" Padding="10,4" />
               </WrapPanel>
               <TextBlock Text="{Binding Js8ComposeStatus}" Foreground="#F0D58A" TextWrapping="Wrap" FontSize="11" />
-              <TextBlock Text="{Binding Js8TransmitReadiness}" Foreground="#8E97AC" TextWrapping="Wrap" FontSize="10.5" />
+              <TextBlock Text="{Binding Js8TransmitReadiness}" Foreground="#8E9096" TextWrapping="Wrap" FontSize="10.5" />
             </StackPanel>
           </Border>
 
-          <Border Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Border Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="3" Padding="10">
             <StackPanel Spacing="8">
-              <TextBlock Text="JS8 / Longwave Log" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="JS8 / Longwave Log" Classes="sectionTitle" />
               <TextBlock Text="Select a real directed/contact decode first. Heartbeats are useful for propagation, but should not be auto-logged."
-                         Foreground="#AAB1C7"
+                         Foreground="#A8A8AE"
                          TextWrapping="Wrap"
                          FontSize="11" />
-              <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" />
               <Grid ColumnDefinitions="76,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Logbook" Foreground="#8E9096" VerticalAlignment="Center" />
                 <ComboBox Grid.Column="1" ItemsSource="{Binding LongwaveLogbooks}" SelectedItem="{Binding SelectedLongwaveLogbook}">
                   <ComboBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:LongwaveLogbookItem">
@@ -223,11 +224,11 @@
                 </ComboBox>
               </Grid>
               <Grid ColumnDefinitions="76,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Call" Foreground="#8E9096" VerticalAlignment="Center" />
                 <TextBox Grid.Column="1" Text="{Binding LongwaveLogCallsign}" Watermark="Worked station" />
               </Grid>
               <Grid ColumnDefinitions="76,*,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="SNR S/R" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="SNR S/R" Foreground="#8E9096" VerticalAlignment="Center" />
                 <TextBox Grid.Column="1" Text="{Binding LongwaveLogRstSent}" />
                 <TextBox Grid.Column="2" Text="{Binding LongwaveLogRstReceived}" />
               </Grid>
@@ -240,15 +241,15 @@
             </StackPanel>
           </Border>
 
-          <Border Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Border Classes="panel" Padding="10">
             <Grid RowDefinitions="Auto,*" RowSpacing="6">
-              <TextBlock Grid.Row="0" Text="Quick Messages" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Grid.Row="0" Text="Quick Messages" Classes="sectionTitle" />
               <ListBox Grid.Row="1"
                        ItemsSource="{Binding Js8SuggestedMessages}"
                        SelectedItem="{Binding SelectedJs8SuggestedMessage}"
                        MaxHeight="180"
-                       Background="#080B12"
-                       BorderBrush="#1E2128"
+                       Background="#030405"
+                       BorderBrush="#202126"
                        BorderThickness="1">
                 <ListBox.Styles>
                   <Style Selector="ListBoxItem">
@@ -261,10 +262,10 @@
                   <DataTemplate x:DataType="vm:WsjtxSuggestedMessageItem">
                     <Border Padding="7,4" Margin="0,0,0,1" Background="Transparent">
                       <Grid ColumnDefinitions="86,*" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="#AFC4FF" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Top" />
+                        <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="#C7CAD2" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Top" />
                         <StackPanel Grid.Column="1" Spacing="1">
-                          <TextBlock Text="{Binding Intent}" Foreground="#8E97AC" FontSize="10" TextWrapping="Wrap" />
-                          <TextBlock Text="{Binding MessageText}" Foreground="#C4C8D8" FontSize="11" TextWrapping="Wrap" />
+                          <TextBlock Text="{Binding Intent}" Foreground="#8E9096" FontSize="10" TextWrapping="Wrap" />
+                          <TextBlock Text="{Binding MessageText}" Foreground="#D8D8DC" FontSize="11" TextWrapping="Wrap" />
                         </StackPanel>
                       </Grid>
                     </Border>
@@ -274,11 +275,11 @@
             </Grid>
           </Border>
 
-          <Border Background="#111827" BorderBrush="#24304A" BorderThickness="1" CornerRadius="8" Padding="10">
+          <Border Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="3" Padding="10">
             <StackPanel Spacing="6">
-              <TextBlock Text="TX Notes" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="TX Notes" Classes="sectionTitle" />
               <TextBlock Text="Text is staged for the next JS8 transmit slot and sent through the normal timed PTT path."
-                         Foreground="#AAB1C7"
+                         Foreground="#A8A8AE"
                          TextWrapping="Wrap" />
             </StackPanel>
           </Border>

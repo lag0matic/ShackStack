@@ -100,6 +100,48 @@ public partial class MainWindowViewModel
     private string cwDecodedText = string.Empty;
 
     [ObservableProperty]
+    private int cwSkimmerLowerAudioHz = 450;
+
+    [ObservableProperty]
+    private int cwSkimmerUpperAudioHz = 2800;
+
+    [ObservableProperty]
+    private int cwSkimmerLaneSpacingHz = 45;
+
+    [ObservableProperty]
+    private int cwSkimmerMaxLanes = 8;
+
+    [ObservableProperty]
+    private bool cwSkimmerNeuralSecondPassEnabled;
+
+    [ObservableProperty]
+    private string cwSkimmerStatus = "Skimmer scout idle";
+
+    [ObservableProperty]
+    private string cwSkimmerWorker = "None";
+
+    [ObservableProperty]
+    private int cwSkimmerCandidateCount;
+
+    [ObservableProperty]
+    private string cwSkimmerStrongestToneDisplay = "---";
+
+    [ObservableProperty]
+    private string cwSkimmerStrongestSnrDisplay = "---";
+
+    [ObservableProperty]
+    private string cwSkimmerCandidates = string.Empty;
+
+    [ObservableProperty]
+    private string cwSkimmerTranscript = string.Empty;
+
+    [ObservableProperty]
+    private string cwSkimmerNeuralTranscript = string.Empty;
+
+    [ObservableProperty]
+    private bool isCwSkimmerRunning;
+
+    [ObservableProperty]
     private IReadOnlyList<string> rttyProfileOptions =
     [
         "170 Hz / 45.45 baud",
@@ -337,6 +379,58 @@ public partial class MainWindowViewModel
     private void ClearCwDecodedText()
     {
         CwDecodedText = string.Empty;
+    }
+
+    [RelayCommand]
+    private async Task StartCwSkimmerAsync()
+    {
+        if (_cwSkimmerDecoderHost is null)
+        {
+            CwSkimmerStatus = "CW skimmer host unavailable";
+            return;
+        }
+
+        var lower = Math.Clamp(CwSkimmerLowerAudioHz, 50, 3000);
+        var upper = Math.Clamp(CwSkimmerUpperAudioHz, lower + 100, 4000);
+        var config = new CwSkimmerConfiguration(
+            lower,
+            upper,
+            Math.Clamp(CwSkimmerLaneSpacingHz, 15, 250),
+            Math.Clamp(CwSkimmerMaxLanes, 1, 32),
+            Math.Clamp(CwWpm, 5, 60),
+            CwSkimmerNeuralSecondPassEnabled,
+            CwSkimmerNeuralSecondPassEnabled ? "Spectral Scout + Neural Pass" : "Spectral Scout");
+
+        await _cwSkimmerDecoderHost.ConfigureAsync(config, CancellationToken.None);
+        await _cwSkimmerDecoderHost.StartAsync(CancellationToken.None);
+    }
+
+    [RelayCommand]
+    private async Task StopCwSkimmerAsync()
+    {
+        if (_cwSkimmerDecoderHost is null)
+        {
+            return;
+        }
+
+        await _cwSkimmerDecoderHost.StopAsync(CancellationToken.None);
+    }
+
+    [RelayCommand]
+    private async Task ResetCwSkimmerAsync()
+    {
+        CwSkimmerCandidates = string.Empty;
+        CwSkimmerTranscript = string.Empty;
+        CwSkimmerNeuralTranscript = string.Empty;
+        _cwSkimmerLaneStates.Clear();
+        _cwSkimmerNeuralLaneStates.Clear();
+        _cwSkimmerCandidateLogLines.Clear();
+        if (_cwSkimmerDecoderHost is null)
+        {
+            return;
+        }
+
+        await _cwSkimmerDecoderHost.ResetAsync(CancellationToken.None);
     }
 
     [RelayCommand]

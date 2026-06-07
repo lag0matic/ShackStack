@@ -20,6 +20,7 @@ docs/*
 !docs/SSTV_REGRESSION_HARNESS.md
 !docs/USER_MANUAL.md
 !docs/HANDOFF_2026-05-11.md
+!docs/CW_SKIMMER_EXPERIMENT_CHECKLIST.md
 src/ShackStack.Desktop/DecoderWorkers/
 src/ShackStack.DecoderWorkers.Python/.pyinstaller/
 
@@ -35,3 +36,5 @@ Thumbs.db
 Desktop.ini
 src/ShackStack.DecoderWorkers.Python/**/__pycache__/
 src/ShackStack.DecoderWorkers.Python/**/*.pyc
+tools/**/__pycache__/
+tools/**/*.pyc

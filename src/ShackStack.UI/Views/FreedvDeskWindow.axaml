@@ -9,14 +9,13 @@
         MinHeight="560"
         Title="FreeDV Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
-        Background="#0F1117"
-        Foreground="#C4C8D8">
-  <Grid RowDefinitions="Auto,*" Margin="10">
-    <Border Grid.Row="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,10">
+        Background="#050607"
+        Foreground="#D8D8DC"
+        Classes="operatorDesk">
+  <Grid RowDefinitions="Auto,*" Margin="8">
+    <Border Grid.Row="0" Classes="panel" CornerRadius="3" Padding="10,8" Margin="0,0,0,8">
       <Grid ColumnDefinitions="*,Auto">
-        <StackPanel Spacing="4">
-          <TextBlock Text="FreeDV Digital Voice" FontSize="20" FontWeight="SemiBold" />
-        </StackPanel>
+        <TextBlock Text="FreeDV Digital Voice" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
         <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
           <Button Content="Start RX" Command="{Binding StartFreedvReceiveCommand}" Margin="0,0,8,0" />
           <Button Content="Stop RX" Command="{Binding StopFreedvReceiveCommand}" Margin="0,0,8,0" />
@@ -41,16 +40,16 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="360,*" ColumnSpacing="10">
-      <Border Grid.Column="0" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
-        <StackPanel Spacing="10">
+    <Grid Grid.Row="1" ColumnDefinitions="348,*" ColumnSpacing="8">
+      <Border Grid.Column="0" Classes="panel">
+        <StackPanel Spacing="12">
           <CheckBox Content="Use current radio frequency instead of preset" IsChecked="{Binding FreedvUseCurrentRadioFrequency}" />
           <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-            <TextBlock Grid.Column="0" Text="Mode" Foreground="#7F879B" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="0" Text="Mode" Classes="fieldLabel" />
             <ComboBox Grid.Column="1" ItemsSource="{Binding FreedvModeOptions}" SelectedItem="{Binding FreedvSelectedMode}" />
           </Grid>
           <Grid ColumnDefinitions="92,*,44" ColumnSpacing="10">
-            <TextBlock Grid.Column="0" Text="RX offset" Foreground="#7F879B" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="0" Text="RX offset" Classes="fieldLabel" />
             <Slider Grid.Column="1"
                     Minimum="-1000"
                     Maximum="1000"
@@ -59,7 +58,7 @@
                     Value="{Binding FreedvRxFrequencyOffsetHz}" />
             <TextBlock Grid.Column="2"
                        Text="{Binding FreedvRxFrequencyOffsetHz, StringFormat={}{0} Hz}"
-                       Foreground="#C4C8D8"
+                       Classes="fieldValue"
                        VerticalAlignment="Center"
                        HorizontalAlignment="Right"
                        MinWidth="44"
@@ -67,13 +66,13 @@
                        FontFamily="Consolas" />
           </Grid>
           <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-            <TextBlock Grid.Column="0" Text="Tune" Foreground="#7F879B" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="0" Text="Tune" Classes="fieldLabel" />
             <ComboBox Grid.Column="1"
                       ItemsSource="{Binding FreedvFrequencyOptions}"
                       SelectedItem="{Binding FreedvSelectedFrequency}" />
           </Grid>
           <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
-            <TextBlock Grid.Column="0" Text="Speech out" Foreground="#7F879B" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="0" Text="Speech out" Classes="fieldLabel" />
             <ComboBox Grid.Column="1"
                       ItemsSource="{Binding OutputDeviceOptions}"
                       SelectedItem="{Binding SelectedFreedvMonitorDevice}">
@@ -89,11 +88,11 @@
                      TextWrapping="Wrap"
                      FontSize="11" />
           <Grid ColumnDefinitions="92,*,48" ColumnSpacing="10">
-            <TextBlock Grid.Column="0" Text="DV volume" Foreground="#7F879B" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="0" Text="DV volume" Classes="fieldLabel" />
             <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding FreedvSpeechVolumePercent}" />
             <TextBlock Grid.Column="2"
                        Text="{Binding FreedvSpeechVolumePercent, StringFormat={}{0}%}"
-                       Foreground="#C4C8D8"
+                       Classes="fieldValue"
                        VerticalAlignment="Center"
                        HorizontalAlignment="Right"
                        MinWidth="34"
@@ -101,27 +100,27 @@
                        FontFamily="Consolas" />
           </Grid>
           <Grid ColumnDefinitions="92,*,48" ColumnSpacing="10">
-            <TextBlock Grid.Column="0" Text="Mic" Foreground="#7F879B" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="0" Text="Mic" Classes="fieldLabel" />
             <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MicLevelPercent}" Height="8" />
-            <TextBlock Grid.Column="2" Text="{Binding MicLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" HorizontalAlignment="Right" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
+            <TextBlock Grid.Column="2" Text="{Binding MicLevelPercent, StringFormat={}{0}%}" Classes="fieldValue" VerticalAlignment="Center" HorizontalAlignment="Right" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
           </Grid>
           <Grid ColumnDefinitions="92,*,48" ColumnSpacing="10">
-            <TextBlock Grid.Column="0" Text="Modem TX" Foreground="#7F879B" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="0" Text="Modem TX" Classes="fieldLabel" />
             <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding TxLevelPercent}" Height="8" />
-            <TextBlock Grid.Column="2" Text="{Binding TxLevelPercent, StringFormat={}{0}%}" Foreground="#C4C8D8" VerticalAlignment="Center" HorizontalAlignment="Right" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
+            <TextBlock Grid.Column="2" Text="{Binding TxLevelPercent, StringFormat={}{0}%}" Classes="fieldValue" VerticalAlignment="Center" HorizontalAlignment="Right" MinWidth="34" TextAlignment="Right" FontFamily="Consolas" />
           </Grid>
           <TextBlock Text="For FreeDV TX, Mic is your voice into the codec; Modem TX is the encoded audio actually sent to the radio."
                      Foreground="#8E97AC"
                      TextWrapping="Wrap"
                      FontSize="11" />
 
-          <Border Background="#101824" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10">
+          <Border Classes="section">
             <StackPanel Spacing="8">
-              <TextBlock Text="FreeDV / Longwave Log" FontSize="13" FontWeight="SemiBold" />
-              <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#AAB1C7" TextWrapping="Wrap" />
+              <TextBlock Text="FreeDV / Longwave Log" Classes="sectionTitle" />
+              <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" />
               <TextBlock Text="{Binding LongwaveQuickLogSummary}" Foreground="#E9F3FF" FontWeight="SemiBold" TextWrapping="Wrap" />
               <Grid ColumnDefinitions="74,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Logbook" Classes="fieldLabel" />
                 <ComboBox Grid.Column="1" ItemsSource="{Binding LongwaveLogbooks}" SelectedItem="{Binding SelectedLongwaveLogbook}">
                   <ComboBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:LongwaveLogbookItem">
@@ -131,11 +130,11 @@
                 </ComboBox>
               </Grid>
               <Grid ColumnDefinitions="74,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="Call" Classes="fieldLabel" />
                 <TextBox Grid.Column="1" Text="{Binding LongwaveLogCallsign}" Watermark="Worked station" />
               </Grid>
               <Grid ColumnDefinitions="74,*,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="RST S/R" Foreground="#7F879B" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="RST S/R" Classes="fieldLabel" />
                 <TextBox Grid.Column="1" Text="{Binding LongwaveLogRstSent}" />
                 <TextBox Grid.Column="2" Text="{Binding LongwaveLogRstReceived}" />
               </Grid>
@@ -151,12 +150,12 @@
         </StackPanel>
       </Border>
 
-      <Border Grid.Column="1" Background="#121620" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="8" Padding="10">
+      <Border Grid.Column="1" Classes="panel">
         <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="10">
-          <TextBlock Grid.Row="0" Text="Live FreeDV State" FontSize="16" FontWeight="SemiBold" />
+          <TextBlock Grid.Row="0" Text="Live FreeDV State" Classes="sectionTitle" />
 
           <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="10">
-            <Border Grid.Column="0" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10" MinHeight="96">
+            <Border Grid.Column="0" Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="3" Padding="10" MinHeight="96">
               <StackPanel Spacing="4">
                 <TextBlock Text="Mode" Foreground="#7F879B" FontSize="11" />
                 <TextBlock Text="{Binding FreedvSelectedMode}" Foreground="#FFFFFF" FontSize="18" FontWeight="SemiBold" />
@@ -164,14 +163,14 @@
                 <TextBlock Text="{Binding FreedvRuntimeStatus}" Foreground="#8E97AC" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="10" />
               </StackPanel>
             </Border>
-            <Border Grid.Column="1" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10" MinHeight="96">
+            <Border Grid.Column="1" Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="3" Padding="10" MinHeight="96">
               <StackPanel Spacing="4">
                 <TextBlock Text="Signal" Foreground="#7F879B" FontSize="11" />
                 <TextBlock Text="{Binding FreedvSignalSummary}" Foreground="#77D8FF" FontFamily="Consolas" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" MinHeight="18" />
                 <TextBlock Text="{Binding FreedvRxStatus}" Foreground="#C4C8D8" TextWrapping="Wrap" MinHeight="36" MaxHeight="36" TextTrimming="CharacterEllipsis" />
               </StackPanel>
             </Border>
-            <Border Grid.Column="2" Background="#0D1320" BorderBrush="#24304A" BorderThickness="1" CornerRadius="6" Padding="10" MinHeight="96">
+            <Border Grid.Column="2" Background="#08090C" BorderBrush="#1B1C21" BorderThickness="1" CornerRadius="3" Padding="10" MinHeight="96">
               <StackPanel Spacing="4">
                 <TextBlock Text="RADE EOO" Foreground="#7F879B" FontSize="11" />
                 <TextBlock Text="{Binding FreedvLastRadeCallsign}" Foreground="#FFD166" FontSize="18" FontWeight="SemiBold" MinWidth="96" FontFamily="Consolas" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
@@ -181,16 +180,16 @@
           </Grid>
 
           <Grid Grid.Row="2" ColumnDefinitions="92,*" ColumnSpacing="10">
-            <TextBlock Grid.Column="0" Text="Session" Foreground="#7F879B" />
-            <TextBlock Grid.Column="1" Text="{Binding FreedvSessionNotes}" Foreground="#C4C8D8" TextWrapping="Wrap" FontFamily="Consolas" MinHeight="36" MaxHeight="36" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="0" Text="Session" Classes="fieldLabel" />
+            <TextBlock Grid.Column="1" Text="{Binding FreedvSessionNotes}" Classes="fieldValue" TextWrapping="Wrap" FontFamily="Consolas" MinHeight="36" MaxHeight="36" TextTrimming="CharacterEllipsis" />
           </Grid>
 
-          <Border Grid.Row="3" Background="#0A0C10" BorderBrush="#1E2128" BorderThickness="1" CornerRadius="6" Padding="6">
+          <Border Grid.Row="3" Background="#050608" BorderBrush="#202126" BorderThickness="1" CornerRadius="3" Padding="6">
             <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="5">
               <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <StackPanel Spacing="0">
-                  <TextBlock Text="FreeDV Reporter" FontSize="13" FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding FreedvReporterStatus}" Foreground="#AAB1C7" FontSize="11" TextWrapping="Wrap" />
+                  <TextBlock Text="FreeDV Reporter" Classes="sectionTitle" />
+                  <TextBlock Text="{Binding FreedvReporterStatus}" Foreground="#A8A8AE" FontSize="11" TextWrapping="Wrap" />
                 </StackPanel>
                 <TextBlock Grid.Column="1"
                            Text="{Binding FreedvReporterStationCount, StringFormat={}{0} stations}"
