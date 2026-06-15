@@ -151,4 +151,4 @@ Current installer name: `ShackStack-Setup-v1.0.exe`
 
 ## Notes
 
-This repo is intentionally app-focused. Scratch captures, local publish artifacts, giant experimental branches, and one-off test outputs should stay out of GitHub. The goal for 1.0 is a useful, honest, reproducible shack app: powerful where it works, clearly labeled where it is still rough, and respectful of the open-source radio projects that made the direct-port path possible.
+This project is heavily AI assisted coding - I am not a professional, and bugs will exist. This is tailored to my workflow - and probably will not work for you!
