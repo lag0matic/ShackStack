@@ -590,9 +590,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                                 .Select(static lane => $"Lane {lane.LaneId} {lane.AudioToneHz:0} Hz ({lane.Confidence:P0}, {lane.CopyRateCharactersPerSecond:0.0} cps): {lane.Transcript}"));
                     }
 
-                    var hasNeuralData = !string.IsNullOrWhiteSpace(candidate.NeuralText)
-                        || !string.IsNullOrWhiteSpace(candidate.NeuralTokenText)
-                        || !string.IsNullOrWhiteSpace(candidate.NeuralStatus);
+                    var neuralStatusOnly = IsCwSkimmerNeuralRuntimeStatus(candidate.NeuralStatus)
+                        && string.IsNullOrWhiteSpace(candidate.NeuralText)
+                        && string.IsNullOrWhiteSpace(candidate.NeuralTokenText)
+                        && string.IsNullOrWhiteSpace(candidate.NeuralTokenCandidates);
+                    if (neuralStatusOnly)
+                    {
+                        CwSkimmerNeuralTranscript = candidate.NeuralStatus;
+                    }
+
+                    var hasNeuralData = !neuralStatusOnly
+                        && (!string.IsNullOrWhiteSpace(candidate.NeuralText)
+                            || !string.IsNullOrWhiteSpace(candidate.NeuralTokenText)
+                            || !string.IsNullOrWhiteSpace(candidate.NeuralStatus));
                     if (hasNeuralData)
                     {
                         var laneId = candidate.LaneId > 0 ? candidate.LaneId : 0;
@@ -1054,6 +1064,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         => $"{Math.Clamp(percent, 0, 100),3}%";
 
     private static string FormatCallsign(string callsign) => callsign.Trim().ToUpperInvariant();
+
+    private static bool IsCwSkimmerNeuralRuntimeStatus(string status)
+        => !string.IsNullOrWhiteSpace(status)
+            && (status.StartsWith("neural unavailable:", StringComparison.OrdinalIgnoreCase)
+            || status.StartsWith("neural model missing:", StringComparison.OrdinalIgnoreCase));
 
 
     private void UpdateHeaderCallsign()

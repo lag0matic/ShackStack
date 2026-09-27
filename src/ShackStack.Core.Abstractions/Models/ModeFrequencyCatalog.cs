@@ -22,6 +22,7 @@ public static class ModeFrequencyCatalog
         new(Rtty, "15m RTTY 21.080 MHz USB-D", 21_080_000),
         new(Rtty, "12m RTTY 24.920 MHz USB-D", 24_920_000),
         new(Rtty, "10m RTTY 28.080 MHz USB-D", 28_080_000),
+        new(Rtty, "6m RTTY/Data 50.300 MHz USB-D", 50_300_000),
 
         new(Keyboard, "160m PSK31 1.838 MHz USB-D", 1_838_000),
         new(Keyboard, "80m PSK31 3.580 MHz LSB-D", 3_580_000),
@@ -32,6 +33,7 @@ public static class ModeFrequencyCatalog
         new(Keyboard, "15m PSK31 21.070 MHz USB-D", 21_070_000),
         new(Keyboard, "12m PSK31 24.920 MHz USB-D", 24_920_000),
         new(Keyboard, "10m PSK31 28.120 MHz USB-D", 28_120_000),
+        new(Keyboard, "6m PSK31 50.290 MHz USB-D", 50_290_000),
 
         new(Freedv, "160m FreeDV 1.870 MHz LSB-D", 1_870_000),
         new(Freedv, "80m FreeDV 3.625 MHz LSB-D", 3_625_000),
@@ -50,6 +52,7 @@ public static class ModeFrequencyCatalog
         new(Freedv, "12m FreeDV 24.933 MHz USB-D", 24_933_000),
         new(Freedv, "10m FreeDV 28.330 MHz USB-D", 28_330_000),
         new(Freedv, "10m FreeDV alt 28.720 MHz USB-D", 28_720_000),
+        new(Freedv, "6m FreeDV 50.330 MHz USB-D", 50_330_000),
 
         new(Sstv, "80m SSTV 3.845 MHz LSB-D", 3_845_000),
         new(Sstv, "40m SSTV 7.171 MHz LSB-D", 7_171_000),
@@ -57,6 +60,8 @@ public static class ModeFrequencyCatalog
         new(Sstv, "20m SSTV alt 14.233 MHz USB-D", 14_233_000),
         new(Sstv, "15m SSTV 21.340 MHz USB-D", 21_340_000),
         new(Sstv, "10m SSTV 28.680 MHz USB-D", 28_680_000),
+        new(Sstv, "6m SSTV 50.680 MHz USB-D", 50_680_000),
+        new(Sstv, "6m SSTV alt 50.950 MHz USB-D", 50_950_000),
 
         new(Wefax, "NOAA Atlantic 4235.0 kHz USB-D", 4_235_000),
         new(Wefax, "NOAA Atlantic 6340.5 kHz USB-D", 6_340_500),

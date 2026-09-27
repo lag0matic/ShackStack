@@ -52,6 +52,7 @@ public static class WsjtxModeCatalog
         new("FT4", "15m FT4 21.140 MHz USB-D", 21_140_000),
         new("FT4", "12m FT4 24.919 MHz USB-D", 24_919_000),
         new("FT4", "10m FT4 28.180 MHz USB-D", 28_180_000),
+        new("FT4", "6m FT4 50.318 MHz USB-D", 50_318_000),
         new("Q65", "6m Q65 50.275 MHz USB-D", 50_275_000),
         new("FST4", "20m FST4 14.080 MHz USB-D", 14_080_000),
         new("FST4W", "20m FST4W 14.0956 MHz USB-D", 14_095_600),
