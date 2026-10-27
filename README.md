@@ -1,3 +1,12 @@
+
+
+THIS REPOSITORY IS PARKED. 
+For now, I have switched to a personal fork of Nexus - it offers most of what I ever hoped to accomplish with shackstack. 
+
+You can find my fork on my github!
+73 Lag0matic
+
+
 # ShackStack 1.0
 
 ShackStack is a Windows desktop ham-radio operating app built with C# and Avalonia. It is designed around one real shack workflow: radio control, audio routing, decode desks, transmit helpers, image modes, logging, and enough operator ergonomics to make the computer feel like part of the station instead of another fight.
