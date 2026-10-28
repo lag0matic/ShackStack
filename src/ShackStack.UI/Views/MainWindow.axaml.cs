@@ -31,6 +31,34 @@ public partial class MainWindow : Window
         Deactivated += OnWindowDeactivated;
     }
 
+    public void OpenDesk(string desk)
+    {
+        var args = new Avalonia.Interactivity.RoutedEventArgs();
+        switch (desk)
+        {
+            case "Voice": OnOpenVoiceDeskClicked(this, args); break;
+            case "CW": OnOpenCwDeskClicked(this, args); break;
+            case "Weak Signal": OnOpenWsjtxDeskClicked(this, args); break;
+            case "JS8": OnOpenJs8DeskClicked(this, args); break;
+            case "RTTY": OnOpenRttyDeskClicked(this, args); break;
+            case "Keyboard": OnOpenKeyboardModesDeskClicked(this, args); break;
+            case "FreeDV": OnOpenFreedvDeskClicked(this, args); break;
+            case "SSTV": OnOpenSstvDeskClicked(this, args); break;
+            case "WeFAX": OnOpenWefaxDeskClicked(this, args); break;
+            case "Logbook": OnOpenLongwaveDeskClicked(this, args); break;
+            case "CW Lab": OnOpenCwExperimentDeskClicked(this, args); break;
+            default:
+                if (DataContext is MainWindowViewModel vm)
+                {
+                    if (desk == "Settings") vm.ShowSettingsCommand.Execute(null);
+                    else vm.ShowOperatingCommand.Execute(null);
+                }
+                Show();
+                Activate();
+                break;
+        }
+    }
+
     private async void OnPttPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is not InputElement element

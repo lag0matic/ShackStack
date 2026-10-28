@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ShackStack.UI.ViewModels"
+             xmlns:controls="using:ShackStack.UI.Controls"
+             x:Class="ShackStack.UI.Controls.OperatingWorkspace"
+             x:Name="WorkspaceRoot"
+             x:DataType="vm:MainWindowViewModel">
+  <UserControl.Content>
+  <Grid ColumnDefinitions="104,*" Background="#050607">
+    <controls:DeskNavigation Desk="{ReflectionBinding Desk, ElementName=WorkspaceRoot}" />
+    <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*" Margin="12,0,12,10">
+      <controls:StationToolbar Grid.Row="0" />
+      <Expander Grid.Row="1" Header="Spectrum" IsExpanded="True" IsVisible="{ReflectionBinding ShowScope, ElementName=WorkspaceRoot}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="#030405" BorderBrush="#202126" Padding="0" Margin="0,0,0,8">
+        <controls:OperatingScope Height="130" />
+      </Expander>
+      <ContentControl Grid.Row="2"
+                      Content="{ReflectionBinding WorkspaceContent, ElementName=WorkspaceRoot}"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Stretch" />
+    </Grid>
+  </Grid>
+  </UserControl.Content>
+</UserControl>

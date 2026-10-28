@@ -9,7 +9,7 @@
         x:DataType="vm:MainWindowViewModel"
         Width="{Binding WindowWidth}"
         Height="{Binding WindowHeight}"
-        MinWidth="1100"
+        MinWidth="1280"
         MinHeight="700"
         Title="{Binding Title}"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
@@ -70,7 +70,9 @@
       <Setter Property="BorderBrush" Value="#2D2F36" />
     </Style>
   </Window.Styles>
-  <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
+  <Grid ColumnDefinitions="104,*">
+  <controls:DeskNavigation Desk="Operate" />
+  <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
     <Border Grid.Row="0" Background="#050608" BorderBrush="#202126" BorderThickness="0,0,0,1" Padding="16,0" Height="42">
       <Grid ColumnDefinitions="Auto,*,Auto">
         <Image Grid.Column="0"
@@ -1126,5 +1128,6 @@
                    FontSize="11" />
       </Grid>
     </Border>
+  </Grid>
   </Grid>
 </Window>

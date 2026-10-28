@@ -1,18 +1,20 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ShackStack.UI.ViewModels"
+        xmlns:controls="using:ShackStack.UI.Controls"
         x:Class="ShackStack.UI.Views.WefaxDeskWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1420"
-        Height="860"
-        MinWidth="1120"
-        MinHeight="700"
+        Width="1440"
+        Height="960"
+        MinWidth="1260"
+        MinHeight="800"
         Title="WeFAX Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
         Background="#050607"
         Foreground="#D8D8DC"
         Classes="operatorDesk">
-  <Grid RowDefinitions="Auto,*" Margin="8">
+  <controls:OperatingWorkspace Desk="WeFAX">
+  <Grid RowDefinitions="Auto,*" Margin="0">
     <Border Grid.Row="0" Classes="panel" Padding="10,8" Margin="0,0,0,8">
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Spacing="4">
@@ -266,4 +268,5 @@
       </Border>
     </Grid>
   </Grid>
+  </controls:OperatingWorkspace>
 </Window>

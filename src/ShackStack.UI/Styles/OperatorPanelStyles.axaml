@@ -48,11 +48,16 @@
   </Style>
 
   <Style Selector="Window.operatorDesk TextBox">
+    <Setter Property="MinWidth" Value="0" />
     <Setter Property="Background" Value="#030405" />
     <Setter Property="BorderBrush" Value="#292B31" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="3" />
     <Setter Property="Foreground" Value="#F4F7FC" />
+  </Style>
+
+  <Style Selector="Window.operatorDesk Expander">
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
   </Style>
 
   <Style Selector="Window.operatorDesk TextBox.monospace">

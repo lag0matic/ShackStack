@@ -2,6 +2,8 @@
 
 Recorded: 2026-09-24. Follow-up to [our code review](CODE_REVIEW_2026-09-16.md).
 
+Update 2026-10-19: the user has now tried Nexus and requested a broader UI/workflow and decoder comparison. Use [the current comparison plan](NEXUS_COMPARISON_PLAN_2026-10-19.md) for next work; the earlier operating preferences and authorization checklist below are historical.
+
 ## Intent
 
 Improve ShackStack selectively, without switching applications/frameworks or chasing Nexus's entire feature list. The user does not want to run Nexus; source inspection and independent tests are the preferred approach. No Nexus software was installed or executed during this comparison. No implementation or model training is authorized by this note alone.

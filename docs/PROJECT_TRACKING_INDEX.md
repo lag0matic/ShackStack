@@ -6,6 +6,7 @@ Use these documents when planning the next ShackStack work session.
 
 | Document | Purpose |
 | --- | --- |
+| `PI_RADIO_BRIDGE_EXPERIMENT.md` | Raspberry Pi radio bridge experiment on `codex/pi-radio-bridge`: Windows keeps the UI and decoders; investigate network control, scope data, and receive audio first. |
 | `USER_MANUAL.md` | Operator-facing manual: desk workflows, setup notes, FreeDV Reporter, logging flow, and practical shutdown/testing guidance. |
 | `DIGITAL_WEAK_MODE_STATUS_2026-04-29.md` | Current digital/weak mode status, planned modes, deferred/abandoned modes, and validation notes. Refreshed after WSPR RX, FreeDV RADEV1 harness work, PSK scaffolding, SSTV regression expansion, and Robot36 TX smoke testing. |
 | `CURRENT_FEATURE_STATUS_2026-04-29.md` | Whole-app feature inventory across shell, radio/audio, desks, Longwave, interop, packaging, and risk areas. Refreshed after logging, shutdown, FreeDV audio/layout, SSTV stability work, and the main view-model split. |

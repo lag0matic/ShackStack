@@ -1,32 +1,78 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ShackStack.UI.ViewModels"
+        xmlns:controls="using:ShackStack.UI.Controls"
         x:Class="ShackStack.UI.Views.CwDeskWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1320"
-        Height="820"
-        MinWidth="1080"
-        MinHeight="680"
+        Width="1440"
+        Height="960"
+        MinWidth="1180"
+        MinHeight="800"
         Title="CW Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
         Background="#050607"
         Foreground="#D8D8DC"
         Classes="operatorDesk">
 
-  <Grid RowDefinitions="Auto,*" Margin="8">
-    <Border Grid.Row="0" Classes="panel" CornerRadius="3" Padding="10,8" Margin="0,0,0,8">
-      <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="CW Desk" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-          <Button Content="Start RX" Command="{Binding StartCwDecoderCommand}" Margin="0,0,8,0" />
-          <Button Content="Stop RX" Command="{Binding StopCwDecoderCommand}" Margin="0,0,8,0" />
-          <Button Content="Reset" Command="{Binding ResetCwDecoderCommand}" />
-        </WrapPanel>
+  <controls:OperatingWorkspace Desk="CW">
+    <Grid RowDefinitions="Auto,*,Auto,Auto" RowSpacing="10">
+      <WrapPanel>
+        <TextBlock Text="CW" Classes="sectionTitle" VerticalAlignment="Center" Margin="0,0,16,0" />
+        <Button Content="Start RX" Command="{Binding StartCwDecoderCommand}" Margin="0,0,6,4" />
+        <Button Content="Stop RX" Command="{Binding StopCwDecoderCommand}" Margin="0,0,6,4" />
+        <Button Content="Reset" Command="{Binding ResetCwDecoderCommand}" Margin="0,0,16,4" />
+        <TextBlock Text="Pitch" Classes="fieldLabel" Margin="0,0,6,4" />
+        <NumericUpDown Value="{Binding CwPitchHz}" Minimum="300" Maximum="900" Increment="10" FormatString="F0" Width="138" Margin="0,0,12,4" />
+        <TextBlock Text="WPM" Classes="fieldLabel" Margin="0,0,6,4" />
+        <NumericUpDown Value="{Binding CwWpm}" Minimum="6" Maximum="48" FormatString="F0" Width="130" Margin="0,0,8,4" />
+        <Button Content="Apply Rig Settings" Command="{Binding ApplyCwRigSettingsCommand}" Margin="0,0,0,4" />
+      </WrapPanel>
+      <Grid Grid.Row="1" ColumnDefinitions="1.65*,1*" ColumnSpacing="16">
+        <Grid RowDefinitions="Auto,*" RowSpacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Decoded Copy" Classes="sectionTitle" />
+              <TextBlock Text="{Binding CwDecoderStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" FontSize="12" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Clear" Command="{Binding ClearCwDecodedTextCommand}" VerticalAlignment="Top" />
+          </Grid>
+          <TextBox Grid.Row="1" Text="{Binding CwDecodedText}" Classes="monospace" AcceptsReturn="True" IsReadOnly="True" TextWrapping="Wrap" FontSize="17" Padding="12" />
+        </Grid>
+        <Border Grid.Column="1" BorderBrush="#202126" BorderThickness="1,0,0,0" Padding="16,0,0,0">
+          <controls:ContactLogPanel UseRigCommand="{Binding UseRigForCwLongwaveLogCommand}" />
+        </Border>
       </Grid>
-    </Border>
-
-    <Grid Grid.Row="1" ColumnDefinitions="348,*,348" ColumnSpacing="8">
-      <Border Grid.Column="0" Classes="panel">
+      <StackPanel Grid.Row="2" Spacing="8">
+        <WrapPanel>
+          <Button Content="CQ" Command="{Binding SendCwMacroCommand}" CommandParameter="CQ" Margin="0,0,6,4" />
+          <Button Content="DE" Command="{Binding SendCwMacroCommand}" CommandParameter="DE" Margin="0,0,6,4" />
+          <Button Content="599" Command="{Binding SendCwMacroCommand}" CommandParameter="RST" Margin="0,0,6,4" />
+          <Button Content="TU" Command="{Binding SendCwMacroCommand}" CommandParameter="TU" Margin="0,0,6,4" />
+          <Button Content="73" Command="{Binding SendCwMacroCommand}" CommandParameter="73" Margin="0,0,6,4" />
+          <Button Content="POTA" Command="{Binding SendCwMacroCommand}" CommandParameter="POTA" Margin="0,0,16,4" />
+          <TextBlock Text="{Binding CwTxStatus}" Foreground="#A8A8AE" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="400" />
+        </WrapPanel>
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+          <TextBox Text="{Binding CwSendText}" Watermark="CW text" AcceptsReturn="True" Height="56" TextWrapping="Wrap" />
+          <Button Grid.Column="1" Content="Send" Command="{Binding QueueCwSendTextCommand}" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Content="Stop TX" Command="{Binding StopCwSendCommand}" VerticalAlignment="Center" BorderBrush="#7D4545" />
+        </Grid>
+      </StackPanel>
+      <Expander Grid.Row="3" Header="Decoder settings / Macro staging" HorizontalContentAlignment="Stretch">
+        <ScrollViewer MaxHeight="210" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="8">
+            <WrapPanel>
+              <Button Content="Load CQ" Command="{Binding LoadCwMacroCommand}" CommandParameter="CQ" Margin="0,0,6,4" />
+              <Button Content="Load DE" Command="{Binding LoadCwMacroCommand}" CommandParameter="DE" Margin="0,0,6,4" />
+              <Button Content="Load 599" Command="{Binding LoadCwMacroCommand}" CommandParameter="RST" Margin="0,0,6,4" />
+              <Button Content="Load TU" Command="{Binding LoadCwMacroCommand}" CommandParameter="TU" Margin="0,0,6,4" />
+              <Button Content="Load 73" Command="{Binding LoadCwMacroCommand}" CommandParameter="73" Margin="0,0,6,4" />
+              <Button Content="Load POTA" Command="{Binding LoadCwMacroCommand}" CommandParameter="POTA" Margin="0,0,6,4" />
+            </WrapPanel>
+            <TextBlock Text="{Binding CwEstimatedPitchDisplay, StringFormat=Estimated pitch: {0}}" Foreground="#A8A8AE" />
+            <TextBlock Text="{Binding CwEstimatedWpmDisplay, StringFormat=Estimated speed: {0}}" Foreground="#A8A8AE" />
+            <TextBlock Text="{Binding CwDecoderConfidenceDisplay, StringFormat=Confidence: {0}}" Foreground="#A8A8AE" />
+      <Border Classes="panel">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
           <StackPanel Spacing="12">
             <TextBlock Text="Receive Shaping" Classes="sectionTitle" />
@@ -61,7 +107,7 @@
                   <TextBlock Grid.Column="2" Text="Hz" Classes="fieldValue" VerticalAlignment="Center" />
                 </Grid>
                 <CheckBox Content="Matched filter" IsChecked="{Binding CwMatchedFilterEnabled}" />
-                <TextBlock Text="Matched filter follows fldigi's narrow CW filter shape. Use it for real signals; turn it off only for experiments."
+                <TextBlock Text=""
                            Foreground="#8E97AC"
                            TextWrapping="Wrap"
                            FontSize="11" />
@@ -129,146 +175,10 @@
         </ScrollViewer>
       </Border>
 
-      <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="8">
-        <Border Grid.Row="0" Classes="panel">
-          <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
-            <Grid Grid.Row="0" ColumnDefinitions="90,*,90,*,90,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Status" Classes="fieldLabel" />
-              <TextBlock Grid.Column="1" Text="{Binding CwDecoderStatus}" Classes="fieldValue" TextWrapping="Wrap" />
-              <TextBlock Grid.Column="2" Text="Pitch Est" Classes="fieldLabel" />
-              <TextBlock Grid.Column="3" Text="{Binding CwEstimatedPitchDisplay}" Classes="fieldValue" />
-              <TextBlock Grid.Column="4" Text="WPM Est" Classes="fieldLabel" />
-              <TextBlock Grid.Column="5" Text="{Binding CwEstimatedWpmDisplay}" Classes="fieldValue" />
-            </Grid>
-            <Grid Grid.Row="1" ColumnDefinitions="90,*" ColumnSpacing="10">
-              <TextBlock Grid.Column="0" Text="Confidence" Classes="fieldLabel" />
-              <TextBlock Grid.Column="1" Text="{Binding CwDecoderConfidenceDisplay}" Classes="fieldValue" />
-            </Grid>
-          </Grid>
-        </Border>
 
-        <Border Grid.Row="1" Classes="panel">
-          <Grid RowDefinitions="Auto,*">
-            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-              <TextBlock Text="Decoded Text" Classes="sectionTitle" />
-              <Button Grid.Column="1" Content="Clear" Command="{Binding ClearCwDecodedTextCommand}" />
-            </Grid>
-            <TextBox Grid.Row="1"
-                     Text="{Binding CwDecodedText}"
-                     Classes="monospace"
-                     AcceptsReturn="True"
-                     IsReadOnly="True"
-                     TextWrapping="Wrap"
-                     FontSize="15" />
-          </Grid>
-        </Border>
-
-      </Grid>
-
-      <Border Grid.Column="2" Classes="panel">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Spacing="12">
-            <TextBlock Text="Keyer And Logging" Classes="sectionTitle" />
-
-            <Border Classes="section">
-              <StackPanel Spacing="8">
-                <TextBlock Text="CW Keyer" Classes="sectionTitle" />
-                <Grid ColumnDefinitions="82,120,Auto" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="Pitch" Classes="fieldLabel" />
-                  <NumericUpDown Grid.Column="1" Minimum="300" Maximum="900" Increment="10" Value="{Binding CwPitchHz}" FormatString="F0" Width="110" />
-                  <TextBlock Grid.Column="2" Text="Hz" Classes="fieldValue" VerticalAlignment="Center" />
-                </Grid>
-                <Grid ColumnDefinitions="82,120,Auto" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0" Text="Speed" Classes="fieldLabel" />
-                  <NumericUpDown Grid.Column="1" Minimum="6" Maximum="48" Increment="1" Value="{Binding CwWpm}" FormatString="F0" Width="110" />
-                  <TextBlock Grid.Column="2" Text="WPM" Classes="fieldValue" VerticalAlignment="Center" />
-                </Grid>
-                <Button Content="Apply Rig CW Settings" Command="{Binding ApplyCwRigSettingsCommand}" HorizontalAlignment="Left" />
-                <TextBlock Text="{Binding CwTxStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" />
-              </StackPanel>
-            </Border>
-
-            <Border Classes="section">
-              <StackPanel Spacing="8">
-                <TextBlock Text="Quick Macros" Classes="sectionTitle" />
-                <TextBlock Text="Macros expand %mycall from settings and %tocall from the CW log callsign field."
-                           Foreground="#8E97AC"
-                           TextWrapping="Wrap"
-                           FontSize="11" />
-                <UniformGrid Columns="3" Rows="2">
-                  <Button Content="CQ" Command="{Binding SendCwMacroCommand}" CommandParameter="CQ" Margin="0,0,6,6" />
-                  <Button Content="DE" Command="{Binding SendCwMacroCommand}" CommandParameter="DE" Margin="0,0,6,6" />
-                  <Button Content="599" Command="{Binding SendCwMacroCommand}" CommandParameter="RST" Margin="0,0,0,6" />
-                  <Button Content="TU" Command="{Binding SendCwMacroCommand}" CommandParameter="TU" Margin="0,0,6,0" />
-                  <Button Content="73" Command="{Binding SendCwMacroCommand}" CommandParameter="73" Margin="0,0,6,0" />
-                  <Button Content="POTA" Command="{Binding SendCwMacroCommand}" CommandParameter="POTA" />
-                </UniformGrid>
-                <UniformGrid Columns="3" Rows="2">
-                  <Button Content="Load CQ" Command="{Binding LoadCwMacroCommand}" CommandParameter="CQ" Margin="0,0,6,6" />
-                  <Button Content="Load DE" Command="{Binding LoadCwMacroCommand}" CommandParameter="DE" Margin="0,0,6,6" />
-                  <Button Content="Load 599" Command="{Binding LoadCwMacroCommand}" CommandParameter="RST" Margin="0,0,0,6" />
-                  <Button Content="Load TU" Command="{Binding LoadCwMacroCommand}" CommandParameter="TU" Margin="0,0,6,0" />
-                  <Button Content="Load 73" Command="{Binding LoadCwMacroCommand}" CommandParameter="73" Margin="0,0,6,0" />
-                  <Button Content="Load POTA" Command="{Binding LoadCwMacroCommand}" CommandParameter="POTA" />
-                </UniformGrid>
-              </StackPanel>
-            </Border>
-
-            <Border Classes="section">
-              <StackPanel Spacing="8">
-                <TextBlock Text="Send Text" Classes="sectionTitle" />
-                <TextBox Text="{Binding CwSendText}" AcceptsReturn="True" Height="120" TextWrapping="Wrap" Watermark="Type CW text to send with the rig keyer" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="Send" Command="{Binding QueueCwSendTextCommand}" />
-                  <Button Content="Stop" Command="{Binding StopCwSendCommand}" />
-                </StackPanel>
-              </StackPanel>
-            </Border>
-
-            <Border Classes="section">
-              <StackPanel Spacing="8">
-                <TextBlock Text="CW / Longwave Log" Classes="sectionTitle" />
-                <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding LongwaveQuickLogSummary}" Foreground="#E9F3FF" FontWeight="SemiBold" TextWrapping="Wrap" />
-                <Grid ColumnDefinitions="70,*" ColumnSpacing="8">
-                  <TextBlock Grid.Column="0" Text="Logbook" Foreground="#7F879B" VerticalAlignment="Center" />
-                  <ComboBox Grid.Column="1"
-                            ItemsSource="{Binding LongwaveLogbooks}"
-                            SelectedItem="{Binding SelectedLongwaveLogbook}">
-                    <ComboBox.ItemTemplate>
-                      <DataTemplate x:DataType="vm:LongwaveLogbookItem">
-                        <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
-                      </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                  </ComboBox>
-                </Grid>
-                <Grid ColumnDefinitions="70,*" ColumnSpacing="8">
-                  <TextBlock Grid.Column="0" Text="Call" Foreground="#7F879B" VerticalAlignment="Center" />
-                  <TextBox Grid.Column="1" Text="{Binding LongwaveLogCallsign}" Watermark="Worked station" />
-                </Grid>
-                <Grid ColumnDefinitions="70,*,70,*" ColumnSpacing="8">
-                  <TextBlock Grid.Column="0" Text="RST S" Foreground="#7F879B" VerticalAlignment="Center" />
-                  <TextBox Grid.Column="1" Text="{Binding LongwaveLogRstSent}" Watermark="Sent" />
-                  <TextBlock Grid.Column="2" Text="RST R" Foreground="#7F879B" VerticalAlignment="Center" />
-                  <TextBox Grid.Column="3" Text="{Binding LongwaveLogRstReceived}" Watermark="Rcvd" />
-                </Grid>
-                <Grid ColumnDefinitions="70,*,70,*" ColumnSpacing="8">
-                  <TextBlock Grid.Column="0" Text="Band" Foreground="#7F879B" VerticalAlignment="Center" />
-                  <TextBox Grid.Column="1" Text="{Binding LongwaveLogBand}" />
-                  <TextBlock Grid.Column="2" Text="Freq" Foreground="#7F879B" VerticalAlignment="Center" />
-                  <TextBox Grid.Column="3" Text="{Binding LongwaveLogFrequencyKhz}" />
-                </Grid>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="Use Rig" Command="{Binding UseRigForCwLongwaveLogCommand}" />
-                  <Button Content="Log QSO" Command="{Binding LogCurrentQsoCommand}" IsVisible="{Binding IsCreatingLongwaveContact}" />
-                  <Button Content="Save" Command="{Binding UpdateSelectedLongwaveContactCommand}" IsVisible="{Binding IsEditingLongwaveContact}" />
-                  <Button Content="New" Command="{Binding NewLongwaveContactCommand}" />
-                </StackPanel>
-              </StackPanel>
-            </Border>
           </StackPanel>
         </ScrollViewer>
-      </Border>
+      </Expander>
     </Grid>
-  </Grid>
+  </controls:OperatingWorkspace>
 </Window>

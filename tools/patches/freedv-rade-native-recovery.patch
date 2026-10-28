@@ -1,0 +1,49 @@
+diff --git a/cmake/BuildOpus.cmake b/cmake/BuildOpus.cmake
+index 8a6e058..693c7e1 100644
+--- a/cmake/BuildOpus.cmake
++++ b/cmake/BuildOpus.cmake
+@@ -1,6 +1,6 @@
+ message(STATUS "Will build opus with FARGAN")
+ 
+-set(CONFIGURE_COMMAND ./autogen.sh && ./configure --with-pic --enable-osce --enable-dred --disable-shared --disable-doc --disable-extra-programs)
++set(CONFIGURE_COMMAND sh -lc "export PATH=/ucrt64/bin:/usr/bin:$PATH && cd <SOURCE_DIR> && ./autogen.sh && ./configure --with-pic --enable-osce --enable-dred --disable-shared --disable-doc --disable-extra-programs")
+ 
+ if (CMAKE_CROSSCOMPILING)
+ set(CONFIGURE_COMMAND ${CONFIGURE_COMMAND} --host=${CMAKE_C_COMPILER_TARGET} --target=${CMAKE_C_COMPILER_TARGET})
+@@ -20,7 +20,7 @@ ExternalProject_Add(build_opus_x86
+     BUILD_IN_SOURCE 1
+     PATCH_COMMAND sh -c "patch dnn/nnet.h < ${CMAKE_SOURCE_DIR}/src/opus-nnet.h.diff"
+     CONFIGURE_COMMAND ${CONFIGURE_COMMAND} --host=x86_64-apple-darwin --target=x86_64-apple-darwin CFLAGS=-arch\ x86_64\ -O2\ -mmacosx-version-min=10.11
+-    BUILD_COMMAND $(MAKE)
++    BUILD_COMMAND sh -lc "export PATH=/ucrt64/bin:/usr/bin:$PATH && cd <SOURCE_DIR> && make"
+     INSTALL_COMMAND ""
+     URL ${OPUS_URL}
+ )
+diff --git a/src/lpcnet_demo.c b/src/lpcnet_demo.c
+index 4ce3d94..2994dcb 100644
+--- a/src/lpcnet_demo.c
++++ b/src/lpcnet_demo.c
+@@ -170,6 +170,7 @@ int main(int argc, char **argv) {
+             if (feof(fin) || ret != LPCNET_FRAME_SIZE) break;
+             lpcnet_compute_single_frame_features(net, pcm, features, arch);
+             fwrite(features, sizeof(float), NB_TOTAL_FEATURES, fout);
++            fflush(fout);
+         }
+         lpcnet_encoder_destroy(net);
+     } else if (mode == MODE_FARGAN_SYNTHESIS) {
+@@ -197,6 +198,7 @@ int main(int argc, char **argv) {
+             fargan_synthesize(&fargan, fpcm, features);
+             for (i=0;i<LPCNET_FRAME_SIZE;i++) pcm[i] = (int)floor(.5 + MIN32(32767, MAX32(-32767, 32768.f*fpcm[i])));
+             fwrite(pcm, sizeof(pcm[0]), LPCNET_FRAME_SIZE, fout);
++            fflush(fout);
+         }
+     } else if (mode == MODE_ADDLPC) {
+         float features[36];
+@@ -207,6 +209,7 @@ int main(int argc, char **argv) {
+             if (ret != 36 || feof(fin)) break;
+             lpc_from_cepstrum(&features[20], &features[0]);
+             fwrite(features, sizeof(features[0]), 36, fout);
++            fflush(fout);
+         }
+ 
+     } else {

@@ -1,19 +1,21 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ShackStack.UI.ViewModels"
+        xmlns:controls="using:ShackStack.UI.Controls"
         xmlns:models="using:ShackStack.UI.ViewModels"
         x:Class="ShackStack.UI.Views.SstvDeskWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1480"
-        Height="880"
-        MinWidth="1180"
-        MinHeight="720"
+        Width="1600"
+        Height="960"
+        MinWidth="1320"
+        MinHeight="800"
         Title="SSTV Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
         Background="#050607"
         Foreground="#D8D8DC"
         Classes="operatorDesk">
-  <Grid RowDefinitions="Auto,*" Margin="8">
+  <controls:OperatingWorkspace Desk="SSTV">
+  <Grid RowDefinitions="Auto,*" Margin="0">
     <Border Grid.Row="0" Classes="panel" Padding="10,8" Margin="0,0,0,8">
       <Grid ColumnDefinitions="*,Auto,Auto">
         <StackPanel Spacing="4">
@@ -377,4 +379,5 @@
       </Border>
     </Grid>
   </Grid>
+  </controls:OperatingWorkspace>
 </Window>

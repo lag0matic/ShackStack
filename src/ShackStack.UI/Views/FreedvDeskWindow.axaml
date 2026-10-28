@@ -1,18 +1,20 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ShackStack.UI.ViewModels"
+        xmlns:controls="using:ShackStack.UI.Controls"
         x:Class="ShackStack.UI.Views.FreedvDeskWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1040"
-        Height="680"
-        MinWidth="880"
-        MinHeight="560"
+        Width="1440"
+        Height="960"
+        MinWidth="1180"
+        MinHeight="800"
         Title="FreeDV Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
         Background="#050607"
         Foreground="#D8D8DC"
         Classes="operatorDesk">
-  <Grid RowDefinitions="Auto,*" Margin="8">
+  <controls:OperatingWorkspace Desk="FreeDV">
+  <Grid RowDefinitions="Auto,*" Margin="0">
     <Border Grid.Row="0" Classes="panel" CornerRadius="3" Padding="10,8" Margin="0,0,0,8">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Text="FreeDV Digital Voice" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -42,6 +44,7 @@
 
     <Grid Grid.Row="1" ColumnDefinitions="348,*" ColumnSpacing="8">
       <Border Grid.Column="0" Classes="panel">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="12">
           <CheckBox Content="Use current radio frequency instead of preset" IsChecked="{Binding FreedvUseCurrentRadioFrequency}" />
           <Grid ColumnDefinitions="92,*" ColumnSpacing="10">
@@ -148,10 +151,12 @@
             </StackPanel>
           </Border>
         </StackPanel>
+        </ScrollViewer>
       </Border>
 
       <Border Grid.Column="1" Classes="panel">
-        <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="10">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
           <TextBlock Grid.Row="0" Text="Live FreeDV State" Classes="sectionTitle" />
 
           <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="10">
@@ -265,7 +270,9 @@
           </Border>
 
         </Grid>
+        </ScrollViewer>
       </Border>
     </Grid>
   </Grid>
+  </controls:OperatingWorkspace>
 </Window>

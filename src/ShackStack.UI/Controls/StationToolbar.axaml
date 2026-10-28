@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ShackStack.UI.ViewModels"
+             xmlns:controls="using:ShackStack.UI.Controls"
+             x:Class="ShackStack.UI.Controls.StationToolbar"
+             x:DataType="vm:MainWindowViewModel">
+  <Grid RowDefinitions="Auto,Auto" RowSpacing="6" Margin="0,10,0,8">
+    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+      <controls:VfoDisplay Frequency="{Binding VfoAFrequencyHz}" IsActive="{Binding IsVfoAActive}" TuneStepCommand="{Binding AdjustFrequencyByStepCommand}" />
+      <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+        <TextBlock Text="{Binding ModeDisplay}" FontSize="15" FontWeight="SemiBold" Margin="0,0,14,0" VerticalAlignment="Center" />
+        <Button Content="A/B" Command="{Binding ExchangeVfosCommand}" Margin="0,0,4,0" ToolTip.Tip="Switch active VFO" />
+        <Button Content="A=B" Command="{Binding EqualizeVfosCommand}" Margin="0,0,4,0" ToolTip.Tip="Copy VFO A to B" />
+        <Button Content="Split" Command="{Binding ToggleSplitCommand}" Background="{Binding SplitButtonBrush}" />
+      </WrapPanel>
+      <StackPanel Grid.Column="2" Spacing="3" VerticalAlignment="Center" MaxWidth="220">
+        <TextBlock Text="{Binding ConnectionState}" HorizontalAlignment="Right" FontSize="12" />
+        <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+          <TextBlock Text="{Binding SmeterDisplay}" FontFamily="Consolas" />
+          <TextBlock Text="{Binding PttState}" FontWeight="SemiBold" />
+        </StackPanel>
+      </StackPanel>
+    </Grid>
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <ItemsControl ItemsSource="{Binding AvailableModes}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ModePreset">
+              <Button Content="{Binding Label}" Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).SetModeDirectCommand}" CommandParameter="{Binding Mode}" Background="{Binding Brush}" Padding="8,3" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <ItemsControl ItemsSource="{Binding AvailableBands}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:BandPreset">
+              <Button Content="{Binding Label}" Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).JumpToBandCommand}" CommandParameter="{Binding FrequencyHz}" Background="{Binding Brush}" Padding="7,3" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

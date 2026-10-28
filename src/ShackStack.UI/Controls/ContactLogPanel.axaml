@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ShackStack.UI.ViewModels"
+             x:Class="ShackStack.UI.Controls.ContactLogPanel"
+             x:Name="ContactRoot"
+             x:DataType="vm:MainWindowViewModel">
+  <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
+    <Grid ColumnDefinitions="*,Auto">
+      <TextBlock Text="Current Contact" Classes="sectionTitle" VerticalAlignment="Center" />
+      <Button Grid.Column="1" Content="New" Command="{Binding NewLongwaveContactCommand}" />
+    </Grid>
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" Padding="0,0,12,0">
+      <StackPanel Spacing="10">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Callsign" Classes="fieldLabel" />
+            <TextBox Text="{Binding LongwaveLogCallsign}" FontSize="18" FontWeight="SemiBold" MinHeight="36" />
+          </StackPanel>
+          <Button Grid.Column="1" Content="Lookup" Command="{Binding AutofillLongwaveLookupCommand}" VerticalAlignment="Bottom" MinHeight="36" />
+        </Grid>
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+          <StackPanel Spacing="4"><TextBlock Text="Sent" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogRstSent}" /></StackPanel>
+          <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Received" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogRstReceived}" /></StackPanel>
+        </Grid>
+        <StackPanel Spacing="4"><TextBlock Text="Name" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogName}" /></StackPanel>
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+          <StackPanel Spacing="4"><TextBlock Text="QTH" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogQth}" /></StackPanel>
+          <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Grid" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogGridSquare}" /></StackPanel>
+        </Grid>
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+          <StackPanel Spacing="4"><TextBlock Text="Park" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogParkReference}" /></StackPanel>
+          <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="State" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogState}" /></StackPanel>
+        </Grid>
+        <StackPanel Spacing="4">
+          <TextBlock Text="Longwave Logbook" Classes="fieldLabel" />
+          <ComboBox ItemsSource="{Binding LongwaveLogbooks}" SelectedItem="{Binding SelectedLongwaveLogbook}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:LongwaveLogbookItem"><TextBlock Text="{Binding DisplayText}" TextTrimming="CharacterEllipsis" /></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+        <Expander Header="Contact details" HorizontalContentAlignment="Stretch">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+              <StackPanel Spacing="4"><TextBlock Text="Band" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogBand}" /></StackPanel>
+              <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Mode" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogMode}" /></StackPanel>
+            </Grid>
+            <StackPanel Spacing="4"><TextBlock Text="Frequency (kHz)" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogFrequencyKhz}" /></StackPanel>
+            <StackPanel Spacing="4"><TextBlock Text="Operator" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogOperatorCallsign}" /></StackPanel>
+            <StackPanel Spacing="4"><TextBlock Text="County" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogCounty}" /></StackPanel>
+            <Grid ColumnDefinitions="*,80" ColumnSpacing="10">
+              <StackPanel Spacing="4"><TextBlock Text="Country" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogCountry}" /></StackPanel>
+              <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="DXCC" Classes="fieldLabel" /><TextBox Text="{Binding LongwaveLogDxcc}" /></StackPanel>
+            </Grid>
+          </StackPanel>
+        </Expander>
+      </StackPanel>
+    </ScrollViewer>
+    <StackPanel Grid.Row="2" Spacing="8">
+      <TextBlock Text="{Binding LongwaveQuickLogSummary}" Foreground="#D8D8DC" TextWrapping="Wrap" FontSize="12" />
+      <WrapPanel>
+        <Button Content="Use Rig" Command="{ReflectionBinding UseRigCommand, ElementName=ContactRoot}" Margin="0,0,8,4" />
+        <Button Content="Log QSO" Command="{Binding LogCurrentQsoCommand}" IsVisible="{Binding IsCreatingLongwaveContact}" Margin="0,0,0,4" />
+        <Button Content="Save Changes" Command="{Binding UpdateSelectedLongwaveContactCommand}" IsVisible="{Binding IsEditingLongwaveContact}" Margin="0,0,0,4" />
+      </WrapPanel>
+      <TextBlock Text="{Binding LongwaveLogStatus}" Foreground="#A8A8AE" TextWrapping="Wrap" FontSize="12" />
+    </StackPanel>
+  </Grid>
+</UserControl>

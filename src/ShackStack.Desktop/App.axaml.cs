@@ -36,6 +36,25 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             DisableAvaloniaDataAnnotationValidation();
+            if (desktop.Args?.Contains("--layout-preview", StringComparer.OrdinalIgnoreCase) == true)
+            {
+                var preview = new MainWindow
+                {
+                    DataContext = new MainWindowViewModel(AppSettings.Default, string.Empty),
+                    Title = "ShackStack Layout Preview",
+                };
+                desktop.MainWindow = preview;
+                var desk = desktop.Args.FirstOrDefault(arg => arg.StartsWith("--desk=", StringComparison.OrdinalIgnoreCase));
+                var snapshots = desktop.Args.FirstOrDefault(arg => arg.StartsWith("--layout-snapshots=", StringComparison.OrdinalIgnoreCase));
+                if (snapshots is not null)
+                    preview.Opened += async (_, _) => await LayoutPreview.CaptureAsync(preview, desktop, snapshots[19..]);
+                else if (desk is not null)
+                    preview.Opened += (_, _) => preview.OpenDesk(desk[7..]);
+                preview.Show();
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+
             var serviceCollection = new ServiceCollection();
             serviceCollection.AddShackStackDesktop();
             serviceCollection.AddShackStackUi();

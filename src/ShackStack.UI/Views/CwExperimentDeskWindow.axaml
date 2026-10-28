@@ -1,19 +1,21 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ShackStack.UI.ViewModels"
+        xmlns:controls="using:ShackStack.UI.Controls"
         x:Class="ShackStack.UI.Views.CwExperimentDeskWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1160"
-        Height="760"
-        MinWidth="980"
-        MinHeight="620"
+        Width="1440"
+        Height="960"
+        MinWidth="1180"
+        MinHeight="800"
         Title="CW Experiment Desk"
         Icon="avares://ShackStack.Desktop/Assets/shackstack.ico"
         Background="#050607"
         Foreground="#D8D8DC"
         Classes="operatorDesk">
 
-  <Grid RowDefinitions="Auto,*" Margin="8">
+  <controls:OperatingWorkspace Desk="CW Lab">
+  <Grid RowDefinitions="Auto,*" Margin="0">
     <Border Grid.Row="0" Classes="panel" CornerRadius="3" Padding="10,8" Margin="0,0,0,8">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Text="CW Experiment" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -103,7 +105,7 @@
         </ScrollViewer>
       </Border>
 
-      <Grid Grid.Column="1" RowDefinitions="*,150,220" RowSpacing="8">
+      <Grid Grid.Column="1" RowDefinitions="2*,*,*" RowSpacing="8">
         <Border Grid.Row="0" Classes="panel">
           <Grid RowDefinitions="Auto,*">
             <TextBlock Grid.Row="0" Text="Lane Copy" Classes="sectionTitle" Margin="0,0,0,8" />
@@ -150,4 +152,5 @@
       </Grid>
     </Grid>
   </Grid>
+  </controls:OperatingWorkspace>
 </Window>

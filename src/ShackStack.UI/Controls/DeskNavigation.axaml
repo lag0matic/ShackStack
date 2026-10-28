@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ShackStack.UI.Controls.DeskNavigation">
+  <UserControl.Styles>
+    <Style Selector="Button.deskLink">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="2,0,0,0" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="Padding" Value="12,5" />
+      <Setter Property="Foreground" Value="#A8A8AE" />
+    </Style>
+    <Style Selector="Button.deskLink.currentDesk">
+      <Setter Property="Background" Value="#181A1F" />
+      <Setter Property="Foreground" Value="#F4F7FC" />
+      <Setter Property="BorderBrush" Value="#B9BBC2" />
+    </Style>
+  </UserControl.Styles>
+  <Border Background="#08090B" BorderBrush="#202126" BorderThickness="0,0,1,0">
+    <DockPanel>
+      <TextBlock DockPanel.Dock="Top" Text="ShackStack" FontWeight="SemiBold" FontSize="13" Margin="12,16,4,18" Foreground="#E8E8EA" />
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel x:Name="DeskButtons" Spacing="3">
+          <Button Classes="deskLink" Content="Operate" Tag="Operate" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="Voice" Tag="Voice" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="CW" Tag="CW" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="FT / Weak" Tag="Weak Signal" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="JS8" Tag="JS8" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="RTTY" Tag="RTTY" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="PSK" Tag="Keyboard" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="FreeDV" Tag="FreeDV" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="SSTV" Tag="SSTV" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="WeFAX" Tag="WeFAX" Click="OnNavigate" />
+          <Border Height="1" Background="#202126" Margin="12,10" />
+          <Button Classes="deskLink" Content="Logbook" Tag="Logbook" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="CW Lab" Tag="CW Lab" Click="OnNavigate" />
+          <Button Classes="deskLink" Content="Settings" Tag="Settings" Click="OnNavigate" />
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+  </Border>
+</UserControl>

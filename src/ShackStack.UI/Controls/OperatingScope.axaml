@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ShackStack.UI.ViewModels"
+             x:Class="ShackStack.UI.Controls.OperatingScope"
+             x:DataType="vm:MainWindowViewModel">
+  <Grid RowDefinitions="48,*,22" Background="#030405">
+    <Path Grid.Row="0" Data="{Binding SpectrumPathData}" Stroke="#A8ACB8" StrokeThickness="1.2" Stretch="Fill" Margin="2,4" />
+    <Grid Grid.Row="1">
+      <TextBlock Text="{Binding ConnectionState}" Foreground="#8E9096" HorizontalAlignment="Center" VerticalAlignment="Center" />
+      <Image Source="{Binding WaterfallBitmap}" Stretch="Fill" />
+      <Border Width="1" Background="#C7CAD2" HorizontalAlignment="Center" Opacity="0.55" IsHitTestVisible="False" />
+    </Grid>
+    <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*,*" Margin="6,0">
+      <TextBlock Text="{Binding FrequencyMarkers[0]}" Foreground="#A8A8AE" FontSize="11" />
+      <TextBlock Grid.Column="1" Text="{Binding FrequencyMarkers[1]}" Foreground="#A8A8AE" FontSize="11" HorizontalAlignment="Center" />
+      <TextBlock Grid.Column="2" Text="{Binding FrequencyMarkers[2]}" Foreground="#D8D8DC" FontSize="11" HorizontalAlignment="Center" />
+      <TextBlock Grid.Column="3" Text="{Binding FrequencyMarkers[3]}" Foreground="#A8A8AE" FontSize="11" HorizontalAlignment="Center" />
+      <TextBlock Grid.Column="4" Text="{Binding FrequencyMarkers[4]}" Foreground="#A8A8AE" FontSize="11" HorizontalAlignment="Right" />
+    </Grid>
+  </Grid>
+</UserControl>

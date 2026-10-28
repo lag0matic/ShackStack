@@ -7,6 +7,10 @@ obj/
 !src/ShackStack.Desktop/wsjtx-tools/**
 
 publish/
+/Nexus/
+/backups/
+/target/
+/.npm-cache/
 tests/
 docs/*
 !docs/DEPLOYMENT_NOTES.md
@@ -16,6 +20,9 @@ docs/*
 !docs/DIGITAL_WEAK_MODE_STATUS_2026-04-29.md
 !docs/NEXT_STEPS_AND_TECH_DEBT_2026-04-29.md
 !docs/PROJECT_TRACKING_INDEX.md
+!docs/PI_RADIO_BRIDGE_EXPERIMENT.md
+!docs/SSTV_MMSSTV_SOURCE_REFERENCE.md
+!docs/LOCAL_CHECKOUT_RETIREMENT_2026-10-28.md
 !docs/RELEASE_1.0_NOTES.md
 !docs/SSTV_REGRESSION_HARNESS.md
 !docs/USER_MANUAL.md
